@@ -66,33 +66,13 @@
     { "id": "R001-F002", "status": "completed", "commit": "1bd984a" },
     { "id": "R001-F003", "status": "completed", "commit": "03720eb" },
     { "id": "R001-F004", "status": "completed", "commit": "1bd984a" },
-    {
-      "id": "R001-F005",
-      "phase": "verify",
-      "module": "auth",
-      "name": "端到端验证 — 完整登录链路",
-      "description": "连接本地 auth-center Docker，验证完整 OAuth 登录流程：未登录访问 → 跳转认证中心 → 登录 → 回调 → 显示用户名。验证 Token 自动续期。验证登出流程。验证跨 Tab 登出同步。",
-      "verification": "L4",
-      "depends_on": ["R001-F001", "R001-F002", "R001-F003", "R001-F004"],
-      "status": "pending",
-      "priority": "P0",
-      "risk_tags": ["auth", "oauth", "network"],
-      "user_stories": [
-        "作为学生，整个登录-使用-登出链路通畅无阻"
-      ],
-      "success_picture": "1. 访问 /chat → 跳转认证中心 → 账号密码登录 → 回调 → 看到用户名 2. Token 过期自动续期无感知 3. 登出后清除状态 4. 跨 Tab 登出同步",
-      "decision_refs": [],
-      "analysis_refs": [".dev-flow/analysis/2026-05-19--login-sdk-integration.md"],
-      "capability_refs": ["CAP-auth-001", "CAP-auth-002", "CAP-auth-003", "CAP-auth-004"],
-      "smoke_required": true,
-      "planning_notes": "需要本地 auth-center Docker 运行。测试账号：playground_test / test123456"
-    }
+    { "id": "R001-F005", "status": "completed", "commit": "c80fe46" }
   ],
   "summary": {
     "total_tasks": 6,
-    "pending": 1,
+    "pending": 0,
     "in_progress": 0,
-    "completed": 5,
+    "completed": 6,
     "cancelled": 0
   },
   "open_issues": [],
