@@ -33,6 +33,10 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# deploy
+deploy/.remote.env
+auth-sdk-web/
+
 # vercel
 .vercel
 

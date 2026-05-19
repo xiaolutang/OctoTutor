@@ -1,0 +1,31 @@
+# OctoTutor 本地部署配置
+# 使用方式: ./deploy/deploy.sh local
+#
+# 特点:
+#   - 加入 xlfoundryTest 已有的 auth-network-local 网络，复用 Traefik + auth-center
+#   - OctoTutor 通过 Traefik 路由，域名 octotutor.localhost
+#   - 需要先启动 xlfoundryTest 的 auth-center 服务
+
+services:
+  octotutor:
+    image: octotutor:latest
+    container_name: octotutor
+    restart: unless-stopped
+    expose:
+      - "3000"
+    environment:
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+    networks:
+      - auth-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.octotutor-local.rule=Host(`octotutor.localhost`)"
+      - "traefik.http.routers.octotutor-local.entrypoints=web"
+      - "traefik.http.routers.octotutor-local.service=octotutor-local-svc"
+      - "traefik.http.services.octotutor-local-svc.loadbalancer.server.port=3000"
+
+networks:
+  auth-network:
+    name: auth-network-local
+    external: true
