@@ -86,7 +86,7 @@
       "source_decision_refs": ["DEC-003-2"]
     }
   ],
-  "summary": { "total": 12, "completed": 0, "pending": 12 },
+  "summary": { "total": 12, "completed": 1, "pending": 11 },
   "open_issues": [
     "DashScope API Key 需要配置到 .env 文件"
   ],
@@ -113,10 +113,16 @@
       "technical_success_picture": "项目目录结构符合 Monorepo 规范（services/frontend/ + services/backend/ + deploy/），前端功能不变，npm run build 成功，现有 Playwright 测试通过",
       "verification": "L3",
       "depends_on": [],
-      "status": "pending",
+      "status": "completed",
       "priority": "high",
       "dependencies": ["ragDemo 仓库已有 5 本 PDF 可复制到 services/backend/data/raw/"],
       "risk_tags": ["startup"],
+      "started_at": "2026-05-20T22:10:00Z",
+      "completed_at": "2026-05-20T22:25:00Z",
+      "actual_minutes": 15,
+      "commit": "b230408",
+      "evidence_file": ".dev-flow/evidence/R003-BF-001.md",
+      "summary": "Monorepo 结构重组完成。git mv 迁移前端代码到 services/frontend/，新建 services/backend/。Dockerfile/配置更新。build + 12/12 测试通过。Grade A (100/100)",
       "test_tasks": [
         "npm run build 在新路径下成功",
         "docker compose build frontend 成功",
