@@ -86,7 +86,7 @@
       "source_decision_refs": ["DEC-003-2"]
     }
   ],
-  "summary": { "total": 12, "completed": 2, "pending": 10 },
+  "summary": { "total": 12, "completed": 3, "pending": 9 },
   "open_issues": [
     "DashScope API Key 需要配置到 .env 文件"
   ],
@@ -198,7 +198,7 @@
       "technical_success_picture": "给定 OCR Markdown → 正则识别 SectionBoundary[] → Parent-Child 分块 → Chunk[]，每个 Chunk 含完整 metadata（book, chapter, section, page, chunk_type, has_formula, parent_id, child_index）",
       "verification": "L1",
       "depends_on": ["R003-BF-002"],
-      "status": "pending",
+      "status": "completed",
       "priority": "high",
       "dependencies": [],
       "risk_tags": [],
@@ -208,7 +208,13 @@
         "child_index 从 0 递增",
         "parent_id 格式正确（{book}::{section}::{loc}::parent）",
         "跨页内容正确拆分到不同 chunk"
-      ]
+      ],
+      "started_at": "2026-05-20T22:50:00Z",
+      "completed_at": "2026-05-20T23:15:00Z",
+      "actual_minutes": 25,
+      "commit": "90fca38",
+      "evidence_file": ".dev-flow/evidence/R003-BF-004.md",
+      "summary": "StructureParser + MathChunker 完成。4 级章节识别，512 token/50 overlap Child 切分，句子边界切割。pytest 39/39 通过。"
     },
     {
       "id": "R003-BF-005",

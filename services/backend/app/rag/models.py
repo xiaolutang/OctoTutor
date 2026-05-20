@@ -84,3 +84,20 @@ class Chunk:
     chunk_id: str
     text: str
     metadata: ChunkMetadata
+
+
+@dataclass
+class QueryResult:
+    """向量查询结果
+
+    Attributes:
+        chunk_id: chunk 唯一标识
+        text: 分块文本内容
+        metadata: 元数据
+        score: 相似度分数（0~1，越大越相似，1 = 完全匹配）
+    """
+
+    chunk_id: str
+    text: str
+    metadata: ChunkMetadata
+    score: float
