@@ -86,7 +86,7 @@
       "source_decision_refs": ["DEC-003-2"]
     }
   ],
-  "summary": { "total": 12, "completed": 5, "pending": 7 },
+  "summary": { "total": 12, "completed": 6, "pending": 6 },
   "open_issues": [
     "DashScope API Key 需要配置到 .env 文件"
   ],
@@ -174,10 +174,16 @@
       "technical_success_picture": "给定 PDF → 检查每页 OCR 缓存 → 有缓存直接读、无缓存则 PyMuPDF 渲染 PNG + DashScope OCR → 结果存入 parsed/{book}/page_{N}.md，页面图片存入 images/{book}/page_{N}.png",
       "verification": "L2",
       "depends_on": ["R003-BF-002"],
-      "status": "pending",
+      "status": "completed",
       "priority": "high",
       "dependencies": ["DashScope API Key", "PyMuPDF (fitz) 库", "5 本 PDF 文件在 data/raw/ 下"],
       "risk_tags": ["network"],
+      "started_at": "2026-05-21T00:10:00Z",
+      "completed_at": "2026-05-21T00:35:00Z",
+      "actual_minutes": 25,
+      "commit": "f128086",
+      "evidence_file": ".dev-flow/evidence/R003-BF-003.md",
+      "summary": "PDF Reader + OCR 缓存完成。PyMuPDF + DashScope OCR + 缓存优先。pytest 17/17 + 全量 117/117 通过。",
       "test_tasks": [
         "有缓存时跳过 OCR，直接读缓存文件",
         "无缓存时渲染 PNG + 调 DashScope OCR → 缓存正确写入",
