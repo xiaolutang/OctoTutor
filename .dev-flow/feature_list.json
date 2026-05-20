@@ -86,7 +86,7 @@
       "source_decision_refs": ["DEC-003-2"]
     }
   ],
-  "summary": { "total": 12, "completed": 6, "pending": 6 },
+  "summary": { "total": 12, "completed": 7, "pending": 5 },
   "open_issues": [
     "DashScope API Key 需要配置到 .env 文件"
   ],
@@ -318,10 +318,16 @@
       "success_picture": "POST /api/retrieve {\"query\": \"二次函数的顶点公式\", \"top_k\": 5} → 返回 5 个相关 chunks（含 score + metadata）。GET /api/health → 返回 ChromaDB 连接状态和 document_count。空库时返回 chunks=[], total=0",
       "verification": "L2",
       "depends_on": ["R003-BF-005", "R003-BF-006"],
-      "status": "pending",
+      "status": "completed",
       "priority": "high",
       "dependencies": [],
       "risk_tags": [],
+      "started_at": "2026-05-21T00:40:00Z",
+      "completed_at": "2026-05-21T00:55:00Z",
+      "actual_minutes": 15,
+      "commit": "5f17c9f",
+      "evidence_file": ".dev-flow/evidence/R003-BB-008.md",
+      "summary": "检索 API 完成。POST /api/retrieve + GET /api/health 扩展。pytest 16/16 + 全量 132/132 通过。",
       "test_tasks": [
         "POST /api/retrieve 正常返回 top-K chunks",
         "GET /api/health 返回 ChromaDB 状态",
