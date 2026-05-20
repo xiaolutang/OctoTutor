@@ -186,8 +186,16 @@ class IngestionPipeline:
                 else:
                     result.ocr_calls += 1
 
-            # 3. 汇总所有页面 Markdown
-            full_text = "\n\n".join(pr.content for pr in page_results if pr.content)
+            # 3. 汇总所有页面 Markdown，同时构建页码偏移映射
+            full_text = ""
+            page_offsets: list[tuple[int, int, int]] = []  # (start, end, page_number)
+            for pr in page_results:
+                if not pr.content:
+                    continue
+                start = len(full_text)
+                full_text += pr.content + "\n\n"
+                end = len(full_text)
+                page_offsets.append((start, end, pr.page_number))
 
             if not full_text.strip():
                 logger.warning("书籍 %s 内容为空，跳过", book_name)
@@ -198,7 +206,8 @@ class IngestionPipeline:
 
             # 5. MathChunker 分块
             chunks: list[Chunk] = self._chunker.chunk(
-                full_text, boundaries, book=book_name
+                full_text, boundaries, book=book_name,
+                page_offsets=page_offsets,
             )
 
             if not chunks:

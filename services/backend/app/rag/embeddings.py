@@ -11,7 +11,7 @@ import logging
 import time
 from typing import Any
 
-from dashscope import TextEmbedding
+from dashscope import MultiModalEmbedding, TextEmbedding
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ class DashScopeEmbedding:
     def __init__(
         self,
         api_key: str,
-        model: str = "text-embedding-v3",
+        model: str = "text-embedding-v4",
         dimension: int = 768,
         batch_size: int = 6,
         max_retries: int = 3,
@@ -53,13 +53,13 @@ class DashScopeEmbedding:
         """将文本列表转为向量列表
 
         自动按 batch_size 分批调用 DashScope API，
-        失败时指数退避重试。
+        失败时指数退避重试。超长文本自动截断到 8192 字符。
 
         Args:
             texts: 待向量化的文本列表
 
         Returns:
-            与 texts 等长的 768 维向量列表
+            与 texts 等长的向量列表
 
         Raises:
             ValueError: texts 为空列表
@@ -68,10 +68,14 @@ class DashScopeEmbedding:
         if not texts:
             raise ValueError("texts 不能为空列表")
 
-        all_embeddings: list[list[float]] = [None] * len(texts)  # type: ignore[list-item]
+        # 截断超长文本
+        max_len = 8000
+        truncated = [t[:max_len] if len(t) > max_len else t for t in texts]
+
+        all_embeddings: list[list[float]] = [None] * len(truncated)  # type: ignore[list-item]
 
         # 按 batch_size 分片
-        batches = self._split_batches(texts)
+        batches = self._split_batches(truncated)
 
         for batch_start, batch_texts in batches:
             batch_embeddings = self._call_with_retry(batch_texts)
@@ -173,7 +177,9 @@ class DashScopeEmbedding:
         texts: list[str],
         text_type: str | None = None,
     ) -> list[list[float]]:
-        """调用 DashScope TextEmbedding API
+        """调用 DashScope Embedding API
+
+        自动根据模型名选择 TextEmbedding 或 MultiModalEmbedding API。
 
         Args:
             texts: 文本列表
@@ -186,15 +192,26 @@ class DashScopeEmbedding:
             RuntimeError: API 返回非 200 状态码
             ValueError: 返回向量维度与预期不符
         """
-        kwargs: dict[str, Any] = {
-            "model": self._model,
-            "input": texts,
-            "api_key": self._api_key,
-        }
-        if text_type is not None:
-            kwargs["text_type"] = text_type
+        use_vision = self._model.startswith("tongyi-embedding-vision")
 
-        response = TextEmbedding.call(**kwargs)
+        if use_vision:
+            mm_input = [{"text": t} for t in texts]
+            response = MultiModalEmbedding.call(
+                model=self._model,
+                input=mm_input,
+                api_key=self._api_key,
+            )
+        else:
+            kwargs: dict[str, Any] = {
+                "model": self._model,
+                "input": texts,
+                "api_key": self._api_key,
+            }
+            if self._dimension:
+                kwargs["dimension"] = self._dimension
+            if text_type is not None:
+                kwargs["text_type"] = text_type
+            response = TextEmbedding.call(**kwargs)
 
         if response.status_code != 200:
             raise RuntimeError(
@@ -206,10 +223,12 @@ class DashScopeEmbedding:
 
         # 提取并排序 embeddings
         raw_embeddings = response.output["embeddings"]
-        # 按 text_index 排序
-        sorted_embeddings = sorted(
-            raw_embeddings, key=lambda x: x["text_index"]
-        )
+        if raw_embeddings and "text_index" in raw_embeddings[0]:
+            sorted_embeddings = sorted(
+                raw_embeddings, key=lambda x: x["text_index"]
+            )
+        else:
+            sorted_embeddings = raw_embeddings
 
         result: list[list[float]] = []
         for item in sorted_embeddings:

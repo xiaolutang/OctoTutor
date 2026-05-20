@@ -15,8 +15,8 @@ class Settings(BaseSettings):
         ...,
         description="DashScope API Key，用于 Embedding 和 OCR"
     )
-    dashscope_embedding_model: str = "text-embedding-v3"
-    dashscope_embedding_dimension: int = 768
+    dashscope_embedding_model: str = "text-embedding-v4"
+    dashscope_embedding_dimension: int = 1024
 
     # ChromaDB
     chroma_persist_dir: str = "data/chroma_db"

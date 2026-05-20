@@ -162,6 +162,7 @@ class MathChunker:
         text: str,
         boundaries: List[SectionBoundary],
         book: str = "",
+        page_offsets: list[tuple[int, int, int]] | None = None,
     ) -> List[Chunk]:
         """对文本进行 Parent-Child 分块。
 
@@ -169,6 +170,7 @@ class MathChunker:
             text: 完整 Markdown 文本
             boundaries: StructureParser 识别出的章节边界
             book: 书名
+            page_offsets: 页码偏移映射 [(start, end, page_number), ...]
 
         Returns:
             包含 Parent 和 Child 的 Chunk 列表
@@ -203,9 +205,12 @@ class MathChunker:
             if not section_text:
                 continue
 
+            # 根据 page_offsets 查找正确的页码
+            page = _lookup_page(boundary.start_pos, page_offsets) if page_offsets else boundary.page
+
             # 生成 Chunk ID 的共用部分
             section_clean = _clean_section_title(boundary.title)
-            loc = f"p{boundary.page}_s{boundary.section_index}"
+            loc = f"p{page}_s{boundary.section_index}"
             parent_id_str = f"{book}::{section_clean}::{loc}::parent"
 
             # Parent Chunk
@@ -216,7 +221,7 @@ class MathChunker:
                     book=book,
                     chapter=current_chapter,
                     section=boundary.title,
-                    page=boundary.page,
+                    page=page,
                     chunk_type="parent",
                     has_formula=_has_formula(section_text),
                     parent_id=parent_id_str,
@@ -243,7 +248,7 @@ class MathChunker:
                             book=book,
                             chapter=current_chapter,
                             section=boundary.title,
-                            page=boundary.page,
+                            page=page,
                             chunk_type="child",
                             has_formula=_has_formula(child_text),
                             parent_id=parent_id_str,
@@ -334,6 +339,28 @@ class MathChunker:
 # ---------------------------------------------------------------------------
 # 辅助函数
 # ---------------------------------------------------------------------------
+
+
+def _lookup_page(
+    pos: int,
+    page_offsets: list[tuple[int, int, int]],
+) -> int:
+    """根据字符偏移位置查找对应的页码。
+
+    Args:
+        pos: 在 full_text 中的字符位置
+        page_offsets: [(start, end, page_number), ...] 列表
+
+    Returns:
+        对应的页码，未找到时返回 0
+    """
+    for start, end, page_num in page_offsets:
+        if start <= pos < end:
+            return page_num
+    # 如果超出最后一个 range，返回最后一页
+    if page_offsets and pos >= page_offsets[-1][1]:
+        return page_offsets[-1][2]
+    return 0
 
 
 def _clean_section_title(title: str) -> str:
