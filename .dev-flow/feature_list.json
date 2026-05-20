@@ -86,7 +86,7 @@
       "source_decision_refs": ["DEC-003-2"]
     }
   ],
-  "summary": { "total": 12, "completed": 7, "pending": 5 },
+  "summary": { "total": 12, "completed": 9, "pending": 3 },
   "open_issues": [
     "DashScope API Key 需要配置到 .env 文件"
   ],
@@ -293,10 +293,16 @@
       "success_picture": "运行 `python -m ingestion` → 5 本教材全部入库 → ChromaDB 有数据 → 输出 IngestionStats（总页数、总 chunks、OCR 缓存命中数、耗时）。重复运行结果一致",
       "verification": "L2",
       "depends_on": ["R003-BF-003", "R003-BF-004", "R003-BF-005", "R003-BF-006"],
-      "status": "pending",
+      "status": "completed",
       "priority": "high",
       "dependencies": ["DashScope API Key", "5 本 PDF 文件"],
       "risk_tags": ["network", "startup"],
+      "started_at": "2026-05-21T01:00:00Z",
+      "completed_at": "2026-05-21T01:25:00Z",
+      "actual_minutes": 25,
+      "commit": "aec0317",
+      "evidence_file": ".dev-flow/evidence/R003-BB-007.md",
+      "summary": "入库管线编排完成。IngestionPipeline + CLI + 幂等 + 错误隔离。pytest 20/20 + 全量 152/152 通过。",
       "test_tasks": [
         "全量入库 5 本教材 → ChromaDB 有 chunks",
         "重复运行 → chunks 数量不变（幂等）",
@@ -417,10 +423,16 @@
       "technical_success_picture": "docker-compose up → 前端可通过 Traefik 访问 → 后端 /api/health 返回 healthy → 前端功能不变（Playwright 测试通过）→ 后端 API 可被前端调用",
       "verification": "L3",
       "depends_on": ["R003-BB-008"],
-      "status": "pending",
+      "status": "completed",
       "priority": "medium",
       "dependencies": [],
       "risk_tags": ["config"],
+      "started_at": "2026-05-21T01:30:00Z",
+      "completed_at": "2026-05-21T01:50:00Z",
+      "actual_minutes": 20,
+      "commit": "e8a3869",
+      "evidence_file": ".dev-flow/evidence/R003-BF-012.md",
+      "summary": "Docker Compose 双容器部署完成。前端+后端+Traefik 路由。build.sh + deploy.sh 更新。",
       "test_tasks": [
         "docker compose build 成功",
         "docker compose up → 前端可访问",
