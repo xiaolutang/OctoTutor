@@ -86,7 +86,7 @@
       "source_decision_refs": ["DEC-003-2"]
     }
   ],
-  "summary": { "total": 12, "completed": 10, "pending": 2 },
+  "summary": { "total": 12, "completed": 12, "pending": 0 },
   "open_issues": [
     "DashScope API Key 需要配置到 .env 文件"
   ],
@@ -383,10 +383,16 @@
       "success_picture": "基于 ChromaDB 实际 chunks 构建评估集 JSON（每个问题含 id + question + retrieval_truth），覆盖 5 本书的核心知识点（函数、几何、概率等），评估集文件保存到 services/backend/data/evaluation/",
       "verification": "L1",
       "depends_on": ["R003-BB-009"],
-      "status": "pending",
+      "status": "completed",
       "priority": "medium",
       "dependencies": [],
       "risk_tags": [],
+      "started_at": "2026-05-21T02:25:00Z",
+      "completed_at": "2026-05-21T02:50:00Z",
+      "actual_minutes": 25,
+      "commit": "1ca2cb1",
+      "evidence_file": ".dev-flow/evidence/R003-BB-010.md",
+      "summary": "评估集构建完成。EvalItem 数据模型 + EvalSetLoader + 25 条评估数据（5 本书×5 条）。pytest 46/46 + 全量 225/225 通过。",
       "test_tasks": [
         "评估集 JSON 格式正确（id, question, retrieval_truth）",
         "每本书至少有 N 条评估问题",
@@ -406,10 +412,15 @@
       "success_picture": "运行评估脚本 → 逐条查询评估集 → 判定 Hit（ANY/ALL mode）→ 计算 Hit Rate@K 和 MRR → 输出评估报告（总分 + 按书/按问题类型明细）",
       "verification": "L1",
       "depends_on": ["R003-BB-010", "R003-BB-008"],
-      "status": "pending",
+      "status": "completed",
       "priority": "medium",
       "dependencies": [],
       "risk_tags": [],
+      "started_at": "2026-05-21T03:00:00Z",
+      "completed_at": "2026-05-21T03:30:00Z",
+      "actual_minutes": 30,
+      "evidence_file": ".dev-flow/evidence/R003-BB-011.md",
+      "summary": "检索质量评估完成。EvalRunner + Hit Rate@K + MRR + ANY/ALL mode + 按书分组报告。pytest 30/30 + 全量 255/255 通过。",
       "test_tasks": [
         "Hit Rate@K 计算正确（ANY mode：任一 source 命中 → Hit）",
         "MRR 计算正确（排第 N → 1/N，未命中 → 0）",

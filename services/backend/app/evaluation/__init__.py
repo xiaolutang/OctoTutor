@@ -1,11 +1,12 @@
 """评估模块
 
-包含入库抽检、评估集数据模型、评估集加载验证工具。
+包含入库抽检、评估集数据模型、评估集加载验证工具、检索质量评估运行器。
 
 Components:
     - spot_check: 入库抽检（R003-BB-009）
     - eval_types: 评估集数据模型（R003-BB-010）
     - eval_set_loader: 评估集加载验证（R003-BB-010）
+    - eval_runner: 检索质量评估运行器（R003-BB-011）
 """
 
 from app.evaluation.eval_types import (
@@ -15,6 +16,13 @@ from app.evaluation.eval_types import (
     RetrievalTruth,
 )
 from app.evaluation.eval_set_loader import EvalSetLoader
+from app.evaluation.eval_runner import (
+    BookMetrics,
+    EvalDetail,
+    EvalReport,
+    EvalRunner,
+    OverallMetrics,
+)
 
 __all__ = [
     "EvalSource",
@@ -22,4 +30,9 @@ __all__ = [
     "EvalItem",
     "EvalSetValidation",
     "EvalSetLoader",
+    "EvalRunner",
+    "EvalReport",
+    "EvalDetail",
+    "BookMetrics",
+    "OverallMetrics",
 ]
