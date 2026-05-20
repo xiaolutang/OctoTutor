@@ -86,7 +86,7 @@
       "source_decision_refs": ["DEC-003-2"]
     }
   ],
-  "summary": { "total": 12, "completed": 3, "pending": 9 },
+  "summary": { "total": 12, "completed": 4, "pending": 8 },
   "open_issues": [
     "DashScope API Key 需要配置到 .env 文件"
   ],
@@ -251,7 +251,7 @@
       "technical_success_picture": "ChromaDB PersistentClient 可 upsert chunks（含 embedding + metadata）、query by embedding（top-K + where 过滤）、delete by filter。数据持久化到 data/chroma_db/",
       "verification": "L1",
       "depends_on": ["R003-BF-002"],
-      "status": "pending",
+      "status": "completed",
       "priority": "high",
       "dependencies": [],
       "risk_tags": [],
@@ -260,7 +260,13 @@
         "metadata where 过滤（book, page, chunk_type）正确",
         "delete 后 query 不再返回",
         "PersistentClient 数据持久化（重启后数据仍在）"
-      ]
+      ],
+      "started_at": "2026-05-20T23:20:00Z",
+      "completed_at": "2026-05-20T23:40:00Z",
+      "actual_minutes": 20,
+      "commit": "a69fc59",
+      "evidence_file": ".dev-flow/evidence/R003-BF-006.md",
+      "summary": "ChromaDB VectorStore 完成。Protocol 接口 + PersistentClient + where 过滤。pytest 30/30 通过。"
     },
     {
       "id": "R003-BB-007",
