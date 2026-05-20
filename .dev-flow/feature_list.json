@@ -86,7 +86,7 @@
       "source_decision_refs": ["DEC-003-2"]
     }
   ],
-  "summary": { "total": 12, "completed": 9, "pending": 3 },
+  "summary": { "total": 12, "completed": 10, "pending": 2 },
   "open_issues": [
     "DashScope API Key 需要配置到 .env 文件"
   ],
@@ -354,10 +354,16 @@
       "success_picture": "运行抽检脚本 → 验证每本书页码范围（如必修第一册 1-270）→ 抽查关键页内容与 PDF 原文一致 → Parent-Child 分块结构正确 → 输出抽检报告（通过/失败项明细）",
       "verification": "L1",
       "depends_on": ["R003-BB-007"],
-      "status": "pending",
+      "status": "completed",
       "priority": "medium",
       "dependencies": [],
       "risk_tags": [],
+      "started_at": "2026-05-21T02:00:00Z",
+      "completed_at": "2026-05-21T02:20:00Z",
+      "actual_minutes": 20,
+      "commit": "f915015",
+      "evidence_file": ".dev-flow/evidence/R003-BB-009.md",
+      "summary": "入库抽检完成。页码范围+内容完整性+Parent-Child结构+元数据验证。pytest 27/27 + 全量 179/179 通过。",
       "test_tasks": [
         "每本书的页码范围与 PDF 一致",
         "抽查 3-5 页内容与原文匹配",
