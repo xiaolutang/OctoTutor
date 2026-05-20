@@ -1,11 +1,11 @@
 {
   "version": "1.4",
   "active_requirement_cycle": {
-    "id": "R000",
-    "name": "none",
-    "status": "idle",
-    "branch": null,
-    "planning_context": null
+    "id": "R002",
+    "name": "dev-sandbox-enhancement",
+    "branch": "feat/R002-dev-sandbox-enhancement",
+    "status": "active",
+    "planning_context": ".dev-flow/planning_context.md"
   },
   "archived_requirement_cycles": [
     {
@@ -40,9 +40,40 @@
       "notes": "复用 xlfoundryTest 的 auth-center Docker 环境"
     }
   },
-  "summary": { "total": 0, "completed": 0 },
+  "capability_coverage": [
+    {
+      "capability_id": "CAP-dev-001",
+      "must_plan": true,
+      "covered_by": ["R002-F002"],
+      "source_analysis_refs": ["analysis/2026-05-20--dev-sandbox-celebration.md"],
+      "source_decision_refs": ["DEC-dev-001"]
+    },
+    {
+      "capability_id": "CAP-dev-002",
+      "must_plan": false,
+      "covered_by": ["R002-F001"],
+      "source_analysis_refs": ["analysis/2026-05-20--dev-sandbox-celebration.md"],
+      "source_decision_refs": ["DEC-dev-002", "DEC-dev-003"]
+    }
+  ],
+  "summary": { "total": 2, "completed": 2 },
   "open_issues": [],
-  "out_of_scope_notes": [],
+  "out_of_scope_notes": [
+    "生产页面不受任何影响",
+    "不引入外部动画库",
+    "不需要额外的生产环境保护测试（已有 middleware 单元测试 4/4 + Playwright 2/2）"
+  ],
   "archived_phases": [],
-  "features": []
+  "features": [
+    {
+      "id": "R002-F001",
+      "status": "completed",
+      "commit": "8a45ea6"
+    },
+    {
+      "id": "R002-F002",
+      "status": "completed",
+      "commit": "8a45ea6"
+    }
+  ]
 }

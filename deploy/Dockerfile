@@ -22,7 +22,10 @@ COPY next.config.ts tsconfig.json postcss.config.mjs eslint.config.mjs component
 COPY src ./src
 COPY public ./public
 
-# 4. 构建 Next.js
+# 4. 删除开发专用页面（不进入生产构建产物）
+RUN rm -rf ./src/app/dev
+
+# 5. 构建 Next.js
 RUN npm run build --webpack
 
 # ===== Stage 2: Runtime =====
