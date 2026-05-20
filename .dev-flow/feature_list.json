@@ -86,7 +86,7 @@
       "source_decision_refs": ["DEC-003-2"]
     }
   ],
-  "summary": { "total": 12, "completed": 1, "pending": 11 },
+  "summary": { "total": 12, "completed": 2, "pending": 10 },
   "open_issues": [
     "DashScope API Key 需要配置到 .env 文件"
   ],
@@ -143,10 +143,16 @@
       "technical_success_picture": "services/backend/ 下有完整的 Python 项目结构（app/main.py + app/config.py + Dockerfile + .env.template），FastAPI 可启动，GET /api/health 返回 200",
       "verification": "L3",
       "depends_on": ["R003-BF-001"],
-      "status": "pending",
+      "status": "completed",
       "priority": "high",
       "dependencies": ["DashScope API Key 需在 .env 中配置"],
       "risk_tags": ["startup", "config"],
+      "started_at": "2026-05-20T22:30:00Z",
+      "completed_at": "2026-05-20T22:45:00Z",
+      "actual_minutes": 15,
+      "commit": "a0f2a58",
+      "evidence_file": ".dev-flow/evidence/R003-BF-002.md",
+      "summary": "后端脚手架搭建完成。FastAPI + pydantic-settings + health 端点 + Dockerfile + 占位模块。pytest 3/3 通过。Grade A (100/100)",
       "test_tasks": [
         "FastAPI 应用可启动，/api/health 返回 200",
         "pydantic-settings 正确读取 .env 配置",
