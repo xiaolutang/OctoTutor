@@ -11,7 +11,7 @@ import {
 } from "react"
 import { AuthService, type UserInfo, type AuthState } from "@xlfoundry/auth-sdk-web"
 
-/** 运行时配置，从 public/config.json 加载 */
+/** 运行时配置，从 /api/config 加载 */
 export interface RuntimeConfig {
   clientId: string
   authCenterBaseURL: string
@@ -37,6 +37,18 @@ export interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
+const RETURN_URL_KEY = "xlfoundry_auth_return_url"
+
+function saveReturnUrl() {
+  sessionStorage.setItem(RETURN_URL_KEY, window.location.pathname + window.location.search)
+}
+
+export function consumeReturnUrl(): string {
+  const url = sessionStorage.getItem(RETURN_URL_KEY) || "/"
+  sessionStorage.removeItem(RETURN_URL_KEY)
+  return url
+}
+
 /** 单例 AuthService 实例 */
 let authService: AuthService | null = null
 
@@ -52,7 +64,7 @@ function getAuthService(): AuthService {
  *
  * - 必须在 'use client' 组件中使用
  * - SDK 依赖 localStorage/window/sessionStorage，因此初始化放在 useEffect 中
- * - config.json 通过 fetch('/config.json') 在运行时加载
+ * - 配置通过 fetch('/api/config') 从服务端环境变量加载
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isInitialized, setIsInitialized] = useState(false)
@@ -69,10 +81,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const service = getAuthService()
 
-    fetch("/config.json")
+    fetch("/api/config")
       .then((res) => {
         if (!res.ok)
-          throw new Error(`config.json 加载失败: ${res.status}`)
+          throw new Error(`配置加载失败: ${res.status}`)
         return res.json()
       })
       .then((config: RuntimeConfig) => {
@@ -97,6 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const login = useCallback(async () => {
+    saveReturnUrl()
     const service = getAuthService()
     await service.login()
   }, [])

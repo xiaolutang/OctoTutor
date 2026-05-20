@@ -4,6 +4,11 @@ import { useState } from "react"
 import { useAuth } from "@/contexts/auth-context"
 import { CelebrationOverlay } from "./celebration"
 
+const LINKS = [
+  { label: "首页", href: "/" },
+  { label: "对话页", href: "/chat" },
+]
+
 /**
  * 开发沙箱页面
  *
@@ -11,19 +16,8 @@ import { CelebrationOverlay } from "./celebration"
  * 用于快速测试独立组件、功能片段、API 调用等。
  */
 export default function DevSandboxPage() {
-  const [code, setCode] = useState(DEFAULT_CODE)
-  const [output, setOutput] = useState("")
   const [showCelebration, setShowCelebration] = useState(false)
   const { isInitialized, isAuthenticated, user, login, logout } = useAuth()
-
-  function handleRun() {
-    try {
-      const result = new Function("return " + code)()
-      setOutput(String(result))
-    } catch (err) {
-      setOutput(`Error: ${err instanceof Error ? err.message : String(err)}`)
-    }
-  }
 
   return (
     <div className="min-h-screen p-6 max-w-4xl mx-auto">
@@ -75,41 +69,6 @@ export default function DevSandboxPage() {
           </button>
         </section>
 
-        {/* 代码输入区 */}
-        <section className="border rounded-lg p-4">
-          <h2 className="text-sm font-medium text-gray-600 mb-2">
-            表达式求值
-          </h2>
-          <textarea
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            className="w-full h-32 p-3 font-mono text-sm border rounded bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-400"
-            spellCheck={false}
-          />
-          <div className="flex items-center gap-3 mt-3">
-            <button
-              onClick={handleRun}
-              className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
-            >
-              运行
-            </button>
-            <button
-              onClick={() => {
-                setCode(DEFAULT_CODE)
-                setOutput("")
-              }}
-              className="px-4 py-1.5 bg-gray-200 text-sm rounded hover:bg-gray-300"
-            >
-              重置
-            </button>
-          </div>
-          {output && (
-            <pre className="mt-3 p-3 bg-gray-900 text-green-400 rounded text-sm overflow-auto">
-              {output}
-            </pre>
-          )}
-        </section>
-
         {/* 快捷入口 */}
         <section className="border rounded-lg p-4">
           <h2 className="text-sm font-medium text-gray-600 mb-3">
@@ -136,12 +95,3 @@ export default function DevSandboxPage() {
     </div>
   )
 }
-
-const DEFAULT_CODE = `// 在此输入 JS 表达式
-1 + 1`
-
-const LINKS = [
-  { label: "首页", href: "/" },
-  { label: "对话页", href: "/chat" },
-  { label: "OAuth 回调", href: "/callback" },
-]

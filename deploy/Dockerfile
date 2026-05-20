@@ -22,8 +22,9 @@ COPY next.config.ts tsconfig.json postcss.config.mjs eslint.config.mjs component
 COPY src ./src
 COPY public ./public
 
-# 4. 删除开发专用页面（不进入生产构建产物）
-RUN rm -rf ./src/app/dev
+# 4. 线上构建时删除开发专用页面（本地构建保留）
+ARG EXCLUDE_DEV=false
+RUN if [ "$EXCLUDE_DEV" = "true" ]; then rm -rf ./src/app/dev; fi
 
 # 5. 构建 Next.js
 RUN npm run build --webpack

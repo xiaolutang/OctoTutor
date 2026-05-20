@@ -16,6 +16,8 @@ services:
     environment:
       - PORT=3000
       - HOSTNAME=0.0.0.0
+      - AUTH_CLIENT_ID=${AUTH_CLIENT_ID}
+      - AUTH_BASE_URL=${AUTH_BASE_URL}
     networks:
       - gateway
       - auth-network

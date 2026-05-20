@@ -1,47 +1,45 @@
 import { describe, it, expect, afterEach } from "vitest"
-import { NextRequest } from "next/server"
 import { middleware } from "../middleware"
 
 /**
  * middleware 单元测试
  *
- * 验证 /dev/* 路由的环境守卫逻辑：
- * - development：放行
- * - production：rewrite 到 /not-found
+ * 验证 /dev 路由的环境守卫逻辑：
+ * - ENABLE_DEV_SANDBOX=true：放行（本地 Docker 开发）
+ * - ENABLE_DEV_SANDBOX 未设置：rewrite 到 /not-found（线上）
  */
 describe("dev sandbox middleware", () => {
-  const originalEnv = process.env.NODE_ENV
+  const originalEnableDev = process.env.ENABLE_DEV_SANDBOX
 
   afterEach(() => {
-    process.env.NODE_ENV = originalEnv
+    if (originalEnableDev !== undefined) {
+      process.env.ENABLE_DEV_SANDBOX = originalEnableDev
+    } else {
+      delete process.env.ENABLE_DEV_SANDBOX
+    }
   })
 
-  function makeRequest(pathname: string) {
-    return new NextRequest(new URL(pathname, "http://localhost:3000"))
-  }
-
-  it("开发环境放行 /dev", () => {
-    process.env.NODE_ENV = "development"
-    const res = middleware(makeRequest("/dev"))
-    // NextResponse.next() 不设置 rewrite header
+  it("ENABLE_DEV_SANDBOX=true 放行", () => {
+    process.env.ENABLE_DEV_SANDBOX = "true"
+    const res = middleware()
     expect(res.headers.get("x-middleware-rewrite")).toBeNull()
   })
 
-  it("生产环境拦截 /dev，rewrite 到 /not-found", () => {
-    process.env.NODE_ENV = "production"
-    const res = middleware(makeRequest("/dev"))
+  it("未设置时拦截，rewrite 到 /not-found", () => {
+    delete process.env.ENABLE_DEV_SANDBOX
+    const res = middleware()
     expect(res.headers.get("x-middleware-rewrite")).toContain("not-found")
   })
 
-  it("生产环境放行非 /dev 路由", () => {
-    process.env.NODE_ENV = "production"
-    const res = middleware(makeRequest("/"))
-    expect(res.headers.get("x-middleware-rewrite")).toBeNull()
+  it("ENABLE_DEV_SANDBOX=false 仍然拦截", () => {
+    process.env.ENABLE_DEV_SANDBOX = "false"
+    const res = middleware()
+    expect(res.headers.get("x-middleware-rewrite")).toContain("not-found")
   })
 
-  it("生产环境拦截 /dev 子路径", () => {
-    process.env.NODE_ENV = "production"
-    const res = middleware(makeRequest("/dev/some-test"))
+  it("ENABLE_DEV_SANDBOX 为空字符串时拦截", () => {
+    process.env.ENABLE_DEV_SANDBOX = ""
+    const res = middleware()
     expect(res.headers.get("x-middleware-rewrite")).toContain("not-found")
   })
 })

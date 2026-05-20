@@ -2,11 +2,11 @@
 
 import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { useAuth } from "@/contexts/auth-context"
+import { useAuth, consumeReturnUrl } from "@/contexts/auth-context"
 
 export default function CallbackPage() {
   const router = useRouter()
-  const { isInitialized, handleCallback } = useAuth()
+  const { isInitialized, handleCallback, login } = useAuth()
   const [error, setError] = useState<string | null>(null)
   const processedRef = useRef(false)
 
@@ -16,7 +16,7 @@ export default function CallbackPage() {
 
     handleCallback()
       .then(() => {
-        router.replace("/")
+        router.replace(consumeReturnUrl())
       })
       .catch((err) => {
         console.error("[Callback] 登录回调处理失败:", err)
@@ -31,10 +31,10 @@ export default function CallbackPage() {
           <h1 className="text-2xl font-bold text-red-600">登录失败</h1>
           <p className="mt-2 text-muted-foreground">{error}</p>
           <button
-            onClick={() => router.replace("/")}
+            onClick={login}
             className="mt-4 inline-flex h-10 items-center justify-center rounded-md bg-primary px-8 text-sm font-medium text-primary-foreground"
           >
-            返回首页
+            重新登录
           </button>
         </div>
       </div>

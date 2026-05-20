@@ -1,21 +1,17 @@
 import { NextResponse } from "next/server"
-import type { NextRequest } from "next/server"
 
 /**
- * 生产环境拦截 /dev/* 路由，返回 404
- * 开发环境正常放行
+ * 线上环境拦截 /dev 路由，返回 404
+ * 本地 Docker 设置 ENABLE_DEV_SANDBOX=true 放行
  */
-export function middleware(request: NextRequest) {
-  if (
-    process.env.NODE_ENV === "production" &&
-    request.nextUrl.pathname.startsWith("/dev")
-  ) {
-    return NextResponse.rewrite(new URL("/not-found", request.url))
+export function middleware() {
+  if (process.env.ENABLE_DEV_SANDBOX !== "true") {
+    return NextResponse.rewrite(new URL("/not-found", "http://localhost"))
   }
 
   return NextResponse.next()
 }
 
 export const config = {
-  matcher: ["/dev/:path*"],
+  matcher: ["/dev", "/dev/:path*"],
 }

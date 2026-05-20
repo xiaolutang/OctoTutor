@@ -39,6 +39,8 @@ REMOTE_DEPLOY_DIR=$(get_env_var "REMOTE_DEPLOY_DIR")
 REMOTE_DEPLOY_DIR="${REMOTE_DEPLOY_DIR:-/home/ubuntu/project/OctoTutor}"
 REMOTE_PLATFORM=$(get_env_var "REMOTE_PLATFORM")
 REMOTE_PLATFORM="${REMOTE_PLATFORM:-linux/amd64}"
+AUTH_CLIENT_ID=$(get_env_var "AUTH_CLIENT_ID")
+AUTH_BASE_URL=$(get_env_var "AUTH_BASE_URL")
 IMAGE_NAME="octotutor:latest"
 TMP_FILE="/tmp/octotutor-image.tar.gz"
 
@@ -77,6 +79,7 @@ if [[ "${1:-}" != "--skip-build" ]]; then
 
     docker buildx build --platform "$REMOTE_PLATFORM" \
         -f "$SCRIPT_DIR/Dockerfile" \
+        --build-arg EXCLUDE_DEV=true \
         -t "$IMAGE_NAME" \
         --load \
         "$PROJECT_DIR"
@@ -105,7 +108,7 @@ rm -f "$TMP_FILE"
 # ===== 4. 远端加载并启动 =====
 echo -e "${YELLOW}[4/5] 远端加载并启动...${NC}"
 ssh "${REMOTE_USER}@${REMOTE_HOST}" \
-    "REMOTE_DEPLOY_DIR='${REMOTE_DEPLOY_DIR}' bash -s" <<'REMOTE_SCRIPT'
+    "REMOTE_DEPLOY_DIR='${REMOTE_DEPLOY_DIR}' AUTH_CLIENT_ID='${AUTH_CLIENT_ID}' AUTH_BASE_URL='${AUTH_BASE_URL}' bash -s" <<'REMOTE_SCRIPT'
 set -euo pipefail
 
 echo "  加载镜像..."
@@ -114,6 +117,12 @@ rm -f /tmp/octotutor-image.tar.gz
 
 mkdir -p "${REMOTE_DEPLOY_DIR}/deploy"
 mv /tmp/octotutor-compose.yml "${REMOTE_DEPLOY_DIR}/deploy/docker-compose.yml"
+
+# 生成 .env 文件供 docker compose 读取
+cat > "${REMOTE_DEPLOY_DIR}/.env" <<EOF
+AUTH_CLIENT_ID=${AUTH_CLIENT_ID}
+AUTH_BASE_URL=${AUTH_BASE_URL}
+EOF
 
 cd "${REMOTE_DEPLOY_DIR}"
 docker compose -f deploy/docker-compose.yml down 2>/dev/null || true
