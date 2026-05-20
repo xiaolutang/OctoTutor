@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/contexts/auth-context"
 
@@ -8,9 +8,11 @@ export default function CallbackPage() {
   const router = useRouter()
   const { isInitialized, handleCallback } = useAuth()
   const [error, setError] = useState<string | null>(null)
+  const processedRef = useRef(false)
 
   useEffect(() => {
-    if (!isInitialized) return
+    if (!isInitialized || processedRef.current) return
+    processedRef.current = true
 
     handleCallback()
       .then(() => {
