@@ -86,7 +86,7 @@
       "source_decision_refs": ["DEC-003-2"]
     }
   ],
-  "summary": { "total": 12, "completed": 4, "pending": 8 },
+  "summary": { "total": 12, "completed": 5, "pending": 7 },
   "open_issues": [
     "DashScope API Key 需要配置到 .env 文件"
   ],
@@ -228,7 +228,7 @@
       "technical_success_picture": "给定文本列表 → 批量调 DashScope Embedding API（batch=6）→ 返回 768 维向量列表。失败时指数退避重试 3 次，API Key 缺失时启动报错",
       "verification": "L2",
       "depends_on": ["R003-BF-002"],
-      "status": "pending",
+      "status": "completed",
       "priority": "high",
       "dependencies": ["DashScope API Key"],
       "risk_tags": ["network"],
@@ -237,7 +237,13 @@
         "批量大小超过 6 时自动分批",
         "API 失败时指数退避重试 3 次",
         "mock 场景：验证批量拆分逻辑正确"
-      ]
+      ],
+      "started_at": "2026-05-20T23:45:00Z",
+      "completed_at": "2026-05-21T00:05:00Z",
+      "actual_minutes": 20,
+      "commit": "ddb6fd3",
+      "evidence_file": ".dev-flow/evidence/R003-BF-005.md",
+      "summary": "DashScope Embedding 封装完成。批量 embed + 指数退避重试 + embed_query 独立方法。pytest 28/28 + 全量 100/100 通过。"
     },
     {
       "id": "R003-BF-006",
