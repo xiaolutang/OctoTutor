@@ -4,12 +4,13 @@
 # 特点:
 #   - 加入 xlfoundryTest 已有的 auth-network-local 网络，复用 Traefik + auth-center
 #   - OctoTutor 通过 Traefik 路由，域名 octotutor.localhost
+#   - 前端 catch-all + 后端 /api/* 路由
 #   - 需要先启动 xlfoundryTest 的 auth-center 服务
 
 services:
-  octotutor:
-    image: octotutor:latest
-    container_name: octotutor
+  octotutor-frontend:
+    image: octotutor-frontend:latest
+    container_name: octotutor-frontend
     restart: unless-stopped
     expose:
       - "3000"
@@ -23,10 +24,42 @@ services:
       - auth-network
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.octotutor-local.rule=Host(`octotutor.localhost`)"
-      - "traefik.http.routers.octotutor-local.entrypoints=web"
-      - "traefik.http.routers.octotutor-local.service=octotutor-local-svc"
-      - "traefik.http.services.octotutor-local-svc.loadbalancer.server.port=3000"
+      - "traefik.http.routers.octotutor-frontend-local.rule=Host(`octotutor.localhost`)"
+      - "traefik.http.routers.octotutor-frontend-local.entrypoints=web"
+      - "traefik.http.routers.octotutor-frontend-local.priority=1"
+      - "traefik.http.routers.octotutor-frontend-local.service=octotutor-frontend-local-svc"
+      - "traefik.http.services.octotutor-frontend-local-svc.loadbalancer.server.port=3000"
+
+  octotutor-backend:
+    image: octotutor-backend:latest
+    container_name: octotutor-backend
+    restart: unless-stopped
+    expose:
+      - "8000"
+    environment:
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-sk-dummy-for-local}
+      - CHROMA_PERSIST_DIR=/app/data/chroma_db
+    volumes:
+      - octotutor-data:/app/data
+    networks:
+      - auth-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.octotutor-backend-local.rule=Host(`octotutor.localhost`) && PathPrefix(`/api/`)"
+      - "traefik.http.routers.octotutor-backend-local.entrypoints=web"
+      - "traefik.http.routers.octotutor-backend-local.priority=10"
+      - "traefik.http.routers.octotutor-backend-local.service=octotutor-backend-local-svc"
+      - "traefik.http.services.octotutor-backend-local-svc.loadbalancer.server.port=8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  octotutor-data:
+    name: octotutor-data-local
 
 networks:
   auth-network:
