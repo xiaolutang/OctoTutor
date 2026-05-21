@@ -127,7 +127,7 @@
       "description": "新建 infra/reranker.py（DashScopeReranker），实现 Reranker Protocol。调用 DashScope TextReRank API（gte-rerank）重排序。职责边界：reranker 只负责调用 API，失败抛异常（由 ChatService 捕获降级），返回空返回空列表。包含单元测试（mock DashScope response）。",
       "verification": "L2 — DashScopeReranker.rerank 返回排序后 QueryResult 子集；mock 异常验证异常正确传播",
       "depends_on": ["BF001"],
-      "status": "in_progress",
+      "status": "completed",
       "priority": "high",
       "user_stories": "作为开发者，我希望 Reranker 可对检索结果精炼排序，以便 LLM 获得最相关的教材段落",
       "success_picture": "给定 20 条检索结果，rerank(query, results, top_n=3) 返回最相关的 3 条 QueryResult，按 relevance_score 降序；API 失败时异常传播到调用方",
@@ -149,7 +149,7 @@
       "description": "新建 infra/llm.py（LLMGenerator），实现 Generator Protocol。通过 OpenAI 兼容协议调用 LLM（当前 glm-5.1，可通过配置切换）。构建带编号标记的 context prompt，调用 chat.completions.create，从 context_chunks.metadata 构建 sources（非从 LLM 输出解析）。SourceReference 定义在 domain/models.py。包含单元测试（mock OpenAI response）。",
       "verification": "L2 — LLMGenerator.generate 返回 (answer, sources) tuple，answer 非空，sources 包含所有 context_chunks 的引用信息",
       "depends_on": ["BF001"],
-      "status": "pending",
+      "status": "in_progress",
       "priority": "high",
       "user_stories": "作为开发者，我希望 LLM Generator 可基于教材 context 生成助教式回答并附带引用来源",
       "success_picture": "给定 query + 3 条 context_chunks，generate 返回回答文本和 3 条 SourceReference（chunk_id/book/section/page_start/page_end 来自 context_chunks.metadata）；OpenAI client 创建方式复用 block_type_classifier.py 的模式",
@@ -285,7 +285,7 @@
   ],
   "summary": {
     "total": 11,
-    "completed": 3
+    "completed": 4
   },
   "open_issues": [
     {
