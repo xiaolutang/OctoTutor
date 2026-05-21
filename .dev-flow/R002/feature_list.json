@@ -1,0 +1,8 @@
+{
+  "version": "3.0",
+  "rc_id": "R002",
+  "name": "dev-sandbox-enhancement",
+  "status": "archived",
+  "branch": "feat/R002-dev-sandbox-enhancement",
+  "summary": { "total": 2, "completed": 2 }
+}

@@ -1,0 +1,8 @@
+{
+  "version": "3.0",
+  "rc_id": "R003",
+  "name": "knowledge-base",
+  "status": "archived",
+  "branch": "feat/R003-knowledge-base",
+  "summary": { "total": 17, "completed": 17 }
+}

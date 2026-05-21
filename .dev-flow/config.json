@@ -1,0 +1,20 @@
+{
+  "version": "3.0",
+  "project": "OctoTutor",
+  "active_rc": null,
+  "default_workflow": {
+    "name": "XLFoundry",
+    "mode": "A",
+    "runtime": "skill_orchestrated",
+    "evaluate_provider": "local",
+    "risk_provider": "local"
+  },
+  "archived_requirement_cycles": [
+    { "id": "R001", "name": "项目初始化", "archive_dir": "R001", "total_tasks": 6, "completed_at": "2026-05-20" },
+    { "id": "R002", "name": "dev-sandbox-enhancement", "archive_dir": "R002", "total_tasks": 2, "completed_at": "2026-05-20" },
+    { "id": "R003", "name": "knowledge-base", "archive_dir": "R003", "total_tasks": 17, "completed_at": "2026-05-21" }
+  ],
+  "rc_queue": [
+    { "id": "R004", "name": "rag-dialogue", "depends_on": "R003", "status": "analyzed", "analysis_topic": "检索优化 + AI 对话（纯后端）" }
+  ]
+}
