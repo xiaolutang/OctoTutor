@@ -11,16 +11,16 @@ COPY auth-sdk-web/src ./auth-sdk-web/src
 COPY auth-sdk-web/dist ./auth-sdk-web/dist
 
 # 2. 复制项目 package 文件并安装依赖
-COPY services/frontend/package.json services/frontend/package-lock.json* ./
+COPY frontend/package.json frontend/package-lock.json* ./
 
 # 修改 @xlfoundry/auth-sdk-web 引用指向本地 SDK（已有 dist/ 构建产物）
 RUN sed -i 's|"@xlfoundry/auth-sdk-web": "file:.*"|"@xlfoundry/auth-sdk-web": "file:./auth-sdk-web"|' package.json \
     && npm install
 
 # 3. 复制项目源码
-COPY services/frontend/next.config.ts services/frontend/tsconfig.json services/frontend/postcss.config.mjs services/frontend/eslint.config.mjs services/frontend/components.json ./
-COPY services/frontend/src ./src
-COPY services/frontend/public ./public
+COPY frontend/next.config.ts frontend/tsconfig.json frontend/postcss.config.mjs frontend/eslint.config.mjs frontend/components.json ./
+COPY frontend/src ./src
+COPY frontend/public ./public
 
 # 4. 线上构建时删除开发专用页面（本地构建保留）
 ARG EXCLUDE_DEV=false

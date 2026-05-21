@@ -1,6 +1,6 @@
 """入库管线编排模块
 
-编排 PDF → OCR → 分块 → Embedding → ChromaDB 全流程。
+编排 PDF → OCR → 分块 → BlockType分类 → Embedding → ChromaDB 全流程。
 支持指定书籍或全量入库，幂等（先删旧数据再入库），输出 IngestionStats。
 
 Usage:
@@ -219,26 +219,22 @@ class IngestionPipeline:
 
             result.chunks = len(chunks)
 
-            # 6. EmbeddingService 批量 embed
-            texts = [chunk.text for chunk in chunks]
-            embeddings = self._embedding_service.embed(texts)
-
-            # 7. ChromaDBStore.upsert
-            self._vector_store.upsert(chunks, embeddings)
-
-            # 8. Block type classification (child chunks only)
+            # 6. Block type classification (child chunks only, before embedding)
             if self._block_type_classifier:
                 child_chunks = [c for c in chunks if c.metadata.chunk_type == "child"]
                 if child_chunks:
-                    texts = [c.text for c in child_chunks]
-                    block_types = self._block_type_classifier.classify_batch(texts)
-                    # Update metadata in ChromaDB
+                    child_texts = [c.text for c in child_chunks]
+                    block_types = self._block_type_classifier.classify_batch(child_texts)
                     for child_chunk, bt in zip(child_chunks, block_types):
                         child_chunk.metadata.block_type = bt
-                    # Re-upsert only child chunks with updated metadata
-                    child_embeddings = [embeddings[chunks.index(c)] for c in child_chunks]
-                    self._vector_store.upsert(child_chunks, child_embeddings)
                     logger.info("block_type 分类完成: %d child chunks", len(child_chunks))
+
+            # 7. EmbeddingService 批量 embed
+            texts = [chunk.text for chunk in chunks]
+            embeddings = self._embedding_service.embed(texts)
+
+            # 8. ChromaDBStore.upsert（一次写入，含 block_type）
+            self._vector_store.upsert(chunks, embeddings)
 
             logger.info(
                 "完成: %s, %d 页, %d chunks",

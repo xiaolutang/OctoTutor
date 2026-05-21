@@ -64,11 +64,11 @@ fi
 if [[ "$BUILD_BACKEND" == true ]]; then
     echo "==> 构建 octotutor-backend:latest ..."
     docker buildx build \
-        -f "$PROJECT_ROOT/services/backend/Dockerfile" \
+        -f "$PROJECT_ROOT/backend/Dockerfile" \
         -t "octotutor-backend:latest" \
         $CACHE_FLAG \
         --load \
-        "$PROJECT_ROOT/services/backend"
+        "$PROJECT_ROOT/backend"
 
     echo "==> octotutor-backend 构建完成"
 fi

@@ -135,14 +135,14 @@ class EvalSetLoader:
 
         # 3. mode 合法性检查（from_dict 已做，二次确认）
         for item in items:
-            if item.retrieval_truth.mode not in ("ANY", "ALL"):
+            if item.retrieval_truth.mode not in ("ANY", "ALL", "NEGATIVE"):
                 errors.append(
                     f"ID={item.id}: mode='{item.retrieval_truth.mode}' 不合法"
                 )
 
-        # 4. sources 非空检查
+        # 4. sources 非空检查（NEGATIVE 模式允许空 sources）
         for item in items:
-            if not item.retrieval_truth.sources:
+            if item.retrieval_truth.mode != "NEGATIVE" and not item.retrieval_truth.sources:
                 errors.append(f"ID={item.id}: sources 为空")
 
         # 5. 统计每本书覆盖

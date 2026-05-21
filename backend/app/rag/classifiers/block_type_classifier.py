@@ -1,6 +1,6 @@
 """block_type LLM 分类器
 
-对每个 child chunk 调 DashScope LLM（qwen-turbo）分类为
+对每个 child chunk 调 OpenAI 兼容 LLM（如 glm-5.1）分类为
 definition/property/example/exercise/explanation/unknown。
 """
 
@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import logging
 import re
+
+from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
@@ -21,13 +23,19 @@ class BlockTypeClassifier:
     不可识别的标签或调用失败均回退为 'unknown'。
 
     Args:
-        api_key: DashScope API Key
-        model: LLM 模型名称，默认 qwen-turbo
+        api_key: API Key
+        base_url: OpenAI 兼容 API 地址
+        model: LLM 模型名称
     """
 
-    def __init__(self, api_key: str, model: str = "qwen-turbo") -> None:
-        self._api_key = api_key
+    def __init__(
+        self,
+        api_key: str,
+        base_url: str,
+        model: str,
+    ) -> None:
         self._model = model
+        self._client = OpenAI(api_key=api_key, base_url=base_url)
 
     def classify_batch(self, texts: list[str], batch_size: int = 10) -> list[str]:
         """批量分类 chunk 文本的 block_type
@@ -80,14 +88,7 @@ explanation（解释/说明）: 背景介绍、方法说明、总结
 
 请逐行返回类型（只返回类型词，用换行分隔）："""
 
-        # 调 DashScope API（OpenAI 兼容接口）—— lazy import 避免循环依赖
-        from openai import OpenAI
-
-        client = OpenAI(
-            api_key=self._api_key,
-            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-        )
-        response = client.chat.completions.create(
+        response = self._client.chat.completions.create(
             model=self._model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.1,

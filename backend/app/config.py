@@ -10,13 +10,21 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     debug: bool = False
 
-    # DashScope
+    # DashScope — 用于 OCR 和 Embedding
     dashscope_api_key: str = Field(
         ...,
         description="DashScope API Key，用于 Embedding 和 OCR"
     )
     dashscope_embedding_model: str = "text-embedding-v4"
     dashscope_embedding_dimension: int = 1024
+
+    # NewAPI (本地 Docker, OpenAI 兼容协议) — 用于 LLM 调用
+    newapi_api_key: str = Field(
+        default="",
+        description="NewAPI API Key，用于 LLM 调用（如 block_type 分类）"
+    )
+    newapi_base_url: str = "http://localhost:13000/v1"
+    llm_model: str = "glm-5.1"
 
     # ChromaDB
     chroma_persist_dir: str = "data/chroma_db"

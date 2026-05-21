@@ -99,7 +99,7 @@ class TestCorrectClassification:
     def test_single_batch_correct_labels(self, mock_batch):
         """单批次: 所有标签正确解析"""
         mock_batch.return_value = ["definition", "property", "example"]
-        clf = BlockTypeClassifier(api_key="fake-key")
+        clf = BlockTypeClassifier(api_key="fake-key", base_url="http://localhost:9999/v1", model="test-model")
 
         results = clf.classify_batch(
             ["定义内容", "定理内容", "例题内容"],
@@ -118,7 +118,7 @@ class TestCorrectClassification:
             "exercise",
             "explanation",
         ]
-        clf = BlockTypeClassifier(api_key="fake-key")
+        clf = BlockTypeClassifier(api_key="fake-key", base_url="http://localhost:9999/v1", model="test-model")
 
         results = clf.classify_batch(
             ["t1", "t2", "t3", "t4", "t5"],
@@ -135,7 +135,7 @@ class TestCorrectClassification:
 
     def test_parse_llm_output_with_numbered_lines(self):
         """LLM 返回带编号的行 → 正确清理"""
-        clf = BlockTypeClassifier(api_key="fake-key")
+        clf = BlockTypeClassifier(api_key="fake-key", base_url="http://localhost:9999/v1", model="test-model")
 
         with patch.object(clf, "_classify_single_batch") as mock_batch:
             # 模拟 LLM 返回 "1. definition\n2. property" 的解析
@@ -156,7 +156,7 @@ class TestUnknownFallback:
     def test_invalid_label_fallback(self, mock_batch):
         """LLM 返回无效标签 → 回退为 'unknown'"""
         mock_batch.return_value = ["definition", "invalid_label", "example"]
-        clf = BlockTypeClassifier(api_key="fake-key")
+        clf = BlockTypeClassifier(api_key="fake-key", base_url="http://localhost:9999/v1", model="test-model")
 
         results = clf.classify_batch(["t1", "t2", "t3"])
 
@@ -166,7 +166,7 @@ class TestUnknownFallback:
     def test_all_invalid_labels(self, mock_batch):
         """全部无效标签 → 全部 'unknown'"""
         mock_batch.return_value = ["foo", "bar", "baz"]
-        clf = BlockTypeClassifier(api_key="fake-key")
+        clf = BlockTypeClassifier(api_key="fake-key", base_url="http://localhost:9999/v1", model="test-model")
 
         results = clf.classify_batch(["t1", "t2", "t3"])
 
@@ -176,7 +176,7 @@ class TestUnknownFallback:
     def test_mixed_valid_invalid(self, mock_batch):
         """有效与无效标签混合"""
         mock_batch.return_value = ["definition", "nonsense", "exercise", "garbage"]
-        clf = BlockTypeClassifier(api_key="fake-key")
+        clf = BlockTypeClassifier(api_key="fake-key", base_url="http://localhost:9999/v1", model="test-model")
 
         results = clf.classify_batch(["t1", "t2", "t3", "t4"])
 
@@ -195,7 +195,7 @@ class TestLLMFailure:
     def test_llm_exception_returns_unknown(self, mock_batch):
         """LLM 抛异常 → 全批 'unknown'"""
         mock_batch.side_effect = RuntimeError("API 超时")
-        clf = BlockTypeClassifier(api_key="fake-key")
+        clf = BlockTypeClassifier(api_key="fake-key", base_url="http://localhost:9999/v1", model="test-model")
 
         results = clf.classify_batch(["t1", "t2", "t3"])
 
@@ -205,7 +205,7 @@ class TestLLMFailure:
     def test_llm_connection_error(self, mock_batch):
         """网络错误 → 全批 'unknown'"""
         mock_batch.side_effect = ConnectionError("网络不通")
-        clf = BlockTypeClassifier(api_key="fake-key")
+        clf = BlockTypeClassifier(api_key="fake-key", base_url="http://localhost:9999/v1", model="test-model")
 
         results = clf.classify_batch(["t1"])
 
@@ -225,7 +225,7 @@ class TestLLMFailure:
                 raise RuntimeError("第二批失败")
 
         mock_batch.side_effect = side_effect
-        clf = BlockTypeClassifier(api_key="fake-key")
+        clf = BlockTypeClassifier(api_key="fake-key", base_url="http://localhost:9999/v1", model="test-model")
 
         # batch_size=2，4 条文本会分为 2 批
         results = clf.classify_batch(["t1", "t2", "t3", "t4"], batch_size=2)
@@ -295,8 +295,8 @@ class TestPipelineIntegration:
         assert child1.metadata.block_type == "definition"
         assert child2.metadata.block_type == "exercise"
 
-        # 验证 upsert 被调用 2 次：第一次全部 chunks，第二次只 child chunks
-        assert mock_vector_store.upsert.call_count == 2
+        # 验证 upsert 只调用 1 次（block_type 在 upsert 前完成）
+        assert mock_vector_store.upsert.call_count == 1
 
         # 验证统计正确
         assert stats.total_chunks == 3
@@ -402,7 +402,7 @@ class TestBatchGrouping:
     def test_exactly_10_items(self, mock_batch):
         """恰好 10 条 → 1 个批次"""
         mock_batch.return_value = ["definition"] * 10
-        clf = BlockTypeClassifier(api_key="fake-key")
+        clf = BlockTypeClassifier(api_key="fake-key", base_url="http://localhost:9999/v1", model="test-model")
 
         texts = [f"text{i}" for i in range(10)]
         results = clf.classify_batch(texts, batch_size=10)
@@ -418,7 +418,7 @@ class TestBatchGrouping:
             ["definition"] * 10,
             ["property"] * 5,
         ]
-        clf = BlockTypeClassifier(api_key="fake-key")
+        clf = BlockTypeClassifier(api_key="fake-key", base_url="http://localhost:9999/v1", model="test-model")
 
         texts = [f"text{i}" for i in range(15)]
         results = clf.classify_batch(texts, batch_size=10)
@@ -436,7 +436,7 @@ class TestBatchGrouping:
             ["property"] * 10,
             ["example"] * 5,
         ]
-        clf = BlockTypeClassifier(api_key="fake-key")
+        clf = BlockTypeClassifier(api_key="fake-key", base_url="http://localhost:9999/v1", model="test-model")
 
         texts = [f"text{i}" for i in range(25)]
         results = clf.classify_batch(texts, batch_size=10)
@@ -455,7 +455,7 @@ class TestBatchGrouping:
             ["exercise", "explanation", "definition"],
             ["property"],
         ]
-        clf = BlockTypeClassifier(api_key="fake-key")
+        clf = BlockTypeClassifier(api_key="fake-key", base_url="http://localhost:9999/v1", model="test-model")
 
         texts = [f"text{i}" for i in range(7)]
         results = clf.classify_batch(texts, batch_size=3)
@@ -471,7 +471,7 @@ class TestBatchGrouping:
     @patch("app.rag.classifiers.block_type_classifier.BlockTypeClassifier._classify_single_batch")
     def test_empty_list(self, mock_batch):
         """空列表 → 空结果，不调用 LLM"""
-        clf = BlockTypeClassifier(api_key="fake-key")
+        clf = BlockTypeClassifier(api_key="fake-key", base_url="http://localhost:9999/v1", model="test-model")
 
         results = clf.classify_batch([], batch_size=10)
 
@@ -482,7 +482,7 @@ class TestBatchGrouping:
     def test_single_item(self, mock_batch):
         """单条文本 → 1 个批次"""
         mock_batch.return_value = ["definition"]
-        clf = BlockTypeClassifier(api_key="fake-key")
+        clf = BlockTypeClassifier(api_key="fake-key", base_url="http://localhost:9999/v1", model="test-model")
 
         results = clf.classify_batch(["单条文本"], batch_size=10)
 
@@ -504,34 +504,24 @@ class TestClassifySingleBatchParsing:
 
     @pytest.fixture(autouse=True)
     def mock_openai(self):
-        """注入 mock openai 模块到 sys.modules"""
-        import sys
-        import types
+        """Mock OpenAI 客户端（模块顶层 import，需 patch 类引用）"""
+        from app.rag.classifiers import block_type_classifier
+        original = block_type_classifier.OpenAI
+        mock_cls = MagicMock()
+        block_type_classifier.OpenAI = mock_cls
+        yield mock_cls
+        block_type_classifier.OpenAI = original
 
-        # 创建假的 openai 模块
-        mock_module = types.ModuleType("openai")
-        mock_module.OpenAI = MagicMock()
-        # 保存原有模块（如果存在）
-        original = sys.modules.get("openai")
-        sys.modules["openai"] = mock_module
-        yield mock_module
-        # 恢复
-        if original is not None:
-            sys.modules["openai"] = original
-        else:
-            sys.modules.pop("openai", None)
-
-    def _setup_mock_client(self, mock_module, response_content: str):
-        """配置 mock OpenAI 客户端返回指定内容"""
-        mock_client = MagicMock()
-        mock_module.OpenAI.return_value = mock_client
+    def _make_clf_with_mock(self, response_content: str):
+        """构造 classifier 并 mock _client 的 LLM 响应"""
+        clf = BlockTypeClassifier(api_key="fake-key", base_url="http://localhost:9999/v1", model="test-model")
         mock_response = _mock_llm_response(response_content)
-        mock_client.chat.completions.create.return_value = mock_response
+        clf._client.chat.completions.create.return_value = mock_response
+        return clf
 
     def test_raw_llm_output_parsing(self, mock_openai):
         """直接测试 _classify_single_batch 对 LLM 返回内容的解析"""
-        clf = BlockTypeClassifier(api_key="fake-key")
-        self._setup_mock_client(mock_openai, "definition\nproperty\nexample")
+        clf = self._make_clf_with_mock("definition\nproperty\nexample")
 
         results = clf._classify_single_batch(["t1", "t2", "t3"])
 
@@ -539,8 +529,7 @@ class TestClassifySingleBatchParsing:
 
     def test_raw_llm_output_with_numbered_lines(self, mock_openai):
         """LLM 返回带编号的行 → 正确清理编号前缀"""
-        clf = BlockTypeClassifier(api_key="fake-key")
-        self._setup_mock_client(mock_openai, "1. definition\n2. property\n3. example")
+        clf = self._make_clf_with_mock("1. definition\n2. property\n3. example")
 
         results = clf._classify_single_batch(["t1", "t2", "t3"])
 
@@ -548,8 +537,7 @@ class TestClassifySingleBatchParsing:
 
     def test_raw_llm_output_with_parenthesis_prefix(self, mock_openai):
         """LLM 返回 "1) definition" 格式 → 正确清理"""
-        clf = BlockTypeClassifier(api_key="fake-key")
-        self._setup_mock_client(mock_openai, "1) definition\n2) property")
+        clf = self._make_clf_with_mock("1) definition\n2) property")
 
         results = clf._classify_single_batch(["t1", "t2"])
 
@@ -557,8 +545,7 @@ class TestClassifySingleBatchParsing:
 
     def test_raw_llm_output_mixed_case(self, mock_openai):
         """LLM 返回大小写混合 → 正确转小写"""
-        clf = BlockTypeClassifier(api_key="fake-key")
-        self._setup_mock_client(mock_openai, "Definition\nPROPERTY\nExample")
+        clf = self._make_clf_with_mock("Definition\nPROPERTY\nExample")
 
         results = clf._classify_single_batch(["t1", "t2", "t3"])
 
@@ -566,8 +553,7 @@ class TestClassifySingleBatchParsing:
 
     def test_raw_llm_output_with_invalid_lines(self, mock_openai):
         """LLM 返回中包含无法识别的行 → 回退为 unknown"""
-        clf = BlockTypeClassifier(api_key="fake-key")
-        self._setup_mock_client(mock_openai, "definition\n这是定义\nproperty")
+        clf = self._make_clf_with_mock("definition\n这是定义\nproperty")
 
         results = clf._classify_single_batch(["t1", "t2", "t3"])
 

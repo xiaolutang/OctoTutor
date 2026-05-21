@@ -43,7 +43,7 @@ class PageResult:
         page_number: 页码（1-based）
         content: OCR 后的 Markdown+LaTeX 内容
         from_cache: 是否来自缓存
-        image_path: PNG 路径（仅无缓存时有值，有缓存时为 None）
+        image_path: PNG 路径（始终渲染，除非渲染失败时为 None）
     """
 
     page_number: int
@@ -62,6 +62,8 @@ class PDFReader:
         dpi: PNG 渲染 DPI，默认 150
         max_retries: OCR 失败重试次数，默认 2
     """
+
+    DEFAULT_OCR_MODEL = "qwen3.5-omni-flash-2026-03-15"
 
     def __init__(
         self,
@@ -181,7 +183,17 @@ class PDFReader:
         Returns:
             PageResult
         """
-        # 1. 检查缓存
+        # 1. 渲染 PNG（始终执行，确保图片目录完整）
+        image_path: str | None = None
+        try:
+            page = doc[page_idx]
+            image_path = self._render_png(page, book_name, page_number)
+        except Exception as e:
+            logger.error(
+                "页面 %d PNG 渲染失败: %s", page_number, str(e)
+            )
+
+        # 2. 检查缓存
         cached_content = self._check_cache(book_name, page_number)
         if cached_content is not None:
             logger.debug("页面 %d 有缓存，跳过 OCR", page_number)
@@ -189,52 +201,38 @@ class PDFReader:
                 page_number=page_number,
                 content=cached_content,
                 from_cache=True,
-                image_path=None,
-            )
-
-        # 2. 无缓存：渲染 PNG + OCR + 存缓存
-        image_path: str | None = None
-        content: str = ""
-
-        # 2a. 渲染 PNG
-        try:
-            page = doc[page_idx]
-            image_path = self._render_png(page, book_name, page_number)
-        except Exception as e:
-            logger.error(
-                "页面 %d PNG 渲染失败，跳过该页: %s", page_number, str(e)
-            )
-            return PageResult(
-                page_number=page_number,
-                content="",
-                from_cache=False,
-                image_path=None,
-            )
-
-        # 2b. OCR
-        try:
-            content = self._ocr_with_retry(image_path)
-        except Exception as e:
-            logger.error(
-                "页面 %d OCR 失败（已重试 %d 次），跳过该页: %s",
-                page_number,
-                self._max_retries,
-                str(e),
-            )
-            return PageResult(
-                page_number=page_number,
-                content="",
-                from_cache=False,
                 image_path=image_path,
             )
 
-        # 2c. 存缓存
-        try:
-            self._save_cache(book_name, page_number, content)
-        except Exception as e:
-            logger.warning(
-                "页面 %d 缓存写入失败，不阻塞: %s", page_number, str(e)
-            )
+        # 3. 无缓存：OCR + 存缓存
+        content: str = ""
+
+        # 3a. OCR
+        if image_path is not None:
+            try:
+                content = self._ocr_with_retry(image_path)
+            except Exception as e:
+                logger.error(
+                    "页面 %d OCR 失败（已重试 %d 次），跳过该页: %s",
+                    page_number,
+                    self._max_retries,
+                    str(e),
+                )
+                return PageResult(
+                    page_number=page_number,
+                    content="",
+                    from_cache=False,
+                    image_path=image_path,
+                )
+
+        # 3b. 存缓存
+        if content:
+            try:
+                self._save_cache(book_name, page_number, content)
+            except Exception as e:
+                logger.warning(
+                    "页面 %d 缓存写入失败，不阻塞: %s", page_number, str(e)
+                )
 
         return PageResult(
             page_number=page_number,
@@ -290,6 +288,11 @@ class PDFReader:
         image_path = os.path.join(
             image_dir, f"page_{page_number}.png"
         )
+
+        # 已有图片则跳过渲染
+        if os.path.exists(image_path):
+            logger.debug("页面 %d PNG 已存在，跳过渲染", page_number)
+            return image_path
 
         # 渲染参数
         zoom = self._dpi / 72.0  # 72 是 PDF 默认 DPI
@@ -385,7 +388,7 @@ class PDFReader:
         ]
 
         response = MultiModalConversation.call(
-            model="qwen-vl-max",
+            model=self.DEFAULT_OCR_MODEL,
             messages=messages,
             api_key=self._api_key,
         )

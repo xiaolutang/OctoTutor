@@ -52,12 +52,16 @@ def main() -> None:
         persist_directory=settings.chroma_persist_dir,
     )
 
-    # Block type classifier（可选，需要 DashScope API Key）
+    # Block type classifier（可选，需要 NewAPI Key）
     block_type_classifier = None
-    if settings.dashscope_api_key:
+    if settings.newapi_api_key:
         from app.rag.classifiers.block_type_classifier import BlockTypeClassifier
 
-        block_type_classifier = BlockTypeClassifier(api_key=settings.dashscope_api_key)
+        block_type_classifier = BlockTypeClassifier(
+            api_key=settings.newapi_api_key,
+            base_url=settings.newapi_base_url,
+            model=settings.llm_model,
+        )
 
     # 执行入库
     pipeline = IngestionPipeline(

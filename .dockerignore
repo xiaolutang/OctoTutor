@@ -4,4 +4,4 @@ node_modules
 .dev-flow
 .env*
 deploy
-services/backend
+backend

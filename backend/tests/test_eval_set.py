@@ -515,7 +515,10 @@ class TestRealEvalSet:
         for item in items:
             assert isinstance(item.id, str) and item.id.startswith("q")
             assert isinstance(item.question, str) and len(item.question) > 0
-            assert item.retrieval_truth.mode in ("ANY", "ALL")
+            assert item.retrieval_truth.mode in ("ANY", "ALL", "NEGATIVE")
+            if item.retrieval_truth.mode == "NEGATIVE":
+                assert len(item.retrieval_truth.sources) == 0
+                continue
             assert len(item.retrieval_truth.sources) > 0
             for source in item.retrieval_truth.sources:
                 assert isinstance(source.book, str) and len(source.book) > 0

@@ -17,8 +17,12 @@ data/parsed/*
 !data/parsed/.gitkeep
 data/images/*
 !data/images/.gitkeep
+data/chroma/*
+!data/chroma/.gitkeep
 data/chroma_db/*
 !data/chroma_db/.gitkeep
+data/textbooks/*
+!data/textbooks/.gitkeep
 data/evaluation/*
 !data/evaluation/.gitkeep
 
