@@ -345,6 +345,14 @@ class TestMathChunker:
             assert isinstance(meta.has_formula, bool)
             assert isinstance(meta.parent_id, str)
             assert isinstance(meta.child_index, int)
+            # 新增字段
+            assert isinstance(meta.section_id, str)
+            assert meta.section_id.startswith("必修第一册::")
+            assert isinstance(meta.page_start, int)
+            assert isinstance(meta.page_end, int)
+            assert meta.page_start <= meta.page_end
+            assert isinstance(meta.source_pages, list)
+            assert isinstance(meta.block_type, str)
 
     def test_chunk_child_index_increments(self):
         """child_index 从 0 递增"""
@@ -441,8 +449,13 @@ class TestMathChunker:
             book="必修第一册",
             chapter="第一章",
             section="1.1 集合",
+            section_id="必修第一册::1.1",
             page=12,
+            page_start=12,
+            page_end=15,
+            source_pages=[12, 13, 14, 15],
             chunk_type="child",
+            block_type="unknown",
             has_formula=True,
             parent_id="必修第一册::1.1集合::p12_s0::parent",
             child_index=2,
@@ -453,6 +466,11 @@ class TestMathChunker:
         assert d["chunk_type"] == "child"
         assert d["has_formula"] is True
         assert d["child_index"] == 2
+        assert d["section_id"] == "必修第一册::1.1"
+        assert d["page_start"] == 12
+        assert d["page_end"] == 15
+        assert d["source_pages"] == "12,13,14,15"
+        assert d["block_type"] == "unknown"
 
 
 # ===========================================================================

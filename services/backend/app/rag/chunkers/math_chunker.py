@@ -44,6 +44,19 @@ LATEX_PATTERNS = [
     re.compile(r"\\\("),  # \(
 ]
 
+# 页眉过滤正则：匹配 "第X章 ... 数字" 格式的页眉（如 "第六章 平面向量及其应用 7"）
+HEADER_PAGE_NOISE_PATTERN = re.compile(
+    r"^第[一二三四五六七八九十百千\d]+章\s+.+\s+\d+$"
+)
+
+# OCR 噪声过滤规则
+# 1. 目录条目：含 3 个以上连续省略号/点号/cdots（如 "10.1 随机事件与概率 …… 228"）
+TOC_ENTRY_PATTERN = re.compile(r"(?:[\.…·]){3,}|\\cdots")
+# 2. LaTeX 表格行：含 & 和 \\ 的数字行（如 "0.5 & -3.7 & 2.7 & 1.1 & ..."）
+TABLE_ROW_PATTERN = re.compile(r"&.*\\\\")
+# 3. 纯数字序列：标题全是数字、空格、点号、负号和分隔符（如 "5.1 24.5 6.4 7.5"）
+PURE_NUMERIC_PATTERN = re.compile(r"^[\d\s\.\-&\\,]+$")
+
 # 章节正则匹配模式（按优先级排列，优先匹配更具体的模式）
 SECTION_PATTERNS = [
     # level=4: X.X.X 子节（如 "1.1.1 子节标题"）
@@ -105,6 +118,13 @@ class StructureParser:
                     deduped[-1] = match
             else:
                 deduped.append(match)
+
+        # 过滤页眉和 OCR 噪声
+        deduped = [
+            m for m in deduped
+            if (m[1] != 1 or not HEADER_PAGE_NOISE_PATTERN.match(m[2]))
+            and not _is_ocr_noise(m[2])
+        ]
 
         # 构造 SectionBoundary 列表
         boundaries: List[SectionBoundary] = []
@@ -184,7 +204,15 @@ class MathChunker:
         current_chapter = ""
         current_section = ""
 
-        for boundary in boundaries:
+        # 把 boundaries 转为 list，方便索引查找下一个同级 boundary
+        boundaries_list = list(boundaries)
+
+        # 获取最后一页页码（用于最后一个 section 的 page_end 兜底）
+        last_page = (
+            page_offsets[-1][2] if page_offsets else 0
+        )
+
+        for i, boundary in enumerate(boundaries_list):
             # 更新上下文
             if boundary.level == 1:
                 current_chapter = boundary.title
@@ -208,6 +236,31 @@ class MathChunker:
             # 根据 page_offsets 查找正确的页码
             page = _lookup_page(boundary.start_pos, page_offsets) if page_offsets else boundary.page
 
+            # section_id
+            section_id = _extract_section_id(book, boundary.title)
+
+            # Parent page range: 找下一个 level <= 2 的 boundary
+            page_end = page  # 默认值
+            for j in range(i + 1, len(boundaries_list)):
+                if boundaries_list[j].level <= 2:
+                    next_page = (
+                        _lookup_page(boundaries_list[j].start_pos, page_offsets)
+                        if page_offsets
+                        else boundaries_list[j].page
+                    )
+                    if page_offsets:
+                        page_end = next_page - 1
+                    else:
+                        # 无 page_offsets 时，同一页内的 section 直接用 page 作为 page_end
+                        page_end = page
+                    break
+            else:
+                # 没找到下一个同级 boundary → 使用最后一页
+                if page_offsets:
+                    page_end = last_page
+
+            source_pages = list(range(page, page_end + 1))
+
             # 生成 Chunk ID 的共用部分
             section_clean = _clean_section_title(boundary.title)
             loc = f"p{page}_s{boundary.section_index}"
@@ -221,8 +274,13 @@ class MathChunker:
                     book=book,
                     chapter=current_chapter,
                     section=boundary.title,
+                    section_id=section_id,
                     page=page,
+                    page_start=page,
+                    page_end=page_end,
+                    source_pages=source_pages,
                     chunk_type="parent",
+                    block_type="unknown",
                     has_formula=_has_formula(section_text),
                     parent_id=parent_id_str,
                     child_index=0,
@@ -236,10 +294,58 @@ class MathChunker:
             if not child_source.strip():
                 continue
 
+            # 计算 child_source 在 full_text 中的偏移
+            # section_text = text[boundary.start_pos : boundary.end_pos].strip()
+            # 去除标题行后，child_source 的偏移 = boundary.start_pos + (len(section_text) - len(child_source))
+            # 但需要注意 strip() 可能去掉了尾部空白，所以用文本匹配更安全
+            title_line_len = len(section_text) - len(child_source)
+            child_source_offset_in_full = boundary.start_pos + title_line_len
+
             child_texts = self._split_into_children(child_source)
 
+            # 累积位置：跟踪每个 child 在 child_source 中的偏移
+            cumulative_pos = 0
             for idx, child_text in enumerate(child_texts):
-                child_id_str = f"{book}::{section_clean}::{loc}::child::{idx}"
+                # child 在 full_text 中的绝对位置
+                abs_start = child_source_offset_in_full + cumulative_pos
+                abs_end = abs_start + len(child_text)
+
+                # 查找 child 的页码范围
+                if page_offsets:
+                    child_page_start = _lookup_page(abs_start, page_offsets)
+                    child_page_end = _lookup_page(abs_end - 1, page_offsets)
+                else:
+                    child_page_start = page
+                    child_page_end = page
+                child_source_pages = list(
+                    range(child_page_start, child_page_end + 1)
+                )
+
+                # 累加位置（child_texts 中各子串在 child_source 中依次排列，
+                # 但 overlap 导致它们在 child_source 中有重叠，
+                # 所以不能简单用 len(child_text) 推进。
+                # 我们用 child_source 中查找子串的方式来计算下一个起始位置）
+                if idx < len(child_texts) - 1:
+                    next_child_text = child_texts[idx + 1]
+                    # 在 child_source 中从 cumulative_pos 开始查找下一个 child 的开头
+                    # overlap 意味着下一个 child 的起始位置 < cumulative_pos + len(child_text)
+                    # 搜索 next_child_text 的前几个字符在 child_source 中的位置
+                    search_len = min(50, len(next_child_text))
+                    search_snippet = next_child_text[:search_len]
+                    found_pos = child_source.find(
+                        search_snippet, cumulative_pos
+                    )
+                    if found_pos >= 0:
+                        cumulative_pos = found_pos
+                    else:
+                        # fallback: 直接推进 len(child_text)
+                        cumulative_pos += len(child_text)
+                else:
+                    cumulative_pos += len(child_text)
+
+                child_id_str = (
+                    f"{book}::{section_clean}::{loc}::child::{idx}"
+                )
                 chunks.append(
                     Chunk(
                         chunk_id=child_id_str,
@@ -248,8 +354,13 @@ class MathChunker:
                             book=book,
                             chapter=current_chapter,
                             section=boundary.title,
+                            section_id=section_id,
                             page=page,
+                            page_start=child_page_start,
+                            page_end=child_page_end,
+                            source_pages=child_source_pages,
                             chunk_type="child",
+                            block_type="unknown",
                             has_formula=_has_formula(child_text),
                             parent_id=parent_id_str,
                             child_index=idx,
@@ -341,6 +452,17 @@ class MathChunker:
 # ---------------------------------------------------------------------------
 
 
+def _is_ocr_noise(title: str) -> bool:
+    """判断标题是否为 OCR 噪声（目录条目、表格行、纯数字序列）"""
+    if TOC_ENTRY_PATTERN.search(title):
+        return True
+    if TABLE_ROW_PATTERN.search(title):
+        return True
+    if PURE_NUMERIC_PATTERN.match(title):
+        return True
+    return False
+
+
 def _lookup_page(
     pos: int,
     page_offsets: list[tuple[int, int, int]],
@@ -374,6 +496,30 @@ def _clean_section_title(title: str) -> str:
     # 去除空格
     result = title.replace(" ", "")
     return result
+
+
+# section_id 提取用正则：匹配开头的编号部分（如 "2.1"、"2.1.3"）
+_SECTION_NUMBER_RE = re.compile(r"^(\d+\.\d+(?:\.\d+)?)\s+")
+
+
+def _extract_section_id(book: str, title: str) -> str:
+    """从 boundary.title 中提取编号，生成稳定的 section_id。
+
+    规则:
+    - 如果标题以编号开头（如 '2.1 等式性质与不等式性质'），返回 '{book}::{numbered_part}'
+    - 如果标题无编号（如 '练习'），返回 '{book}::{section_clean}'
+
+    Args:
+        book: 书名
+        title: 章节标题文本
+
+    Returns:
+        格式为 '{book}::{id}' 的 section_id
+    """
+    m = _SECTION_NUMBER_RE.match(title)
+    if m:
+        return f"{book}::{m.group(1)}"
+    return f"{book}::{_clean_section_title(title)}"
 
 
 def _has_formula(text: str) -> bool:

@@ -138,6 +138,15 @@ class SpotCheckSummary:
 _REQUIRED_METADATA_FIELDS = ["book", "chapter", "section", "page"]
 
 
+def _parse_source_pages(raw: str | list) -> list[int]:
+    """将 source_pages 从逗号分隔字符串或列表解析为 int 列表"""
+    if isinstance(raw, list):
+        return [int(p) for p in raw]
+    if isinstance(raw, str) and raw.strip():
+        return [int(p.strip()) for p in raw.split(",") if p.strip()]
+    return []
+
+
 class SpotChecker:
     """入库抽检器
 
@@ -187,8 +196,13 @@ class SpotChecker:
                 book=meta_dict.get("book", ""),
                 chapter=meta_dict.get("chapter", ""),
                 section=meta_dict.get("section", ""),
+                section_id=meta_dict.get("section_id", ""),
                 page=int(meta_dict.get("page", 0)),
+                page_start=int(meta_dict.get("page_start", meta_dict.get("page", 0))),
+                page_end=int(meta_dict.get("page_end", meta_dict.get("page", 0))),
+                source_pages=_parse_source_pages(meta_dict.get("source_pages", "")),
                 chunk_type=meta_dict.get("chunk_type", ""),
+                block_type=meta_dict.get("block_type", "unknown"),
                 has_formula=bool(meta_dict.get("has_formula", False)),
                 parent_id=meta_dict.get("parent_id", ""),
                 child_index=int(meta_dict.get("child_index", 0)),

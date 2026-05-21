@@ -84,9 +84,44 @@
       "covered_by": ["R003-BF-012"],
       "source_analysis_refs": ["analysis/2026-05-20--R003-knowledge-base.md"],
       "source_decision_refs": ["DEC-003-2"]
+    },
+    {
+      "capability_id": "CAP-eval-001",
+      "must_plan": true,
+      "covered_by": ["R003-BF-013"],
+      "source_analysis_refs": ["analysis/2026-05-21--rag-metadata-eval-upgrade.md"],
+      "source_decision_refs": ["DEC-eval-001"]
+    },
+    {
+      "capability_id": "CAP-eval-002",
+      "must_plan": true,
+      "covered_by": ["R003-BF-013"],
+      "source_analysis_refs": ["analysis/2026-05-21--rag-metadata-eval-upgrade.md"],
+      "source_decision_refs": ["DEC-eval-002"]
+    },
+    {
+      "capability_id": "CAP-eval-003",
+      "must_plan": true,
+      "covered_by": ["R003-BF-014"],
+      "source_analysis_refs": ["analysis/2026-05-21--rag-metadata-eval-upgrade.md"],
+      "source_decision_refs": ["DEC-eval-003"]
+    },
+    {
+      "capability_id": "CAP-eval-004",
+      "must_plan": true,
+      "covered_by": ["R003-BB-015"],
+      "source_analysis_refs": ["analysis/2026-05-21--rag-metadata-eval-upgrade.md"],
+      "source_decision_refs": ["DEC-eval-004"]
+    },
+    {
+      "capability_id": "CAP-eval-005",
+      "must_plan": false,
+      "covered_by": [],
+      "source_analysis_refs": ["analysis/2026-05-21--rag-metadata-eval-upgrade.md"],
+      "source_decision_refs": ["DEC-eval-005"]
     }
   ],
-  "summary": { "total": 12, "completed": 12, "pending": 0 },
+  "summary": { "total": 17, "completed": 12, "pending": 5 },
   "open_issues": [
     "DashScope API Key 需要配置到 .env 文件"
   ],
@@ -457,6 +492,168 @@
         "前端 Playwright 测试通过",
         "后端 API 可通过 Docker 网络访问"
       ]
+    },
+    {
+      "id": "R003-BF-013",
+      "phase": "rag-components",
+      "module": "models+chunker",
+      "name": "ChunkMetadata 扩展 + page range 推断 + section_id 生成",
+      "description": "扩展 ChunkMetadata 新增 page_start/page_end/source_pages/section_id/block_type 字段。改造 MathChunker 在分块时推断每个 chunk 的页码覆盖范围和稳定 section_id。改造 ChromaDBStore 序列化/反序列化适配新字段。",
+      "developer_stories": [
+        "作为开发者，我希望 chunk metadata 含 page_start/page_end，以便知道 chunk 覆盖了哪些页码",
+        "作为开发者，我希望 chunk metadata 含 section_id，以便按小节匹配和过滤",
+        "作为开发者，我希望 ChromaDB 序列化正确处理 source_pages 列表（逗号分隔字符串）"
+      ],
+      "technical_success_picture": "入库后每个 chunk 的 metadata 含 page_start/page_end/source_pages/section_id。section_id 格式为 '{book}::{numbered}'（如'必修第一册::2.1'）。source_pages 存为逗号分隔字符串。query 返回的 QueryResult 正确解析新字段。",
+      "verification": "L1",
+      "depends_on": [],
+      "status": "pending",
+      "priority": "high",
+      "dependencies": [],
+      "risk_tags": [],
+      "analysis_refs": ["analysis/2026-05-21--rag-metadata-eval-upgrade.md"],
+      "decision_refs": ["DEC-eval-001", "DEC-eval-002", "DEC-eval-006"],
+      "capability_refs": ["CAP-eval-001", "CAP-eval-002"],
+      "test_tasks": [
+        "MathChunker 输出 ChunkMetadata 含 page_start/page_end，且 page_start <= page_end",
+        "section_id 从 boundary.title 正确提取编号（如 '2.1 等式性质与不等式性质' → '必修第一册::2.1'）",
+        "section_id 边界：无编号的标题 fallback 为 '{book}::{section_clean}'",
+        "Child chunk 的 page_start/page_end 反映其文本在 full_text 中的实际页码范围",
+        "Parent chunk 的 page_start = section 起始页，page_end 覆盖到下一 section 起始页 - 1",
+        "to_dict() 中 source_pages 序列化为逗号分隔字符串",
+        "ChromaDBStore.query() 正确解析 page_start/page_end/section_id/block_type"
+      ],
+      "planning_notes": "ChunkMetadata 已部分修改（新增字段），vector_store.py 反序列化已适配。需要补齐 MathChunker 的 page range 推断和 section_id 生成逻辑。Child chunk 位置追踪需要改造 _split_into_children 输出含位置信息。"
+    },
+    {
+      "id": "R003-BF-014",
+      "phase": "rag-components",
+      "module": "block-type-classifier",
+      "name": "block_type LLM 分类模块 + 入库管线集成",
+      "description": "新增 block_type LLM 分类器：对每个 child chunk 调 DashScope LLM（qwen-turbo）分类为 definition/property/example/exercise/explanation/unknown。集成到 IngestionPipeline，在 upsert 后做 metadata update。",
+      "developer_stories": [
+        "作为开发者，我希望 chunk metadata 含 block_type，以便区分定义、性质、例题等不同类型内容",
+        "作为开发者，我希望 block_type 分类在入库流程中自动完成，失败时标 unknown 不阻塞"
+      ],
+      "technical_success_picture": "入库完成后每个 child chunk 有 block_type 标签（非 'unknown' 比例 > 80%）。分类失败不阻塞入库流程。parent chunk 的 block_type 标为 'unknown'（不需要分类）。",
+      "verification": "L2",
+      "depends_on": ["R003-BF-013"],
+      "status": "pending",
+      "priority": "medium",
+      "dependencies": ["DashScope API Key"],
+      "risk_tags": ["network"],
+      "analysis_refs": ["analysis/2026-05-21--rag-metadata-eval-upgrade.md"],
+      "decision_refs": ["DEC-eval-003", "DEC-eval-008"],
+      "capability_refs": ["CAP-eval-003"],
+      "journey_acceptance": {
+        "entry_action": "入库完成后自动调 LLM 分类 block_type",
+        "completion": "所有 child chunk 有 block_type 标签",
+        "user_visible_success": "抽检脚本显示 block_type 统计",
+        "failure_path_result": "LLM 调用失败时标 'unknown'，不阻塞入库"
+      },
+      "test_tasks": [
+        "mock LLM → block_type_classifier 正确解析 LLM 返回的分类标签",
+        "LLM 返回无法识别的标签 → fallback 为 'unknown'",
+        "LLM 调用失败 → 标 'unknown'，不抛异常",
+        "IngestionPipeline 在 upsert 后调用 block_type 分类",
+        "batch 分组正确（每 10 条一组）"
+      ],
+      "planning_notes": "使用 qwen-turbo（最便宜），预估 ~1250 child × 300 token ≈ ¥1-2。分类在 upsert 后做 metadata update，不阻塞 embedding 和入库主流程。"
+    },
+    {
+      "id": "R003-BB-015",
+      "phase": "quality-integration",
+      "module": "evaluation",
+      "name": "EvalSource 扩展 + 分层评估指标",
+      "description": "扩展 EvalSource 新增 section_id（可选）和 required_keywords 字段。升级 EvalRunner 新增 Section Hit@K、Keyword Coverage@K、Negative Pass Rate 指标。升级 EvalReport/BookMetrics/OverallMetrics 输出新指标。保持旧格式 eval_set.json 向后兼容。",
+      "developer_stories": [
+        "作为开发者，我希望评估报告同时输出 Section Hit / Span Hit / Keyword Coverage / MRR / Negative Pass Rate",
+        "作为开发者，我希望 EvalSource 支持 section_id + required_keywords，但旧格式仍可运行"
+      ],
+      "technical_success_picture": "运行评估 → 报告含 Section Hit@5/10、Span Hit@5/10、Keyword Coverage@K、MRR、Negative Pass Rate。旧格式 eval_set（无 section_id/keywords）仍可运行，Section Hit 按 page range fallback。",
+      "verification": "L1",
+      "depends_on": ["R003-BF-013"],
+      "status": "pending",
+      "priority": "high",
+      "dependencies": [],
+      "risk_tags": [],
+      "analysis_refs": ["analysis/2026-05-21--rag-metadata-eval-upgrade.md"],
+      "decision_refs": ["DEC-eval-004"],
+      "capability_refs": ["CAP-eval-004"],
+      "test_tasks": [
+        "EvalSource 新增 section_id（可选）和 required_keywords 解析正确",
+        "旧格式 eval_set（无 section_id/keywords）仍可加载和运行评估",
+        "Section Hit@K：section_id 匹配判定正确",
+        "Section Hit 无 section_id 时 fallback 为 page range 匹配",
+        "Keyword Coverage@K：required_keywords 在 chunk text 中的覆盖率计算正确",
+        "Negative Pass Rate：NEGATIVE 模式判定正确",
+        "EvalReport.to_dict() 包含所有新指标",
+        "_calc_hit_rate_at_k 签名和逻辑不变（Span Hit 复用）"
+      ],
+      "planning_notes": "Section Hit 判定优先用 section_id 匹配；若 truth 或 chunk 缺少 section_id，fallback 到 page range 匹配（即现有 Span Hit 逻辑）。Keyword Coverage 对每个 EvalSource 的 required_keywords 逐个检查 top-K chunk text 是否包含。"
+    },
+    {
+      "id": "R003-BB-016",
+      "phase": "quality-integration",
+      "module": "ingestion+spot-check",
+      "name": "全量重入库 + 抽检验证新字段",
+      "description": "基于升级后的 ChunkMetadata 和 MathChunker，删除旧 ChromaDB 数据，全量重入库 5 本教材。升级抽检脚本验证 page_start/page_end/section_id/block_type 完整性和正确性。",
+      "developer_stories": [
+        "作为开发者，我希望全量重入库后 ChromaDB 数据含完整的新 metadata 字段",
+        "作为开发者，我希望抽检脚本验证 page_start/page_end 与实际 PDF 页码对应"
+      ],
+      "technical_success_picture": "重入库完成 → ChromaDB 每条 chunk 含 page_start/page_end/source_pages/section_id/block_type → 抽检通过（页码范围正确、section_id 可匹配、block_type 统计合理）",
+      "verification": "L2",
+      "depends_on": ["R003-BF-013", "R003-BF-014"],
+      "status": "pending",
+      "priority": "high",
+      "dependencies": ["DashScope API Key"],
+      "risk_tags": ["network"],
+      "analysis_refs": ["analysis/2026-05-21--rag-metadata-eval-upgrade.md"],
+      "decision_refs": ["DEC-eval-007"],
+      "journey_acceptance": {
+        "entry_action": "删除旧 ChromaDB 数据，运行全量入库",
+        "completion": "5 本教材全部入库，抽检通过",
+        "user_visible_success": "抽检报告显示 page_start/page_end/section_id/block_type 完整性和正确性",
+        "failure_path_result": "单本入库失败不影响其他书"
+      },
+      "test_tasks": [
+        "删除旧 data/chroma_db/ → 全量重入库 → ChromaDB chunk 数量合理",
+        "抽检：每本书 page_start/page_end 与实际 PDF 页码对应",
+        "抽检：section_id 可正确匹配（如 '必修第一册::2.1' 对应 '2.1 等式性质与不等式性质'）",
+        "抽检：block_type 分布合理（非 'unknown' 比例 > 80%）",
+        "入库耗时在可接受范围内（OCR 缓存命中，主要是 embedding + block_type 分类）"
+      ],
+      "planning_notes": "旧 ChromaDB 数据不兼容新 metadata 结构，必须删除重建。OCR 缓存仍有效（parsed/ 目录不动），主要是 embedding + block_type LLM 分类的 API 调用开销。"
+    },
+    {
+      "id": "R003-BB-017",
+      "phase": "quality-integration",
+      "module": "evaluation",
+      "name": "新评估基线建立",
+      "description": "使用用户重标后的 eval_set.json（含 section_id + required_keywords）和升级后的 EvalRunner 跑新评估，建立分层指标基线。对比新旧指标差异，确认新指标的可信度。",
+      "user_stories": [
+        "作为开发者，我希望跑出新格式评估的分层基线分数，以便后续迭代有可信对比基准"
+      ],
+      "success_picture": "运行评估 → 输出 Section Hit@5/10、Span Hit@5/10、Keyword Coverage@K、MRR、Negative Pass Rate → 对比旧基线（97.88% Hit Rate）→ 确认新指标更精确",
+      "verification": "L1",
+      "depends_on": ["R003-BB-015", "R003-BB-016"],
+      "status": "pending",
+      "priority": "medium",
+      "dependencies": ["用户完成 eval_set.json 重标"],
+      "risk_tags": [],
+      "analysis_refs": ["analysis/2026-05-21--rag-metadata-eval-upgrade.md"],
+      "decision_refs": ["DEC-eval-005"],
+      "capability_refs": ["CAP-eval-005"],
+      "test_tasks": [
+        "新格式 eval_set 加载和验证通过（含 section_id + required_keywords）",
+        "评估报告包含所有分层指标",
+        "对比新旧基线：Span Hit 应与旧 Hit Rate 基本一致（±2%）",
+        "Section Hit 分数有意义（不是 100% 或 0%）",
+        "Keyword Coverage 分布合理"
+      ],
+      "open_issues": ["等待用户完成 eval_set.json 200 条重标（加 section_id + required_keywords）"],
+      "planning_notes": "此任务需要用户完成 eval_set.json 重标后才能执行。可以先完成其他任务，等用户准备好后跑评估。"
     }
   ]
 }

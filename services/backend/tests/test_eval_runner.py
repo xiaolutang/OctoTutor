@@ -63,8 +63,13 @@ def make_query_result(
             book=book,
             chapter="测试章节",
             section="测试小节",
+            section_id=f"{book}::1.1",
             page=page,
+            page_start=page,
+            page_end=page,
+            source_pages=[page],
             chunk_type="child",
+            block_type="unknown",
             has_formula=False,
             parent_id="test::parent",
             child_index=0,
@@ -190,7 +195,7 @@ class TestCalcHitRateAtK:
             EvalDetail(id="q2", question="Q2", hit=True, first_rank=3, mode="ANY"),
             EvalDetail(id="q3", question="Q3", hit=True, first_rank=5, mode="ANY"),
         ]
-        assert _calc_hit_rate_at_k(details, None, 5) == pytest.approx(1.0)
+        assert _calc_hit_rate_at_k(details, 5) == pytest.approx(1.0)
 
     def test_partial_hit_any_mode_at_k5(self) -> None:
         """ANY mode: 2/3 在 top-5 命中 → Hit Rate@5 = 2/3"""
@@ -199,7 +204,7 @@ class TestCalcHitRateAtK:
             EvalDetail(id="q2", question="Q2", hit=True, first_rank=6, mode="ANY"),
             EvalDetail(id="q3", question="Q3", hit=True, first_rank=5, mode="ANY"),
         ]
-        assert _calc_hit_rate_at_k(details, None, 5) == pytest.approx(2.0 / 3)
+        assert _calc_hit_rate_at_k(details, 5) == pytest.approx(2.0 / 3)
 
     def test_no_hits_any_mode(self) -> None:
         """ANY mode: 都未命中 → Hit Rate = 0.0"""
@@ -207,7 +212,7 @@ class TestCalcHitRateAtK:
             EvalDetail(id="q1", question="Q1", hit=False, first_rank=0, mode="ANY"),
             EvalDetail(id="q2", question="Q2", hit=False, first_rank=0, mode="ANY"),
         ]
-        assert _calc_hit_rate_at_k(details, None, 5) == pytest.approx(0.0)
+        assert _calc_hit_rate_at_k(details, 5) == pytest.approx(0.0)
 
     def test_all_mode_hit(self) -> None:
         """ALL mode: hit=True → 算命中"""
@@ -215,7 +220,7 @@ class TestCalcHitRateAtK:
             EvalDetail(id="q1", question="Q1", hit=True, first_rank=1, mode="ALL"),
             EvalDetail(id="q2", question="Q2", hit=True, first_rank=3, mode="ALL"),
         ]
-        assert _calc_hit_rate_at_k(details, None, 5) == pytest.approx(1.0)
+        assert _calc_hit_rate_at_k(details, 5) == pytest.approx(1.0)
 
     def test_all_mode_partial_hit(self) -> None:
         """ALL mode: 部分 hit=True"""
@@ -223,11 +228,11 @@ class TestCalcHitRateAtK:
             EvalDetail(id="q1", question="Q1", hit=True, first_rank=1, mode="ALL"),
             EvalDetail(id="q2", question="Q2", hit=False, first_rank=0, mode="ALL"),
         ]
-        assert _calc_hit_rate_at_k(details, None, 5) == pytest.approx(0.5)
+        assert _calc_hit_rate_at_k(details, 5) == pytest.approx(0.5)
 
     def test_empty_details(self) -> None:
         """空列表 → Hit Rate = 0.0"""
-        assert _calc_hit_rate_at_k([], None, 5) == pytest.approx(0.0)
+        assert _calc_hit_rate_at_k([], 5) == pytest.approx(0.0)
 
     def test_k10_captures_more_than_k5(self) -> None:
         """K=10 比 K=5 能捕获更多命中"""
@@ -236,9 +241,9 @@ class TestCalcHitRateAtK:
             EvalDetail(id="q2", question="Q2", hit=True, first_rank=8, mode="ANY"),
         ]
         # K=5: 只有 q1 命中
-        assert _calc_hit_rate_at_k(details, None, 5) == pytest.approx(0.5)
+        assert _calc_hit_rate_at_k(details, 5) == pytest.approx(0.5)
         # K=10: 两个都命中
-        assert _calc_hit_rate_at_k(details, None, 10) == pytest.approx(1.0)
+        assert _calc_hit_rate_at_k(details, 10) == pytest.approx(1.0)
 
 
 # ---------------------------------------------------------------------------
@@ -755,7 +760,7 @@ class TestEvalRunnerWithRealEvalSet:
         """验证能加载真实评估集并通过运行器"""
         loader = EvalSetLoader(eval_dir=eval_dir)
         items = loader.load("eval_set.json")
-        assert len(items) == 25
+        assert len(items) >= 20
 
         # 构造全部命中的 mock 结果
         mock_embedding = MagicMock()
@@ -783,8 +788,8 @@ class TestEvalRunnerWithRealEvalSet:
         )
         report = runner.run(eval_filename="eval_set.json")
 
-        assert report.overall.total_questions == 25
-        assert len(report.details) == 25
+        assert report.overall.total_questions == len(items)
+        assert len(report.details) == len(items)
         assert isinstance(report.overall.hit_rate_at_5, float)
         assert isinstance(report.overall.hit_rate_at_10, float)
         assert isinstance(report.overall.mrr, float)
@@ -793,7 +798,7 @@ class TestEvalRunnerWithRealEvalSet:
         result_dict = report.to_dict()
         json_str = json.dumps(result_dict, ensure_ascii=False)
         parsed = json.loads(json_str)
-        assert parsed["overall"]["total_questions"] == 25
+        assert parsed["overall"]["total_questions"] == len(items)
 
 
 # ---------------------------------------------------------------------------

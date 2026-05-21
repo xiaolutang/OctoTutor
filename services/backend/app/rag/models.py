@@ -41,8 +41,13 @@ class ChunkMetadata:
         book: 书名
         chapter: 章名（level=1 标题）
         section: 节名（level=2 标题）
-        page: 页码
+        section_id: 稳定节标识，格式 "{book}::{section_numbered}"
+        page: 页码（section 起始页，向后兼容）
+        page_start: 内容覆盖起始页（含）
+        page_end: 内容覆盖结束页（含）
+        source_pages: 内容覆盖的所有页码列表
         chunk_type: "parent" | "child"
+        block_type: 内容类型 "definition"|"property"|"example"|"exercise"|"explanation"|"unknown"
         has_formula: 是否含 LaTeX 公式
         parent_id: parent chunk 的 ID
         child_index: child 在 parent 内的序号（0-based，parent 类型为 0）
@@ -51,11 +56,16 @@ class ChunkMetadata:
     book: str
     chapter: str
     section: str
+    section_id: str
     page: int
-    chunk_type: str  # "parent" | "child"
-    has_formula: bool
-    parent_id: str
-    child_index: int
+    page_start: int
+    page_end: int
+    source_pages: list[int] = field(default_factory=list)
+    chunk_type: str = "parent"  # "parent" | "child"
+    block_type: str = "unknown"  # "definition"|"property"|"example"|"exercise"|"explanation"|"unknown"
+    has_formula: bool = False
+    parent_id: str = ""
+    child_index: int = 0
 
     def to_dict(self) -> dict:
         """转换为 ChromaDB metadata 字典"""
@@ -63,8 +73,13 @@ class ChunkMetadata:
             "book": self.book,
             "chapter": self.chapter,
             "section": self.section,
+            "section_id": self.section_id,
             "page": self.page,
+            "page_start": self.page_start,
+            "page_end": self.page_end,
+            "source_pages": ",".join(str(p) for p in self.source_pages),
             "chunk_type": self.chunk_type,
+            "block_type": self.block_type,
             "has_formula": self.has_formula,
             "parent_id": self.parent_id,
             "child_index": self.child_index,

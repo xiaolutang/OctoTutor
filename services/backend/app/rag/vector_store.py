@@ -155,12 +155,25 @@ class ChromaDBStore:
 
         for chunk_id, text, meta, distance in zip(ids, documents, metadatas, distances):
             score = 1.0 - distance
+            # 解析 source_pages（逗号分隔字符串 → int 列表）
+            raw_pages = meta.get("source_pages", "")
+            if isinstance(raw_pages, str) and raw_pages.strip():
+                source_pages = [int(p.strip()) for p in raw_pages.split(",") if p.strip()]
+            elif isinstance(raw_pages, list):
+                source_pages = [int(p) for p in raw_pages]
+            else:
+                source_pages = []
             metadata = ChunkMetadata(
                 book=meta.get("book", ""),
                 chapter=meta.get("chapter", ""),
                 section=meta.get("section", ""),
+                section_id=meta.get("section_id", ""),
                 page=int(meta.get("page", 0)),
+                page_start=int(meta.get("page_start", meta.get("page", 0))),
+                page_end=int(meta.get("page_end", meta.get("page", 0))),
+                source_pages=source_pages,
                 chunk_type=meta.get("chunk_type", ""),
+                block_type=meta.get("block_type", "unknown"),
                 has_formula=bool(meta.get("has_formula", False)),
                 parent_id=meta.get("parent_id", ""),
                 child_index=int(meta.get("child_index", 0)),
