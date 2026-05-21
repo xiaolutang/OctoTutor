@@ -234,26 +234,37 @@ class EvalItem:
         id: 唯一标识（如 "q001"）
         question: 查询问题文本
         retrieval_truth: 检索真值
+        key_facts: 期望答案中包含的关键事实列表（可选）
+        reference_answer: 参考答案文本（可选）
+        suite: 所属测试套件名称，默认 "regression"
     """
 
     id: str
     question: str
     retrieval_truth: RetrievalTruth
+    key_facts: list[str] = field(default_factory=list)
+    reference_answer: str = ""
+    suite: str = "regression"
 
     def to_dict(self) -> dict:
         """转换为 JSON 可序列化的字典"""
-        return {
+        d: dict = {
             "id": self.id,
             "question": self.question,
             "retrieval_truth": self.retrieval_truth.to_dict(),
+            "key_facts": self.key_facts,
+            "reference_answer": self.reference_answer,
+            "suite": self.suite,
         }
+        return d
 
     @classmethod
     def from_dict(cls, data: dict) -> EvalItem:
         """从字典构造 EvalItem
 
         Args:
-            data: 包含 id, question, retrieval_truth 的字典
+            data: 包含 id, question, retrieval_truth 的字典，
+                  key_facts, reference_answer, suite 为可选
 
         Returns:
             EvalItem 实例
@@ -274,7 +285,18 @@ class EvalItem:
             raise ValueError("EvalItem.retrieval_truth 不能为空")
 
         retrieval_truth = RetrievalTruth.from_dict(truth_data)
-        return cls(id=id_val, question=question, retrieval_truth=retrieval_truth)
+        key_facts = data.get("key_facts", [])
+        reference_answer = data.get("reference_answer", "")
+        suite = data.get("suite", "regression")
+
+        return cls(
+            id=id_val,
+            question=question,
+            retrieval_truth=retrieval_truth,
+            key_facts=key_facts,
+            reference_answer=reference_answer,
+            suite=suite,
+        )
 
 
 @dataclass
