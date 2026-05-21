@@ -86,9 +86,7 @@ Web 是相对成本最低的方式。浏览器打开就能用，发布也更简�
 | 产品形态 | Web 应用 | 个人开发成本低，发布快，适合先验证全栈链路 |
 | 前端框架 | Next.js 16 (App Router) | 路由、布局、API Route、middleware 和部署输出都比较完整 |
 | 后端框架 | Python / FastAPI | 后续 AI、RAG、评估脚本更适合接 Python 生态 |
-| 认证体系 | OAuth 2.0 + PKCE | 复用已有的 auth-center，不重复造账号系统 |
 | 部署方式 | Docker standalone | 一个镜像搞定，方便本地和线上保持一致 |
-| 样式方案 | Tailwind CSS 4 | 写界面快，适合早期快速迭代 |
 
 ---
 
