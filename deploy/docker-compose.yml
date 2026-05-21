@@ -5,28 +5,73 @@
 #   - 依赖外部 Traefik 网关（gateway 网络）
 #   - 通过 Traefik labels 配置 TLS + 域名路由
 #   - 需要远端已部署基础设施（Traefik + auth-center）
+#   - 前端 catch-all + 后端 /api/* 路由
 
 services:
-  octotutor:
-    image: octotutor:latest
-    container_name: octotutor
+  octotutor-frontend:
+    image: octotutor-frontend:latest
+    container_name: octotutor-frontend
     restart: unless-stopped
     expose:
       - "3000"
     environment:
       - PORT=3000
       - HOSTNAME=0.0.0.0
+      - AUTH_CLIENT_ID=${AUTH_CLIENT_ID}
+      - AUTH_BASE_URL=${AUTH_BASE_URL}
     networks:
       - gateway
       - auth-network
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.octotutor.rule=Host(`${OCTOTUTOR_DOMAIN:-octotutor.xiaolutang.top}`)"
-      - "traefik.http.routers.octotutor.entrypoints=websecure"
-      - "traefik.http.routers.octotutor.tls=true"
-      - "traefik.http.routers.octotutor.tls.certresolver=ali"
-      - "traefik.http.routers.octotutor.service=octotutor-svc"
-      - "traefik.http.services.octotutor-svc.loadbalancer.server.port=3000"
+      - "traefik.http.routers.octotutor-frontend.rule=Host(`${OCTOTUTOR_DOMAIN:-octotutor.xiaolutang.top}`)"
+      - "traefik.http.routers.octotutor-frontend.entrypoints=websecure"
+      - "traefik.http.routers.octotutor-frontend.tls=true"
+      - "traefik.http.routers.octotutor-frontend.tls.certresolver=ali"
+      - "traefik.http.routers.octotutor-frontend.priority=1"
+      - "traefik.http.routers.octotutor-frontend.service=octotutor-frontend-svc"
+      - "traefik.http.services.octotutor-frontend-svc.loadbalancer.server.port=3000"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  octotutor-backend:
+    image: octotutor-backend:latest
+    container_name: octotutor-backend
+    restart: unless-stopped
+    expose:
+      - "8000"
+    environment:
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+      - CHROMA_PERSIST_DIR=/app/data/chroma_db
+    volumes:
+      - octotutor-data:/app/data
+    networks:
+      - gateway
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.octotutor-backend.rule=Host(`${OCTOTUTOR_DOMAIN:-octotutor.xiaolutang.top}`) && PathPrefix(`/api/`)"
+      - "traefik.http.routers.octotutor-backend.entrypoints=websecure"
+      - "traefik.http.routers.octotutor-backend.tls=true"
+      - "traefik.http.routers.octotutor-backend.tls.certresolver=ali"
+      - "traefik.http.routers.octotutor-backend.priority=10"
+      - "traefik.http.routers.octotutor-backend.service=octotutor-backend-svc"
+      - "traefik.http.services.octotutor-backend-svc.loadbalancer.server.port=8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+
+volumes:
+  octotutor-data:
+    name: octotutor-data
 
 networks:
   gateway:

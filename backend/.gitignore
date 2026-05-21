@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 环境变量
+.env
+# 但保留 .env.template（覆盖根 .gitignore 的 .env* 规则）
+!.env.template
+
+# 数据目录（忽略内容但保留目录结构和 .gitkeep）
+data/raw/*
+!data/raw/.gitkeep
+data/parsed/*
+!data/parsed/.gitkeep
+data/images/*
+!data/images/.gitkeep
+data/chroma/*
+!data/chroma/.gitkeep
+data/chroma_db/*
+!data/chroma_db/.gitkeep
+data/textbooks/*
+!data/textbooks/.gitkeep
+data/evaluation/*
+!data/evaluation/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+
+# 测试
+.pytest_cache/
+htmlcov/
+.coverage

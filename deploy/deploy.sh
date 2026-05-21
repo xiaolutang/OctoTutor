@@ -25,6 +25,8 @@ show_help() {
     echo "本地部署选项:"
     echo "  --no-cache      无缓存构建 Docker 镜像"
     echo "  --skip-build    跳过构建，使用已有镜像"
+    echo "  --frontend-only 仅构建/部署前端"
+    echo "  --backend-only  仅构建/部署后端"
     echo ""
     echo "远程部署选项:"
     echo "  --skip-build    跳过构建，使用已有镜像"
@@ -49,6 +51,8 @@ do_local() {
         case "$1" in
             --no-cache) BUILD_CACHE_FLAG="--no-cache"; shift ;;
             --skip-build) SKIP_BUILD=true; shift ;;
+            --frontend-only) BUILD_CACHE_FLAG="$BUILD_CACHE_FLAG --frontend-only"; shift ;;
+            --backend-only) BUILD_CACHE_FLAG="$BUILD_CACHE_FLAG --backend-only"; shift ;;
             *) echo "未知参数: $1"; exit 1 ;;
         esac
     done
@@ -76,8 +80,12 @@ do_local() {
         bash "$SCRIPT_DIR/build.sh" $BUILD_CACHE_FLAG
     else
         echo "==> 跳过构建（使用已有镜像）"
-        if ! docker image inspect octotutor:latest &>/dev/null; then
-            echo "错误: octotutor:latest 镜像不存在"
+        if ! docker image inspect octotutor-frontend:latest &>/dev/null; then
+            echo "错误: octotutor-frontend:latest 镜像不存在"
+            exit 1
+        fi
+        if ! docker image inspect octotutor-backend:latest &>/dev/null; then
+            echo "错误: octotutor-backend:latest 镜像不存在"
             exit 1
         fi
     fi
@@ -86,27 +94,47 @@ do_local() {
     echo "==> 启动 OctoTutor (compose: deploy/docker-compose.local.yml)..."
     docker compose -f "$SCRIPT_DIR/docker-compose.local.yml" up -d
 
-    # 等待健康检查
-    echo "==> 等待服务就绪..."
+    # 等待前端就绪
+    echo "==> 等待前端服务就绪..."
     local max_wait=30
     local elapsed=0
     while [[ $elapsed -lt $max_wait ]]; do
         if curl -s -o /dev/null -w '%{http_code}' http://octotutor.localhost/ 2>/dev/null | grep -q "200\|302"; then
-            echo "==> 服务已就绪!"
-            echo ""
-            echo "服务地址:"
-            echo "  OctoTutor:    http://octotutor.localhost/"
-            echo "  Auth Center:  http://auth.localhost/"
-            echo ""
-            exit 0
+            echo "  前端已就绪"
+            break
         fi
         sleep 2
         elapsed=$((elapsed + 2))
     done
+    if [[ $elapsed -ge $max_wait ]]; then
+        echo "警告: 前端未在 ${max_wait}s 内就绪"
+    fi
 
-    echo "警告: 服务未在 ${max_wait}s 内就绪，请检查日志:"
-    echo "  docker compose -f deploy/docker-compose.local.yml logs"
-    exit 1
+    # 等待后端就绪
+    echo "==> 等待后端服务就绪..."
+    elapsed=0
+    while [[ $elapsed -lt $max_wait ]]; do
+        BACKEND_STATUS=$(curl -s http://octotutor.localhost/api/health 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
+        if [[ "$BACKEND_STATUS" == "healthy" || "$BACKEND_STATUS" == "unhealthy" ]]; then
+            echo "  后端已就绪 (status: $BACKEND_STATUS)"
+            break
+        fi
+        sleep 2
+        elapsed=$((elapsed + 2))
+    done
+    if [[ $elapsed -ge $max_wait ]]; then
+        echo "警告: 后端未在 ${max_wait}s 内就绪"
+    fi
+
+    echo ""
+    echo "==> 服务部署完成!"
+    echo ""
+    echo "服务地址:"
+    echo "  OctoTutor 前端:  http://octotutor.localhost/"
+    echo "  OctoTutor 后端:  http://octotutor.localhost/api/health"
+    echo "  Auth Center:     http://auth.localhost/"
+    echo ""
+    exit 0
 }
 
 # ===== 子命令分发 =====

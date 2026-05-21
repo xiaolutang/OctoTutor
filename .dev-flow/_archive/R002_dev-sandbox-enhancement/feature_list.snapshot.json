@@ -1,0 +1,44 @@
+{
+  "version": "1.4",
+  "active_requirement_cycle": {
+    "id": "R002",
+    "name": "dev-sandbox-enhancement",
+    "branch": "feat/R002-dev-sandbox-enhancement",
+    "status": "active",
+    "planning_context": ".dev-flow/planning_context.md"
+  },
+  "archived_requirement_cycles": [
+    {
+      "id": "R001",
+      "name": "项目初始化",
+      "status": "completed",
+      "archive_dir": "_archive/R001_project-init",
+      "branch": "feat/R001-project-init",
+      "pr_ref": null,
+      "total_tasks": 6,
+      "completed_at": "2026-05-20"
+    }
+  ],
+  "workflow": {
+    "name": "XLFoundry",
+    "mode": "A",
+    "runtime": "skill_orchestrated",
+    "implementer_provider": "claude",
+    "evaluate_provider": "local",
+    "risk_provider": "local",
+    "stop_hook_enabled": false
+  },
+  "summary": { "total": 2, "completed": 2 },
+  "features": [
+    {
+      "id": "R002-F001",
+      "status": "completed",
+      "commit": "8a45ea6"
+    },
+    {
+      "id": "R002-F002",
+      "status": "completed",
+      "commit": "8a45ea6"
+    }
+  ]
+}

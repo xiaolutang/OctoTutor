@@ -1,0 +1,44 @@
+from pydantic_settings import BaseSettings
+from pydantic import Field
+
+
+class Settings(BaseSettings):
+    """应用配置，从环境变量 / .env 文件加载"""
+
+    # 应用基础
+    app_name: str = "OctoTutor-API"
+    app_version: str = "0.1.0"
+    debug: bool = False
+
+    # DashScope — 用于 OCR 和 Embedding
+    dashscope_api_key: str = Field(
+        ...,
+        description="DashScope API Key，用于 Embedding 和 OCR"
+    )
+    dashscope_embedding_model: str = "text-embedding-v4"
+    dashscope_embedding_dimension: int = 1024
+
+    # NewAPI (本地 Docker, OpenAI 兼容协议) — 用于 LLM 调用
+    newapi_api_key: str = Field(
+        default="",
+        description="NewAPI API Key，用于 LLM 调用（如 block_type 分类）"
+    )
+    newapi_base_url: str = "http://localhost:13000/v1"
+    llm_model: str = "glm-5.1"
+
+    # ChromaDB
+    chroma_persist_dir: str = "data/chroma_db"
+
+    # 数据目录
+    data_raw_dir: str = "data/raw"
+    data_parsed_dir: str = "data/parsed"
+    data_images_dir: str = "data/images"
+
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "extra": "ignore",
+    }
+
+
+settings = Settings()

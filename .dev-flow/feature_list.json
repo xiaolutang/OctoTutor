@@ -1,12 +1,6 @@
 {
-  "version": "1.4",
-  "active_requirement_cycle": {
-    "id": "R000",
-    "name": "none",
-    "status": "idle",
-    "branch": null,
-    "planning_context": null
-  },
+  "version": "1.5",
+  "active_requirement_cycle": null,
   "archived_requirement_cycles": [
     {
       "id": "R001",
@@ -17,13 +11,31 @@
       "pr_ref": null,
       "total_tasks": 6,
       "completed_at": "2026-05-20"
+    },
+    {
+      "id": "R002",
+      "name": "dev-sandbox-enhancement",
+      "status": "completed",
+      "archive_dir": "_archive/R002_dev-sandbox-enhancement",
+      "branch": "feat/R002-dev-sandbox-enhancement",
+      "pr_ref": null,
+      "total_tasks": 2,
+      "completed_at": "2026-05-20"
+    },
+    {
+      "id": "R003",
+      "name": "knowledge-base",
+      "status": "completed",
+      "branch": "feat/R003-knowledge-base",
+      "pr_ref": null,
+      "total_tasks": 17,
+      "completed_at": "2026-05-21"
     }
   ],
   "workflow": {
     "name": "XLFoundry",
     "mode": "A",
     "runtime": "skill_orchestrated",
-    "implementer_provider": "claude",
     "evaluate_provider": "local",
     "risk_provider": "local",
     "stop_hook_enabled": false
@@ -32,17 +44,826 @@
     "integration": {
       "mode": "local_docker",
       "commands": [
-        "cd /Users/tangxiaolu/project/xlfoundryTest && docker compose up -d"
+        "cd /Users/tangxiaolu/project/OctoTutor && docker compose -f deploy/docker-compose.yml up -d"
       ],
       "mock_policy": "mock_allowed_for_unit_only",
-      "required_for": ["auth", "oauth", "callback", "network"],
+      "required_for": [
+        "network"
+      ],
       "confirmed_by_user": true,
-      "notes": "复用 xlfoundryTest 的 auth-center Docker 环境"
+      "notes": "Docker Compose 前后端双容器部署验证"
     }
   },
-  "summary": { "total": 0, "completed": 0 },
-  "open_issues": [],
-  "out_of_scope_notes": [],
+  "capability_coverage": [
+    {
+      "capability_id": "CAP-kb-001",
+      "must_plan": true,
+      "covered_by": [
+        "R003-BF-003",
+        "R003-BB-007"
+      ],
+      "source_analysis_refs": [
+        "analysis/2026-05-20--R003-knowledge-base.md"
+      ],
+      "source_decision_refs": [
+        "DEC-kb-001"
+      ]
+    },
+    {
+      "capability_id": "CAP-kb-002",
+      "must_plan": false,
+      "covered_by": [
+        "R003-BB-008"
+      ],
+      "source_analysis_refs": [
+        "analysis/2026-05-20--R003-knowledge-base.md"
+      ],
+      "source_decision_refs": [
+        "DEC-kb-003"
+      ]
+    },
+    {
+      "capability_id": "CAP-kb-003",
+      "must_plan": false,
+      "covered_by": [
+        "R003-BB-010",
+        "R003-BB-011"
+      ],
+      "source_analysis_refs": [
+        "analysis/2026-05-20--R003-knowledge-base.md"
+      ],
+      "source_decision_refs": [
+        "DEC-kb-004"
+      ]
+    },
+    {
+      "capability_id": "CAP-kb-004",
+      "must_plan": true,
+      "covered_by": [
+        "R003-BF-001"
+      ],
+      "source_analysis_refs": [
+        "analysis/2026-05-20--R003-knowledge-base.md"
+      ],
+      "source_decision_refs": [
+        "DEC-kb-005"
+      ]
+    },
+    {
+      "capability_id": "CAP-kb-005",
+      "must_plan": true,
+      "covered_by": [
+        "R003-BF-012"
+      ],
+      "source_analysis_refs": [
+        "analysis/2026-05-20--R003-knowledge-base.md"
+      ],
+      "source_decision_refs": [
+        "DEC-003-2"
+      ]
+    },
+    {
+      "capability_id": "CAP-eval-001",
+      "must_plan": true,
+      "covered_by": [
+        "R003-BF-013"
+      ],
+      "source_analysis_refs": [
+        "analysis/2026-05-21--rag-metadata-eval-upgrade.md"
+      ],
+      "source_decision_refs": [
+        "DEC-eval-001"
+      ]
+    },
+    {
+      "capability_id": "CAP-eval-002",
+      "must_plan": true,
+      "covered_by": [
+        "R003-BF-013"
+      ],
+      "source_analysis_refs": [
+        "analysis/2026-05-21--rag-metadata-eval-upgrade.md"
+      ],
+      "source_decision_refs": [
+        "DEC-eval-002"
+      ]
+    },
+    {
+      "capability_id": "CAP-eval-003",
+      "must_plan": true,
+      "covered_by": [
+        "R003-BF-014"
+      ],
+      "source_analysis_refs": [
+        "analysis/2026-05-21--rag-metadata-eval-upgrade.md"
+      ],
+      "source_decision_refs": [
+        "DEC-eval-003"
+      ]
+    },
+    {
+      "capability_id": "CAP-eval-004",
+      "must_plan": true,
+      "covered_by": [
+        "R003-BB-015"
+      ],
+      "source_analysis_refs": [
+        "analysis/2026-05-21--rag-metadata-eval-upgrade.md"
+      ],
+      "source_decision_refs": [
+        "DEC-eval-004"
+      ]
+    },
+    {
+      "capability_id": "CAP-eval-005",
+      "must_plan": false,
+      "covered_by": [],
+      "source_analysis_refs": [
+        "analysis/2026-05-21--rag-metadata-eval-upgrade.md"
+      ],
+      "source_decision_refs": [
+        "DEC-eval-005"
+      ]
+    }
+  ],
+  "summary": {
+    "total": 17,
+    "completed": 17,
+    "pending": 0
+  },
+  "open_issues": [
+    "DashScope API Key 需要配置到 .env 文件"
+  ],
+  "out_of_scope_notes": [
+    "BM25 / Hybrid / RRF / Reranker / Parent Promote → 后续迭代",
+    "AI 对话 / 生成质量 → R004",
+    "前端 Chat UI → R004",
+    "用户认证打通 → R004",
+    "教材版本管理 → 后续迭代",
+    "LangGraph Agent / Mem0 / 视频动画生成 → 远期"
+  ],
   "archived_phases": [],
-  "features": []
+  "features": [
+    {
+      "id": "R003-BF-001",
+      "phase": "infrastructure",
+      "module": "monorepo",
+      "name": "Monorepo 结构重组 + 前端迁移",
+      "description": "将现有项目结构从根目录平铺迁移到 Monorepo：src/ → services/frontend/src/，新建 services/backend/ 目录，调整 Dockerfile 和部署脚本路径，确保前端功能不变",
+      "developer_stories": [
+        "作为开发者，我希望将现有代码从根目录迁移到 services/frontend/ 下，以便前后端代码在同一仓库独立管理",
+        "作为开发者，我希望 Dockerfile 和 docker-compose.yml 更新后前端仍能正常构建和部署"
+      ],
+      "technical_success_picture": "项目目录结构符合 Monorepo 规范（services/frontend/ + services/backend/ + deploy/），前端功能不变，npm run build 成功，现有 Playwright 测试通过",
+      "verification": "L3",
+      "depends_on": [],
+      "status": "completed",
+      "priority": "high",
+      "dependencies": [
+        "ragDemo 仓库已有 5 本 PDF 可复制到 services/backend/data/raw/"
+      ],
+      "risk_tags": [
+        "startup"
+      ],
+      "started_at": "2026-05-20T22:10:00Z",
+      "completed_at": "2026-05-20T22:25:00Z",
+      "actual_minutes": 15,
+      "commit": "b230408",
+      "evidence_file": ".dev-flow/evidence/R003-BF-001.md",
+      "summary": "Monorepo 结构重组完成。git mv 迁移前端代码到 services/frontend/，新建 services/backend/。Dockerfile/配置更新。build + 12/12 测试通过。Grade A (100/100)",
+      "test_tasks": [
+        "npm run build 在新路径下成功",
+        "docker compose build frontend 成功",
+        "前端 /dev 页面功能不变"
+      ],
+      "planning_notes": "迁移后暂不改动前端代码，仅调整目录结构和构建路径。这是所有后端任务的前置条件。"
+    },
+    {
+      "id": "R003-BF-002",
+      "phase": "infrastructure",
+      "module": "backend-scaffold",
+      "name": "后端脚手架搭建",
+      "description": "搭建 FastAPI 项目骨架：pydantic-settings 配置管理、目录结构、Dockerfile、.env 模板、健康检查端点",
+      "developer_stories": [
+        "作为开发者，我希望有 FastAPI 项目骨架 + pydantic-settings 配置管理，以便后续 RAG 模块可以在其上开发",
+        "作为开发者，我希望有 .env.template 文件标明所有需要的环境变量（DashScope API Key 等）"
+      ],
+      "technical_success_picture": "services/backend/ 下有完整的 Python 项目结构（app/main.py + app/config.py + Dockerfile + .env.template），FastAPI 可启动，GET /api/health 返回 200",
+      "verification": "L3",
+      "depends_on": [
+        "R003-BF-001"
+      ],
+      "status": "completed",
+      "priority": "high",
+      "dependencies": [
+        "DashScope API Key 需在 .env 中配置"
+      ],
+      "risk_tags": [
+        "startup",
+        "config"
+      ],
+      "started_at": "2026-05-20T22:30:00Z",
+      "completed_at": "2026-05-20T22:45:00Z",
+      "actual_minutes": 15,
+      "commit": "a0f2a58",
+      "evidence_file": ".dev-flow/evidence/R003-BF-002.md",
+      "summary": "后端脚手架搭建完成。FastAPI + pydantic-settings + health 端点 + Dockerfile + 占位模块。pytest 3/3 通过。Grade A (100/100)",
+      "test_tasks": [
+        "FastAPI 应用可启动，/api/health 返回 200",
+        "pydantic-settings 正确读取 .env 配置",
+        "Dockerfile 可构建 Docker 镜像",
+        "缺少必要环境变量时启动报错提示"
+      ],
+      "contract_refs": [
+        "GET /api/health"
+      ]
+    },
+    {
+      "id": "R003-BF-003",
+      "phase": "rag-components",
+      "module": "pdf-reader",
+      "name": "PDF Reader + OCR 缓存",
+      "description": "实现 PDF 读取模块：PyMuPDF 逐页处理，缓存优先（检查 parsed/{book}/page_{N}.md），无缓存时渲染 PNG + 调 DashScope OCR + 存缓存。数学教材全量 OCR，不做文本/图片通道判断",
+      "developer_stories": [
+        "作为开发者，我希望有 PDF 读取模块，支持全量 OCR + 缓存优先，以便数学教材的图文混排内容完整提取",
+        "作为开发者，我希望 OCR 结果缓存到 data/parsed/ 下，避免重复调用 DashScope API 产生费用"
+      ],
+      "technical_success_picture": "给定 PDF → 检查每页 OCR 缓存 → 有缓存直接读、无缓存则 PyMuPDF 渲染 PNG + DashScope OCR → 结果存入 parsed/{book}/page_{N}.md，页面图片存入 images/{book}/page_{N}.png",
+      "verification": "L2",
+      "depends_on": [
+        "R003-BF-002"
+      ],
+      "status": "completed",
+      "priority": "high",
+      "dependencies": [
+        "DashScope API Key",
+        "PyMuPDF (fitz) 库",
+        "5 本 PDF 文件在 data/raw/ 下"
+      ],
+      "risk_tags": [
+        "network"
+      ],
+      "started_at": "2026-05-21T00:10:00Z",
+      "completed_at": "2026-05-21T00:35:00Z",
+      "actual_minutes": 25,
+      "commit": "f128086",
+      "evidence_file": ".dev-flow/evidence/R003-BF-003.md",
+      "summary": "PDF Reader + OCR 缓存完成。PyMuPDF + DashScope OCR + 缓存优先。pytest 17/17 + 全量 117/117 通过。",
+      "test_tasks": [
+        "有缓存时跳过 OCR，直接读缓存文件",
+        "无缓存时渲染 PNG + 调 DashScope OCR → 缓存正确写入",
+        "OCR 失败时重试 2 次后跳过，日志记录失败页码",
+        "跨页内容正确分割"
+      ]
+    },
+    {
+      "id": "R003-BF-004",
+      "phase": "rag-components",
+      "module": "chunker",
+      "name": "章节 StructureParser + Parent-Child 分块",
+      "description": "实现章节正则识别模块（识别章节标题和层级）和 Parent-Child 分块模块。Parent = level=2 小节边界，Child = 512 token / 50 overlap，句号/问号/感叹号边界切割",
+      "developer_stories": [
+        "作为开发者，我希望有章节识别模块，能从 OCR 后的 Markdown 中正则匹配章节标题和层级",
+        "作为开发者，我希望有 Parent-Child 分块模块，Child 512 token / 50 overlap，在句子边界切割，元数据完整"
+      ],
+      "technical_success_picture": "给定 OCR Markdown → 正则识别 SectionBoundary[] → Parent-Child 分块 → Chunk[]，每个 Chunk 含完整 metadata（book, chapter, section, page, chunk_type, has_formula, parent_id, child_index）",
+      "verification": "L1",
+      "depends_on": [
+        "R003-BF-002"
+      ],
+      "status": "completed",
+      "priority": "high",
+      "dependencies": [],
+      "risk_tags": [],
+      "test_tasks": [
+        "给定含章节标题的 Markdown → SectionBoundary 正确识别",
+        "给定小节文本 → Chunk 数量/大小/元数据正确",
+        "child_index 从 0 递增",
+        "parent_id 格式正确（{book}::{section}::{loc}::parent）",
+        "跨页内容正确拆分到不同 chunk"
+      ],
+      "started_at": "2026-05-20T22:50:00Z",
+      "completed_at": "2026-05-20T23:15:00Z",
+      "actual_minutes": 25,
+      "commit": "90fca38",
+      "evidence_file": ".dev-flow/evidence/R003-BF-004.md",
+      "summary": "StructureParser + MathChunker 完成。4 级章节识别，512 token/50 overlap Child 切分，句子边界切割。pytest 39/39 通过。"
+    },
+    {
+      "id": "R003-BF-005",
+      "phase": "rag-components",
+      "module": "embedding",
+      "name": "DashScope Embedding 封装",
+      "description": "封装 DashScope Embedding API：支持批量（batch size 6）、指数退避重试（3 次）、返回 768 维向量。使用 tongyi-embedding-vision-flash 模型",
+      "developer_stories": [
+        "作为开发者，我希望有 DashScope Embedding 封装，支持批量+重试，以便文本可转为 768 维向量"
+      ],
+      "technical_success_picture": "给定文本列表 → 批量调 DashScope Embedding API（batch=6）→ 返回 768 维向量列表。失败时指数退避重试 3 次，API Key 缺失时启动报错",
+      "verification": "L2",
+      "depends_on": [
+        "R003-BF-002"
+      ],
+      "status": "completed",
+      "priority": "high",
+      "dependencies": [
+        "DashScope API Key"
+      ],
+      "risk_tags": [
+        "network"
+      ],
+      "test_tasks": [
+        "正常调用返回 768 维向量",
+        "批量大小超过 6 时自动分批",
+        "API 失败时指数退避重试 3 次",
+        "mock 场景：验证批量拆分逻辑正确"
+      ],
+      "started_at": "2026-05-20T23:45:00Z",
+      "completed_at": "2026-05-21T00:05:00Z",
+      "actual_minutes": 20,
+      "commit": "ddb6fd3",
+      "evidence_file": ".dev-flow/evidence/R003-BF-005.md",
+      "summary": "DashScope Embedding 封装完成。批量 embed + 指数退避重试 + embed_query 独立方法。pytest 28/28 + 全量 100/100 通过。"
+    },
+    {
+      "id": "R003-BF-006",
+      "phase": "rag-components",
+      "module": "vector-store",
+      "name": "ChromaDB VectorStore",
+      "description": "实现 ChromaDB 封装：Protocol 接口定义（upsert/query/delete），ChromaDBStore 实现（PersistentClient），collection 管理，metadata where 查询",
+      "developer_stories": [
+        "作为开发者，我希望有 ChromaDB 封装，实现 Protocol 接口（upsert/query/delete），以便向量数据可持久化存储和查询"
+      ],
+      "technical_success_picture": "ChromaDB PersistentClient 可 upsert chunks（含 embedding + metadata）、query by embedding（top-K + where 过滤）、delete by filter。数据持久化到 data/chroma_db/",
+      "verification": "L1",
+      "depends_on": [
+        "R003-BF-002"
+      ],
+      "status": "completed",
+      "priority": "high",
+      "dependencies": [],
+      "risk_tags": [],
+      "test_tasks": [
+        "upsert chunks → query → 返回正确结果",
+        "metadata where 过滤（book, page, chunk_type）正确",
+        "delete 后 query 不再返回",
+        "PersistentClient 数据持久化（重启后数据仍在）"
+      ],
+      "started_at": "2026-05-20T23:20:00Z",
+      "completed_at": "2026-05-20T23:40:00Z",
+      "actual_minutes": 20,
+      "commit": "a69fc59",
+      "evidence_file": ".dev-flow/evidence/R003-BF-006.md",
+      "summary": "ChromaDB VectorStore 完成。Protocol 接口 + PersistentClient + where 过滤。pytest 30/30 通过。"
+    },
+    {
+      "id": "R003-BB-007",
+      "phase": "api-ingestion",
+      "module": "ingestion",
+      "name": "入库管线编排",
+      "description": "编排 PDF→OCR→分块→Embedding→ChromaDB 全流程的入库脚本。支持指定书籍或全量入库，幂等（先删旧数据再入库），输出 IngestionStats",
+      "user_stories": [
+        "作为开发者，我希望有一个端到端入库脚本，编排全流程以便 5 本教材自动入库",
+        "作为开发者，我希望入库是幂等的，重复运行不会产生重复数据"
+      ],
+      "success_picture": "运行 `python -m ingestion` → 5 本教材全部入库 → ChromaDB 有数据 → 输出 IngestionStats（总页数、总 chunks、OCR 缓存命中数、耗时）。重复运行结果一致",
+      "verification": "L2",
+      "depends_on": [
+        "R003-BF-003",
+        "R003-BF-004",
+        "R003-BF-005",
+        "R003-BF-006"
+      ],
+      "status": "completed",
+      "priority": "high",
+      "dependencies": [
+        "DashScope API Key",
+        "5 本 PDF 文件"
+      ],
+      "risk_tags": [
+        "network",
+        "startup"
+      ],
+      "started_at": "2026-05-21T01:00:00Z",
+      "completed_at": "2026-05-21T01:25:00Z",
+      "actual_minutes": 25,
+      "commit": "aec0317",
+      "evidence_file": ".dev-flow/evidence/R003-BB-007.md",
+      "summary": "入库管线编排完成。IngestionPipeline + CLI + 幂等 + 错误隔离。pytest 20/20 + 全量 152/152 通过。",
+      "test_tasks": [
+        "全量入库 5 本教材 → ChromaDB 有 chunks",
+        "重复运行 → chunks 数量不变（幂等）",
+        "指定单本书入库 → 只入库该书",
+        "PDF 文件不存在 → 报错退出并提示",
+        "入库中断后重新运行 → 利用 OCR 缓存跳过已完成页面"
+      ]
+    },
+    {
+      "id": "R003-BB-008",
+      "phase": "api-ingestion",
+      "module": "api",
+      "name": "检索 API",
+      "description": "实现检索 API 端点：POST /api/retrieve（查询 → 返回 top-K 相关 chunks）和 GET /api/health（ChromaDB 连接状态 + document_count）。检索仅用 cosine similarity",
+      "user_stories": [
+        "作为开发者，我希望有检索 API 端点，以便查询教材内容并返回相关 chunks",
+        "作为开发者，我希望 health 端点能反映 ChromaDB 状态，以便监控服务健康"
+      ],
+      "success_picture": "POST /api/retrieve {\"query\": \"二次函数的顶点公式\", \"top_k\": 5} → 返回 5 个相关 chunks（含 score + metadata）。GET /api/health → 返回 ChromaDB 连接状态和 document_count。空库时返回 chunks=[], total=0",
+      "verification": "L2",
+      "depends_on": [
+        "R003-BF-005",
+        "R003-BF-006"
+      ],
+      "status": "completed",
+      "priority": "high",
+      "dependencies": [],
+      "risk_tags": [],
+      "started_at": "2026-05-21T00:40:00Z",
+      "completed_at": "2026-05-21T00:55:00Z",
+      "actual_minutes": 15,
+      "commit": "5f17c9f",
+      "evidence_file": ".dev-flow/evidence/R003-BB-008.md",
+      "summary": "检索 API 完成。POST /api/retrieve + GET /api/health 扩展。pytest 16/16 + 全量 132/132 通过。",
+      "test_tasks": [
+        "POST /api/retrieve 正常返回 top-K chunks",
+        "GET /api/health 返回 ChromaDB 状态",
+        "ChromaDB 为空时返回 chunks=[], total=0",
+        "无效请求参数返回 422"
+      ],
+      "contract_refs": [
+        "POST /api/retrieve",
+        "GET /api/health"
+      ]
+    },
+    {
+      "id": "R003-BB-009",
+      "phase": "quality-integration",
+      "module": "spot-check",
+      "name": "入库抽检",
+      "description": "实现入库抽检脚本：验证每本书的页码范围、关键页内容完整性、Parent-Child 分块结构、元数据正确性，输出可读的抽检报告",
+      "user_stories": [
+        "作为开发者，我希望对入库结果进行抽检，以便验证页码映射、内容完整性和分块质量"
+      ],
+      "success_picture": "运行抽检脚本 → 验证每本书页码范围（如必修第一册 1-270）→ 抽查关键页内容与 PDF 原文一致 → Parent-Child 分块结构正确 → 输出抽检报告（通过/失败项明细）",
+      "verification": "L1",
+      "depends_on": [
+        "R003-BB-007"
+      ],
+      "status": "completed",
+      "priority": "medium",
+      "dependencies": [],
+      "risk_tags": [],
+      "started_at": "2026-05-21T02:00:00Z",
+      "completed_at": "2026-05-21T02:20:00Z",
+      "actual_minutes": 20,
+      "commit": "f915015",
+      "evidence_file": ".dev-flow/evidence/R003-BB-009.md",
+      "summary": "入库抽检完成。页码范围+内容完整性+Parent-Child结构+元数据验证。pytest 27/27 + 全量 179/179 通过。",
+      "test_tasks": [
+        "每本书的页码范围与 PDF 一致",
+        "抽查 3-5 页内容与原文匹配",
+        "Parent-Child 分块结构正确（parent 包含 child）",
+        "元数据字段完整（book, chapter, section, page）"
+      ]
+    },
+    {
+      "id": "R003-BB-010",
+      "phase": "quality-integration",
+      "module": "evaluation-set",
+      "name": "构建检索评估集",
+      "description": "基于实际入库结果构建评估数据集。评估集包含 id + question + retrieval_truth（mode + sources with book/page_start/page_end）。覆盖 5 本书的核心知识点，参考 ragDemo 的 ANY/ALL mode 设计",
+      "user_stories": [
+        "作为开发者，我希望基于实际入库结果构建评估数据集，以便后续检索质量可量化评估"
+      ],
+      "success_picture": "基于 ChromaDB 实际 chunks 构建评估集 JSON（每个问题含 id + question + retrieval_truth），覆盖 5 本书的核心知识点（函数、几何、概率等），评估集文件保存到 services/backend/data/evaluation/",
+      "verification": "L1",
+      "depends_on": [
+        "R003-BB-009"
+      ],
+      "status": "completed",
+      "priority": "medium",
+      "dependencies": [],
+      "risk_tags": [],
+      "started_at": "2026-05-21T02:25:00Z",
+      "completed_at": "2026-05-21T02:50:00Z",
+      "actual_minutes": 25,
+      "commit": "1ca2cb1",
+      "evidence_file": ".dev-flow/evidence/R003-BB-010.md",
+      "summary": "评估集构建完成。EvalItem 数据模型 + EvalSetLoader + 25 条评估数据（5 本书×5 条）。pytest 46/46 + 全量 225/225 通过。",
+      "test_tasks": [
+        "评估集 JSON 格式正确（id, question, retrieval_truth）",
+        "每本书至少有 N 条评估问题",
+        "retrieval_truth 的 book + page 范围与实际入库数据一致",
+        "ANY/ALL mode 定义清晰"
+      ]
+    },
+    {
+      "id": "R003-BB-011",
+      "phase": "quality-integration",
+      "module": "evaluation",
+      "name": "检索质量评估",
+      "description": "实现检索质量评估脚本：基于评估集跑 Hit Rate@K 和 MRR，支持 ANY/ALL mode 判定，输出可读的评估报告",
+      "user_stories": [
+        "作为开发者，我希望跑检索质量评估，以便获得 Hit Rate / MRR 基线分数"
+      ],
+      "success_picture": "运行评估脚本 → 逐条查询评估集 → 判定 Hit（ANY/ALL mode）→ 计算 Hit Rate@K 和 MRR → 输出评估报告（总分 + 按书/按问题类型明细）",
+      "verification": "L1",
+      "depends_on": [
+        "R003-BB-010",
+        "R003-BB-008"
+      ],
+      "status": "completed",
+      "priority": "medium",
+      "dependencies": [],
+      "risk_tags": [],
+      "started_at": "2026-05-21T03:00:00Z",
+      "completed_at": "2026-05-21T03:30:00Z",
+      "actual_minutes": 30,
+      "evidence_file": ".dev-flow/evidence/R003-BB-011.md",
+      "summary": "检索质量评估完成。EvalRunner + Hit Rate@K + MRR + ANY/ALL mode + 按书分组报告。pytest 30/30 + 全量 255/255 通过。",
+      "test_tasks": [
+        "Hit Rate@K 计算正确（ANY mode：任一 source 命中 → Hit）",
+        "MRR 计算正确（排第 N → 1/N，未命中 → 0）",
+        "ALL mode 判定正确（全部 source 都有命中 → Hit）",
+        "评估报告包含总分和按书明细"
+      ]
+    },
+    {
+      "id": "R003-BF-012",
+      "phase": "quality-integration",
+      "module": "docker-integration",
+      "name": "Docker Compose 集成 + 迁移验证",
+      "description": "更新 Docker Compose 配置支持前后端双容器部署，验证前端功能不变，后端 health 检查通过，Traefik 路由正确",
+      "developer_stories": [
+        "作为开发者，我希望更新 Docker Compose 配置支持前后端双容器部署，以便整体系统可容器化运行"
+      ],
+      "technical_success_picture": "docker-compose up → 前端可通过 Traefik 访问 → 后端 /api/health 返回 healthy → 前端功能不变（Playwright 测试通过）→ 后端 API 可被前端调用",
+      "verification": "L3",
+      "depends_on": [
+        "R003-BB-008"
+      ],
+      "status": "completed",
+      "priority": "medium",
+      "dependencies": [],
+      "risk_tags": [
+        "config"
+      ],
+      "started_at": "2026-05-21T01:30:00Z",
+      "completed_at": "2026-05-21T01:50:00Z",
+      "actual_minutes": 20,
+      "commit": "e8a3869",
+      "evidence_file": ".dev-flow/evidence/R003-BF-012.md",
+      "summary": "Docker Compose 双容器部署完成。前端+后端+Traefik 路由。build.sh + deploy.sh 更新。",
+      "test_tasks": [
+        "docker compose build 成功",
+        "docker compose up → 前端可访问",
+        "docker compose up → 后端 /api/health 返回 200",
+        "前端 Playwright 测试通过",
+        "后端 API 可通过 Docker 网络访问"
+      ]
+    },
+    {
+      "id": "R003-BF-013",
+      "phase": "rag-components",
+      "module": "models+chunker",
+      "name": "ChunkMetadata 扩展 + page range 推断 + section_id 生成",
+      "description": "扩展 ChunkMetadata 新增 page_start/page_end/source_pages/section_id/block_type 字段。改造 MathChunker 在分块时推断每个 chunk 的页码覆盖范围和稳定 section_id。改造 ChromaDBStore 序列化/反序列化适配新字段。",
+      "developer_stories": [
+        "作为开发者，我希望 chunk metadata 含 page_start/page_end，以便知道 chunk 覆盖了哪些页码",
+        "作为开发者，我希望 chunk metadata 含 section_id，以便按小节匹配和过滤",
+        "作为开发者，我希望 ChromaDB 序列化正确处理 source_pages 列表（逗号分隔字符串）"
+      ],
+      "technical_success_picture": "入库后每个 chunk 的 metadata 含 page_start/page_end/source_pages/section_id。section_id 格式为 '{book}::{numbered}'（如'必修第一册::2.1'）。source_pages 存为逗号分隔字符串。query 返回的 QueryResult 正确解析新字段。",
+      "verification": "L1",
+      "depends_on": [],
+      "status": "completed",
+      "priority": "high",
+      "dependencies": [],
+      "risk_tags": [],
+      "analysis_refs": [
+        "analysis/2026-05-21--rag-metadata-eval-upgrade.md"
+      ],
+      "decision_refs": [
+        "DEC-eval-001",
+        "DEC-eval-002",
+        "DEC-eval-006"
+      ],
+      "capability_refs": [
+        "CAP-eval-001",
+        "CAP-eval-002"
+      ],
+      "test_tasks": [
+        "MathChunker 输出 ChunkMetadata 含 page_start/page_end，且 page_start <= page_end",
+        "section_id 从 boundary.title 正确提取编号（如 '2.1 等式性质与不等式性质' → '必修第一册::2.1'）",
+        "section_id 边界：无编号的标题 fallback 为 '{book}::{section_clean}'",
+        "Child chunk 的 page_start/page_end 反映其文本在 full_text 中的实际页码范围",
+        "Parent chunk 的 page_start = section 起始页，page_end 覆盖到下一 section 起始页 - 1",
+        "to_dict() 中 source_pages 序列化为逗号分隔字符串",
+        "ChromaDBStore.query() 正确解析 page_start/page_end/section_id/block_type"
+      ],
+      "planning_notes": "ChunkMetadata 已部分修改（新增字段），vector_store.py 反序列化已适配。需要补齐 MathChunker 的 page range 推断和 section_id 生成逻辑。Child chunk 位置追踪需要改造 _split_into_children 输出含位置信息。",
+      "started_at": "2026-05-21T12:00:00Z",
+      "completed_at": "2026-05-21T12:30:00Z",
+      "actual_minutes": 30,
+      "commit": "e188ea0",
+      "evidence_file": ".dev-flow/evidence/R003-BF-013.md",
+      "summary": "ChunkMetadata 扩展完成。page_start/page_end/source_pages/section_id 生成。测试 226/227 通过。"
+    },
+    {
+      "id": "R003-BF-014",
+      "phase": "rag-components",
+      "module": "block-type-classifier",
+      "name": "block_type LLM 分类模块 + 入库管线集成",
+      "description": "新增 block_type LLM 分类器：对每个 child chunk 调 DashScope LLM（qwen-turbo）分类为 definition/property/example/exercise/explanation/unknown。集成到 IngestionPipeline，在 upsert 后做 metadata update。",
+      "developer_stories": [
+        "作为开发者，我希望 chunk metadata 含 block_type，以便区分定义、性质、例题等不同类型内容",
+        "作为开发者，我希望 block_type 分类在入库流程中自动完成，失败时标 unknown 不阻塞"
+      ],
+      "technical_success_picture": "入库完成后每个 child chunk 有 block_type 标签（非 'unknown' 比例 > 80%）。分类失败不阻塞入库流程。parent chunk 的 block_type 标为 'unknown'（不需要分类）。",
+      "verification": "L2",
+      "depends_on": [
+        "R003-BF-013"
+      ],
+      "status": "completed",
+      "priority": "medium",
+      "dependencies": [
+        "DashScope API Key"
+      ],
+      "risk_tags": [
+        "network"
+      ],
+      "analysis_refs": [
+        "analysis/2026-05-21--rag-metadata-eval-upgrade.md"
+      ],
+      "decision_refs": [
+        "DEC-eval-003",
+        "DEC-eval-008"
+      ],
+      "capability_refs": [
+        "CAP-eval-003"
+      ],
+      "journey_acceptance": {
+        "entry_action": "入库完成后自动调 LLM 分类 block_type",
+        "completion": "所有 child chunk 有 block_type 标签",
+        "user_visible_success": "抽检脚本显示 block_type 统计",
+        "failure_path_result": "LLM 调用失败时标 'unknown'，不阻塞入库"
+      },
+      "test_tasks": [
+        "mock LLM → block_type_classifier 正确解析 LLM 返回的分类标签",
+        "LLM 返回无法识别的标签 → fallback 为 'unknown'",
+        "LLM 调用失败 → 标 'unknown'，不抛异常",
+        "IngestionPipeline 在 upsert 后调用 block_type 分类",
+        "batch 分组正确（每 10 条一组）"
+      ],
+      "planning_notes": "使用 qwen-turbo（最便宜），预估 ~1250 child × 300 token ≈ ¥1-2。分类在 upsert 后做 metadata update，不阻塞 embedding 和入库主流程。",
+      "started_at": "2026-05-21T13:00:00Z",
+      "completed_at": "2026-05-21T13:30:00Z",
+      "actual_minutes": 30,
+      "commit": "65c88d0",
+      "evidence_file": ".dev-flow/evidence/R003-BF-014.md",
+      "summary": "block_type LLM 分类模块 + 入库管线集成完成。qwen-turbo 批量分类。测试 263/263 通过。"
+    },
+    {
+      "id": "R003-BB-015",
+      "phase": "quality-integration",
+      "module": "evaluation",
+      "name": "EvalSource 扩展 + 分层评估指标",
+      "description": "扩展 EvalSource 新增 section_id（可选）和 required_keywords 字段。升级 EvalRunner 新增 Section Hit@K、Keyword Coverage@K、Negative Pass Rate 指标。升级 EvalReport/BookMetrics/OverallMetrics 输出新指标。保持旧格式 eval_set.json 向后兼容。",
+      "developer_stories": [
+        "作为开发者，我希望评估报告同时输出 Section Hit / Span Hit / Keyword Coverage / MRR / Negative Pass Rate",
+        "作为开发者，我希望 EvalSource 支持 section_id + required_keywords，但旧格式仍可运行"
+      ],
+      "technical_success_picture": "运行评估 → 报告含 Section Hit@5/10、Span Hit@5/10、Keyword Coverage@K、MRR、Negative Pass Rate。旧格式 eval_set（无 section_id/keywords）仍可运行，Section Hit 按 page range fallback。",
+      "verification": "L1",
+      "depends_on": [
+        "R003-BF-013"
+      ],
+      "status": "completed",
+      "priority": "high",
+      "dependencies": [],
+      "risk_tags": [],
+      "analysis_refs": [
+        "analysis/2026-05-21--rag-metadata-eval-upgrade.md"
+      ],
+      "decision_refs": [
+        "DEC-eval-004"
+      ],
+      "capability_refs": [
+        "CAP-eval-004"
+      ],
+      "test_tasks": [
+        "EvalSource 新增 section_id（可选）和 required_keywords 解析正确",
+        "旧格式 eval_set（无 section_id/keywords）仍可加载和运行评估",
+        "Section Hit@K：section_id 匹配判定正确",
+        "Section Hit 无 section_id 时 fallback 为 page range 匹配",
+        "Keyword Coverage@K：required_keywords 在 chunk text 中的覆盖率计算正确",
+        "Negative Pass Rate：NEGATIVE 模式判定正确",
+        "EvalReport.to_dict() 包含所有新指标",
+        "_calc_hit_rate_at_k 签名和逻辑不变（Span Hit 复用）"
+      ],
+      "planning_notes": "Section Hit 判定优先用 section_id 匹配；若 truth 或 chunk 缺少 section_id，fallback 到 page range 匹配（即现有 Span Hit 逻辑）。Keyword Coverage 对每个 EvalSource 的 required_keywords 逐个检查 top-K chunk text 是否包含。",
+      "started_at": "2026-05-21T12:30:00Z",
+      "completed_at": "2026-05-21T13:00:00Z",
+      "actual_minutes": 30,
+      "commit": "d92bd97",
+      "evidence_file": ".dev-flow/evidence/R003-BB-015.md",
+      "summary": "EvalSource 扩展 + 分层评估指标完成。Section Hit + Keyword Coverage + Negative Pass Rate。测试 240/240 通过。"
+    },
+    {
+      "id": "R003-BB-016",
+      "phase": "quality-integration",
+      "module": "ingestion+spot-check",
+      "name": "全量重入库 + 抽检验证新字段",
+      "description": "基于升级后的 ChunkMetadata 和 MathChunker，删除旧 ChromaDB 数据，全量重入库 5 本教材。升级抽检脚本验证 page_start/page_end/section_id/block_type 完整性和正确性。",
+      "developer_stories": [
+        "作为开发者，我希望全量重入库后 ChromaDB 数据含完整的新 metadata 字段",
+        "作为开发者，我希望抽检脚本验证 page_start/page_end 与实际 PDF 页码对应"
+      ],
+      "technical_success_picture": "重入库完成 → ChromaDB 每条 chunk 含 page_start/page_end/source_pages/section_id/block_type → 抽检通过（页码范围正确、section_id 可匹配、block_type 统计合理）",
+      "verification": "L2",
+      "depends_on": [
+        "R003-BF-013",
+        "R003-BF-014"
+      ],
+      "status": "pending",
+      "priority": "high",
+      "dependencies": [
+        "DashScope API Key"
+      ],
+      "risk_tags": [
+        "network"
+      ],
+      "analysis_refs": [
+        "analysis/2026-05-21--rag-metadata-eval-upgrade.md"
+      ],
+      "decision_refs": [
+        "DEC-eval-007"
+      ],
+      "journey_acceptance": {
+        "entry_action": "删除旧 ChromaDB 数据，运行全量入库",
+        "completion": "5 本教材全部入库，抽检通过",
+        "user_visible_success": "抽检报告显示 page_start/page_end/section_id/block_type 完整性和正确性",
+        "failure_path_result": "单本入库失败不影响其他书"
+      },
+      "test_tasks": [
+        "删除旧 data/chroma_db/ → 全量重入库 → ChromaDB chunk 数量合理",
+        "抽检：每本书 page_start/page_end 与实际 PDF 页码对应",
+        "抽检：section_id 可正确匹配（如 '必修第一册::2.1' 对应 '2.1 等式性质与不等式性质'）",
+        "抽检：block_type 分布合理（非 'unknown' 比例 > 80%）",
+        "入库耗时在可接受范围内（OCR 缓存命中，主要是 embedding + block_type 分类）"
+      ],
+      "planning_notes": "旧 ChromaDB 数据不兼容新 metadata 结构，必须删除重建。OCR 缓存仍有效（parsed/ 目录不动），主要是 embedding + block_type LLM 分类的 API 调用开销。",
+      "status": "completed",
+      "started_at": "2026-05-21T10:00:00Z",
+      "completed_at": "2026-05-21T12:00:00Z",
+      "actual_minutes": 120,
+      "evidence_file": ".dev-flow/evidence/R003-BB-016.md",
+      "summary": "全量重入库 + 抽检完成。NewAPI LLM 分类 1183 child chunks，1182/1183 成功（99.9%），block_type 分布合理。目录重构 services/ → 根目录平铺。"
+    },
+    {
+      "id": "R003-BB-017",
+      "phase": "quality-integration",
+      "module": "evaluation",
+      "name": "新评估基线建立",
+      "description": "使用用户重标后的 eval_set.json（含 section_id + required_keywords）和升级后的 EvalRunner 跑新评估，建立分层指标基线。对比新旧指标差异，确认新指标的可信度。",
+      "user_stories": [
+        "作为开发者，我希望跑出新格式评估的分层基线分数，以便后续迭代有可信对比基准"
+      ],
+      "success_picture": "运行评估 → 输出 Section Hit@5/10、Span Hit@5/10、Keyword Coverage@K、MRR、Negative Pass Rate → 对比旧基线（97.88% Hit Rate）→ 确认新指标更精确",
+      "verification": "L1",
+      "depends_on": [
+        "R003-BB-015",
+        "R003-BB-016"
+      ],
+      "status": "pending",
+      "priority": "medium",
+      "dependencies": [
+        "用户完成 eval_set.json 重标"
+      ],
+      "risk_tags": [],
+      "analysis_refs": [
+        "analysis/2026-05-21--rag-metadata-eval-upgrade.md"
+      ],
+      "decision_refs": [
+        "DEC-eval-005"
+      ],
+      "capability_refs": [
+        "CAP-eval-005"
+      ],
+      "test_tasks": [
+        "新格式 eval_set 加载和验证通过（含 section_id + required_keywords）",
+        "评估报告包含所有分层指标",
+        "对比新旧基线：Span Hit 应与旧 Hit Rate 基本一致（±2%）",
+        "Section Hit 分数有意义（不是 100% 或 0%）",
+        "Keyword Coverage 分布合理"
+      ],
+      "open_issues": [],
+      "planning_notes": "此任务需要用户完成 eval_set.json 重标后才能执行。可以先完成其他任务，等用户准备好后跑评估。",
+      "status": "completed",
+      "started_at": "2026-05-21T13:00:00Z",
+      "completed_at": "2026-05-21T14:00:00Z",
+      "actual_minutes": 60,
+      "evidence_file": ".dev-flow/evidence/R003-BB-017.md",
+      "summary": "新评估基线建立。200 条重标 eval_set 评估完成：Span Hit@5=97.9%, Section Hit@5=84.7%, Keyword Coverage@5=48.3%, MRR=0.959, Negative Pass Rate=100%。"
+    }
+  ]
 }
