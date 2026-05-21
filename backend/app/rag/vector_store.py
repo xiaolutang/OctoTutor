@@ -197,6 +197,61 @@ class ChromaDBStore:
         """
         self._collection.delete(where=where)
 
+    def get_all_chunks(self) -> list[Chunk]:
+        """获取 collection 中的全量 chunks，供 BM25 索引构建使用
+
+        使用 ChromaDB .get() 无过滤条件拉取全部数据，
+        返回格式与 .query() 类似但不是嵌套列表。
+
+        Returns:
+            collection 中所有 Chunk 对象列表
+        """
+        results = self._collection.get(
+            include=["documents", "metadatas"]
+        )
+
+        if not results["ids"]:
+            return []
+
+        ids = results["ids"]
+        documents = results["documents"] if results["documents"] else [""] * len(ids)
+        metadatas = results["metadatas"] if results["metadatas"] else [{}] * len(ids)
+
+        chunks: list[Chunk] = []
+        for chunk_id, text, meta in zip(ids, documents, metadatas):
+            # 解析 source_pages（与 query 方法保持一致的解析逻辑）
+            raw_pages = meta.get("source_pages", "")
+            if isinstance(raw_pages, str) and raw_pages.strip():
+                source_pages = [int(p.strip()) for p in raw_pages.split(",") if p.strip()]
+            elif isinstance(raw_pages, list):
+                source_pages = [int(p) for p in raw_pages]
+            else:
+                source_pages = []
+            metadata = ChunkMetadata(
+                book=meta.get("book", ""),
+                chapter=meta.get("chapter", ""),
+                section=meta.get("section", ""),
+                section_id=meta.get("section_id", ""),
+                page=int(meta.get("page", 0)),
+                page_start=int(meta.get("page_start", meta.get("page", 0))),
+                page_end=int(meta.get("page_end", meta.get("page", 0))),
+                source_pages=source_pages,
+                chunk_type=meta.get("chunk_type", ""),
+                block_type=meta.get("block_type", "unknown"),
+                has_formula=bool(meta.get("has_formula", False)),
+                parent_id=meta.get("parent_id", ""),
+                child_index=int(meta.get("child_index", 0)),
+            )
+            chunks.append(
+                Chunk(
+                    chunk_id=chunk_id,
+                    text=text,
+                    metadata=metadata,
+                )
+            )
+
+        return chunks
+
     def count(self) -> int:
         """返回 collection 中的文档数量"""
         return self._collection.count()

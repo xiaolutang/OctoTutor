@@ -91,7 +91,7 @@
       "description": "在 config.py 新增 7 个配置字段（rerank_top_n, rerank_model, chat_max_context_tokens, bm25_enabled, rrf_k, retrieval_top_k, similarity_threshold），更新 .env.template 声明所有 R004 环境变量，添加 rank-bm25 到 requirements.txt。",
       "verification": "L2 — Settings 加载新字段成功，向后兼容（现有字段不受影响）",
       "depends_on": [],
-      "status": "in_progress",
+      "status": "completed",
       "priority": "high",
       "developer_stories": "作为后端开发者，我希望 R004 所有配置项在启动阶段可加载，以便后续模块通过 settings 访问配置",
       "technical_success_picture": "Settings.rerank_top_n=3, Settings.rerank_model='gte-rerank', Settings.chat_max_context_tokens=3000, Settings.bm25_enabled=True, Settings.rrf_k=60, Settings.retrieval_top_k=20, Settings.similarity_threshold=0.70；.env.template 包含所有新变量声明；requirements.txt 包含 rank-bm25",
@@ -109,7 +109,7 @@
       "description": "新建 infra/bm25.py（BM25Retriever：rank_bm25 + jieba 分词，启动时从 ChromaDB 构建索引，查询返回 list[QueryResult]）。在 ChromaDBStore 新增 get_all_chunks() 方法供 BM25 索引构建使用。包含单元测试验证 build_index + query 排序 + _chunk_ids 索引正确性。",
       "verification": "L2 — BM25Retriever 从 mock chunks 构建索引成功，query 返回 QueryResult 按 BM25 分数降序；ChromaDBStore.get_all_chunks() 返回全部 chunks",
       "depends_on": ["BF001", "BF002"],
-      "status": "pending",
+      "status": "in_progress",
       "priority": "high",
       "developer_stories": "作为后端开发者，我希望 BM25 检索器可独立运行并返回与向量检索相同格式的 QueryResult，以便 RRF 融合时 BM25 独有 chunk 不被丢弃",
       "technical_success_picture": "BM25Retriever.build_index(chunks) 构建索引；query('二次函数', top_k=10) 返回 list[QueryResult]，BM25 分数降序，_chunk_ids 索引正确；ChromaDBStore.get_all_chunks() 返回全量 chunks",
@@ -285,7 +285,7 @@
   ],
   "summary": {
     "total": 11,
-    "completed": 1
+    "completed": 2
   },
   "open_issues": [
     {
