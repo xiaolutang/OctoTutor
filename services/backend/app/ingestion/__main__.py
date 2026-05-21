@@ -52,6 +52,13 @@ def main() -> None:
         persist_directory=settings.chroma_persist_dir,
     )
 
+    # Block type classifier（可选，需要 DashScope API Key）
+    block_type_classifier = None
+    if settings.dashscope_api_key:
+        from app.rag.classifiers.block_type_classifier import BlockTypeClassifier
+
+        block_type_classifier = BlockTypeClassifier(api_key=settings.dashscope_api_key)
+
     # 执行入库
     pipeline = IngestionPipeline(
         pdf_reader=pdf_reader,
@@ -60,6 +67,7 @@ def main() -> None:
         embedding_service=embedding_service,
         vector_store=vector_store,
         raw_dir=settings.data_raw_dir,
+        block_type_classifier=block_type_classifier,
     )
 
     stats = pipeline.run(book_name=args.book)

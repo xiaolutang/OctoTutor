@@ -82,6 +82,7 @@ class IngestionPipeline:
         embedding_service: Embedding 向量化服务
         vector_store: ChromaDB 向量存储
         raw_dir: PDF 原始文件目录，默认 "data/raw"
+        block_type_classifier: 可选的 block_type LLM 分类器，None 表示跳过分类
     """
 
     def __init__(
@@ -92,6 +93,7 @@ class IngestionPipeline:
         embedding_service: DashScopeEmbedding,
         vector_store: ChromaDBStore,
         raw_dir: str = "data/raw",
+        block_type_classifier: object | None = None,
     ) -> None:
         self._pdf_reader = pdf_reader
         self._structure_parser = structure_parser
@@ -99,6 +101,7 @@ class IngestionPipeline:
         self._embedding_service = embedding_service
         self._vector_store = vector_store
         self._raw_dir = raw_dir
+        self._block_type_classifier = block_type_classifier
 
     def run(self, book_name: str | None = None) -> IngestionStats:
         """执行入库流程
@@ -222,6 +225,20 @@ class IngestionPipeline:
 
             # 7. ChromaDBStore.upsert
             self._vector_store.upsert(chunks, embeddings)
+
+            # 8. Block type classification (child chunks only)
+            if self._block_type_classifier:
+                child_chunks = [c for c in chunks if c.metadata.chunk_type == "child"]
+                if child_chunks:
+                    texts = [c.text for c in child_chunks]
+                    block_types = self._block_type_classifier.classify_batch(texts)
+                    # Update metadata in ChromaDB
+                    for child_chunk, bt in zip(child_chunks, block_types):
+                        child_chunk.metadata.block_type = bt
+                    # Re-upsert only child chunks with updated metadata
+                    child_embeddings = [embeddings[chunks.index(c)] for c in child_chunks]
+                    self._vector_store.upsert(child_chunks, child_embeddings)
+                    logger.info("block_type 分类完成: %d child chunks", len(child_chunks))
 
             logger.info(
                 "完成: %s, %d 页, %d chunks",
