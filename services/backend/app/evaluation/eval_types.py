@@ -32,21 +32,29 @@ class EvalSource:
     book: str
     page_start: int
     page_end: int
+    section_id: str | None = None
+    required_keywords: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         """转换为 JSON 可序列化的字典"""
-        return {
+        d: dict = {
             "book": self.book,
             "page_start": self.page_start,
             "page_end": self.page_end,
         }
+        if self.section_id is not None:
+            d["section_id"] = self.section_id
+        if self.required_keywords:
+            d["required_keywords"] = self.required_keywords
+        return d
 
     @classmethod
     def from_dict(cls, data: dict) -> EvalSource:
         """从字典构造 EvalSource
 
         Args:
-            data: 包含 book, page_start, page_end 的字典
+            data: 包含 book, page_start, page_end 的字典，
+                  section_id 和 required_keywords 为可选
 
         Returns:
             EvalSource 实例
@@ -74,7 +82,16 @@ class EvalSource:
                 f"EvalSource.page_start ({page_start}) > page_end ({page_end})"
             )
 
-        return cls(book=book, page_start=page_start, page_end=page_end)
+        section_id = data.get("section_id")
+        required_keywords = data.get("required_keywords", [])
+
+        return cls(
+            book=book,
+            page_start=page_start,
+            page_end=page_end,
+            section_id=section_id,
+            required_keywords=required_keywords,
+        )
 
     def contains_page(self, book: str, page: int) -> bool:
         """判断指定的书名和页码是否落在当前来源范围内
@@ -88,6 +105,12 @@ class EvalSource:
         """
         return self.book == book and self.page_start <= page <= self.page_end
 
+    def overlaps_page_range(self, book: str, page_start: int, page_end: int) -> bool:
+        """判断指定书名和页码区间是否与当前来源范围重叠"""
+        if self.book != book:
+            return False
+        return max(self.page_start, page_start) <= min(self.page_end, page_end)
+
 
 @dataclass
 class RetrievalTruth:
@@ -98,13 +121,14 @@ class RetrievalTruth:
     Mode 说明:
         ANY: top-K 结果中，任意一个 source 命中即判定为 Hit
         ALL: top-K 结果中，全部 source 都至少命中一次才判定为 Hit
+        NEGATIVE: top-K 结果中，不应包含任何相关来源，用于测试超纲/误导性问题的拒识能力
 
     Attributes:
-        mode: 判定模式，"ANY" 或 "ALL"
-        sources: 期望命中的来源列表
+        mode: 判定模式，"ANY"、"ALL" 或 "NEGATIVE"
+        sources: 期望命中的来源列表（NEGATIVE 模式下为空）
     """
 
-    mode: str  # "ANY" | "ALL"
+    mode: str  # "ANY" | "ALL" | "NEGATIVE"
     sources: list[EvalSource]
 
     def to_dict(self) -> dict:
@@ -128,14 +152,14 @@ class RetrievalTruth:
             ValueError: mode 不合法或 sources 为空
         """
         mode = data.get("mode", "")
-        if mode not in ("ANY", "ALL"):
+        if mode not in ("ANY", "ALL", "NEGATIVE"):
             raise ValueError(
-                f"RetrievalTruth.mode 必须是 'ANY' 或 'ALL', got: {mode!r}"
+                f"RetrievalTruth.mode 必须是 'ANY'、'ALL' 或 'NEGATIVE', got: {mode!r}"
             )
 
         sources_data = data.get("sources", [])
-        if not sources_data:
-            raise ValueError("RetrievalTruth.sources 不能为空")
+        if mode != "NEGATIVE" and not sources_data:
+            raise ValueError("RetrievalTruth.sources 不能为空（NEGATIVE 模式除外）")
 
         sources = [EvalSource.from_dict(s) for s in sources_data]
         return cls(mode=mode, sources=sources)
@@ -149,7 +173,10 @@ class RetrievalTruth:
         Returns:
             是否命中（根据 mode 决定判定逻辑）
         """
-        if self.mode == "ANY":
+        if self.mode == "NEGATIVE":
+            # NEGATIVE 模式不应调用 check_hit（eval_runner 中已早返回）
+            return False
+        elif self.mode == "ANY":
             # 任一 source 命中即可
             for source in self.sources:
                 for book, page in results:
@@ -162,6 +189,34 @@ class RetrievalTruth:
                 hit = False
                 for book, page in results:
                     if source.contains_page(book, page):
+                        hit = True
+                        break
+                if not hit:
+                    return False
+            return True
+
+    def check_hit_ranges(self, results: list[tuple[str, int, int]]) -> bool:
+        """判断带覆盖区间的检索结果是否命中
+
+        Args:
+            results: 检索结果列表，每项为 (book, page_start, page_end)
+
+        Returns:
+            是否命中（根据 mode 决定判定逻辑）
+        """
+        if self.mode == "NEGATIVE":
+            return False
+        elif self.mode == "ANY":
+            for source in self.sources:
+                for book, page_start, page_end in results:
+                    if source.overlaps_page_range(book, page_start, page_end):
+                        return True
+            return False
+        else:  # ALL
+            for source in self.sources:
+                hit = False
+                for book, page_start, page_end in results:
+                    if source.overlaps_page_range(book, page_start, page_end):
                         hit = True
                         break
                 if not hit:
