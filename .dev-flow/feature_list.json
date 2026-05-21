@@ -1,12 +1,6 @@
 {
   "version": "1.5",
-  "active_requirement_cycle": {
-    "id": "R003",
-    "name": "knowledge-base",
-    "branch": "feat/R003-knowledge-base",
-    "status": "active",
-    "planning_context": ".dev-flow/planning_context.md"
-  },
+  "active_requirement_cycle": null,
   "archived_requirement_cycles": [
     {
       "id": "R001",
@@ -27,6 +21,15 @@
       "pr_ref": null,
       "total_tasks": 2,
       "completed_at": "2026-05-20"
+    },
+    {
+      "id": "R003",
+      "name": "knowledge-base",
+      "status": "completed",
+      "branch": "feat/R003-knowledge-base",
+      "pr_ref": null,
+      "total_tasks": 17,
+      "completed_at": "2026-05-21"
     }
   ],
   "workflow": {
