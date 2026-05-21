@@ -1,0 +1,342 @@
+{
+  "version": "3.0",
+  "rc_id": "R004",
+  "name": "rag-dialogue",
+  "status": "active",
+  "branch": "feat/R004-rag-dialogue",
+  "workflow": {
+    "mode": "A",
+    "runtime": "skill_orchestrated",
+    "evaluate_provider": "local",
+    "risk_provider": "local"
+  },
+  "test_strategy": {
+    "integration": {
+      "mode": "local",
+      "commands": ["pytest backend/tests/ -v --tb=short"],
+      "mock_policy": "mock_allowed_for_unit_only",
+      "required_for": ["L3", "L4", "network", "third_party"],
+      "confirmed_by_user": false,
+      "notes": "R004 依赖真实 OpenAI 兼容 LLM 服务和 DashScope API，集成测试需要真实 API 凭证"
+    }
+  },
+  "capability_coverage": [
+    {
+      "capability_id": "CAP-dialogue-001",
+      "name": "Context Precision 评估",
+      "must_plan": true,
+      "covered_by": ["BB007", "BB009"]
+    },
+    {
+      "capability_id": "CAP-dialogue-002",
+      "name": "Reranker 精炼",
+      "must_plan": true,
+      "covered_by": ["BB002", "BB004", "BB009"]
+    },
+    {
+      "capability_id": "CAP-dialogue-003",
+      "name": "LLM 对话生成",
+      "must_plan": true,
+      "covered_by": ["BB003", "BB004", "BB009"]
+    },
+    {
+      "capability_id": "CAP-dialogue-004",
+      "name": "Faithfulness 评估",
+      "must_plan": true,
+      "covered_by": ["BB007", "BB009"]
+    },
+    {
+      "capability_id": "CAP-dialogue-005",
+      "name": "Coverage 覆盖度检查",
+      "must_plan": true,
+      "covered_by": ["BB007"]
+    },
+    {
+      "capability_id": "CAP-dialogue-006",
+      "name": "确定性评分器兜底",
+      "must_plan": true,
+      "covered_by": ["BB006"]
+    },
+    {
+      "capability_id": "CAP-dialogue-007",
+      "name": "回归套件正式化",
+      "must_plan": true,
+      "covered_by": ["BB007", "BB009"]
+    }
+  ],
+  "features": [
+    {
+      "id": "BF001",
+      "phase": 1,
+      "module": "domain",
+      "name": "domain 层基础 — 共享模型 + Protocol 接口",
+      "description": "新建 domain/models.py（SourceReference 共享数据模型）和 domain/protocols.py（Reranker、Generator Protocol 接口定义）。SourceReference 跨域共享（infra + chat + evaluation 都依赖），Protocol 契约属于领域层，具体实现在 infra/。",
+      "verification": "L2 — import 成功，Protocol 类签名正确（Reranker.rerank、Generator.generate），SourceReference 字段完整",
+      "depends_on": [],
+      "status": "completed",
+      "priority": "high",
+      "developer_stories": "作为后端开发者，我希望 domain 层的共享模型和 Protocol 接口在项目启动阶段定义完成，以便 infra/ 和 chat/ 模块可基于稳定契约构建",
+      "technical_success_picture": "domain/models.py 含 SourceReference(chunk_id, book, section, page_start, page_end)；domain/protocols.py 含 Reranker.rerank(query, results, top_n)→list[QueryResult] 和 Generator.generate(query, context_chunks)→tuple[str, list[SourceReference]]；所有 import 无报错",
+      "decision_refs": ["DEC-rag-012"],
+      "analysis_refs": ["2026-05-21--R004-rag-dialogue.md §8 模块与边界"],
+      "risk_tags": ["config"],
+      "test_tasks": ["import 验证", "Protocol 签名检查"],
+      "smoke_required": false
+    },
+    {
+      "id": "BF002",
+      "phase": 1,
+      "module": "config",
+      "name": "config.py 配置扩展 + .env.template + requirements.txt",
+      "description": "在 config.py 新增 7 个配置字段（rerank_top_n, rerank_model, chat_max_context_tokens, bm25_enabled, rrf_k, retrieval_top_k, similarity_threshold），更新 .env.template 声明所有 R004 环境变量，添加 rank-bm25 到 requirements.txt。",
+      "verification": "L2 — Settings 加载新字段成功，向后兼容（现有字段不受影响）",
+      "depends_on": [],
+      "status": "in_progress",
+      "priority": "high",
+      "developer_stories": "作为后端开发者，我希望 R004 所有配置项在启动阶段可加载，以便后续模块通过 settings 访问配置",
+      "technical_success_picture": "Settings.rerank_top_n=3, Settings.rerank_model='gte-rerank', Settings.chat_max_context_tokens=3000, Settings.bm25_enabled=True, Settings.rrf_k=60, Settings.retrieval_top_k=20, Settings.similarity_threshold=0.70；.env.template 包含所有新变量声明；requirements.txt 包含 rank-bm25",
+      "decision_refs": ["DEC-rag-013", "DEC-rag-014"],
+      "analysis_refs": ["2026-05-21--R004-rag-dialogue.md §8 配置变更"],
+      "risk_tags": ["config"],
+      "test_tasks": ["Settings 加载验证", "向后兼容性检查"],
+      "smoke_required": false
+    },
+    {
+      "id": "BB001",
+      "phase": 2,
+      "module": "infra/bm25",
+      "name": "BM25 检索器 + ChromaDBStore.get_all_chunks()",
+      "description": "新建 infra/bm25.py（BM25Retriever：rank_bm25 + jieba 分词，启动时从 ChromaDB 构建索引，查询返回 list[QueryResult]）。在 ChromaDBStore 新增 get_all_chunks() 方法供 BM25 索引构建使用。包含单元测试验证 build_index + query 排序 + _chunk_ids 索引正确性。",
+      "verification": "L2 — BM25Retriever 从 mock chunks 构建索引成功，query 返回 QueryResult 按 BM25 分数降序；ChromaDBStore.get_all_chunks() 返回全部 chunks",
+      "depends_on": ["BF001", "BF002"],
+      "status": "pending",
+      "priority": "high",
+      "developer_stories": "作为后端开发者，我希望 BM25 检索器可独立运行并返回与向量检索相同格式的 QueryResult，以便 RRF 融合时 BM25 独有 chunk 不被丢弃",
+      "technical_success_picture": "BM25Retriever.build_index(chunks) 构建索引；query('二次函数', top_k=10) 返回 list[QueryResult]，BM25 分数降序，_chunk_ids 索引正确；ChromaDBStore.get_all_chunks() 返回全量 chunks",
+      "decision_refs": ["DEC-rag-013"],
+      "analysis_refs": ["2026-05-21--R004-rag-dialogue.md §8 BM25 检索模块设计"],
+      "risk_tags": ["quality"],
+      "test_tasks": ["BM25Retriever build_index + query 单元测试", "ChromaDBStore.get_all_chunks 单元测试"],
+      "smoke_required": false
+    },
+    {
+      "id": "BB002",
+      "phase": 2,
+      "module": "infra/reranker",
+      "name": "DashScope Reranker 实现",
+      "description": "新建 infra/reranker.py（DashScopeReranker），实现 Reranker Protocol。调用 DashScope TextReRank API（gte-rerank）重排序。职责边界：reranker 只负责调用 API，失败抛异常（由 ChatService 捕获降级），返回空返回空列表。包含单元测试（mock DashScope response）。",
+      "verification": "L2 — DashScopeReranker.rerank 返回排序后 QueryResult 子集；mock 异常验证异常正确传播",
+      "depends_on": ["BF001"],
+      "status": "pending",
+      "priority": "high",
+      "user_stories": "作为开发者，我希望 Reranker 可对检索结果精炼排序，以便 LLM 获得最相关的教材段落",
+      "success_picture": "给定 20 条检索结果，rerank(query, results, top_n=3) 返回最相关的 3 条 QueryResult，按 relevance_score 降序；API 失败时异常传播到调用方",
+      "decision_refs": ["DEC-rag-001", "DEC-rag-005"],
+      "capability_refs": ["CAP-dialogue-002"],
+      "analysis_refs": ["2026-05-21--R004-rag-dialogue.md §8 Reranker 模块设计"],
+      "risk_tags": ["third_party", "network"],
+      "test_tasks": ["DashScopeReranker.rerank mock 测试", "异常传播测试"],
+      "contract_refs": ["new:reranker-api"],
+      "journey_acceptance": "给定 20 条检索结果，rerank(query, results, top_n=3) 返回最相关 3 条；API 失败时异常正确传播到 ChatService；DashScope TextReRank 返回 relevance_score 可解析",
+      "evidence_required": true,
+      "smoke_required": false
+    },
+    {
+      "id": "BB003",
+      "phase": 2,
+      "module": "infra/llm",
+      "name": "LLM Generator 实现",
+      "description": "新建 infra/llm.py（LLMGenerator），实现 Generator Protocol。通过 OpenAI 兼容协议调用 LLM（当前 glm-5.1，可通过配置切换）。构建带编号标记的 context prompt，调用 chat.completions.create，从 context_chunks.metadata 构建 sources（非从 LLM 输出解析）。SourceReference 定义在 domain/models.py。包含单元测试（mock OpenAI response）。",
+      "verification": "L2 — LLMGenerator.generate 返回 (answer, sources) tuple，answer 非空，sources 包含所有 context_chunks 的引用信息",
+      "depends_on": ["BF001"],
+      "status": "pending",
+      "priority": "high",
+      "user_stories": "作为开发者，我希望 LLM Generator 可基于教材 context 生成助教式回答并附带引用来源",
+      "success_picture": "给定 query + 3 条 context_chunks，generate 返回回答文本和 3 条 SourceReference（chunk_id/book/section/page_start/page_end 来自 context_chunks.metadata）；OpenAI client 创建方式复用 block_type_classifier.py 的模式",
+      "decision_refs": ["DEC-rag-003"],
+      "capability_refs": ["CAP-dialogue-003"],
+      "analysis_refs": ["2026-05-21--R004-rag-dialogue.md §8 Generator 模块设计", "2026-05-21--R004-rag-dialogue.md §8 Prompt 设计"],
+      "risk_tags": ["third_party", "network", "quality"],
+      "test_tasks": ["LLMGenerator.generate mock 测试", "SourceReference 构建验证", "Prompt 格式验证"],
+      "contract_refs": ["new:generator-api"],
+      "journey_acceptance": "给定 query + 3 条 context_chunks，generate 返回非空 answer 和 3 条 SourceReference（chunk_id/book/section/page 来自 metadata）；OpenAI 兼容 API 调用成功；回答包含数学内容",
+      "evidence_required": true,
+      "smoke_required": false
+    },
+    {
+      "id": "BB004",
+      "phase": 3,
+      "module": "chat",
+      "name": "Chat Service 编排 + Schemas + DI + Router",
+      "description": "新建 chat/ 模块：schemas.py（ChatRequest/ChatResponse，SourceReference 在 domain/models.py）、service.py（ChatService 核心编排：Embed→Vector→Threshold→BM25→RRF→Rerank→Truncate→Generate，含 _rrf_fuse 和 _truncate_by_tokens 静态方法）、dependencies.py（DI providers，通过 Request→app.state）、router.py（POST /api/chat）。Rerank 失败降级在 ChatService 统一处理。包含完整的单元测试覆盖。",
+      "verification": "L2 — ChatService 全链路 mock 测试通过：RRF 融合正确、BM25 独有 chunk 保留、cosine 阈值过滤、Rerank 降级（degraded=true）、Token 截断保底；Router 返回正确 HTTP 状态码和响应格式",
+      "depends_on": ["BF001", "BF002", "BB001", "BB002", "BB003"],
+      "status": "pending",
+      "priority": "high",
+      "user_stories": "作为开发者，我希望 POST /api/chat 端到端可用，发送数学问题后获得 AI 回答和教材引用来源",
+      "success_picture": "POST /api/chat {question: '二次函数怎么求顶点'} 返回 {answer: '...', sources: [{chunk_id, book, section, page_start, page_end}], context_used: 3, degraded: false, degradation_reason: null}；Rerank 失败时 degraded=true；检索返回 0 条时 404；LLM 失败时 503",
+      "decision_refs": ["DEC-rag-005", "DEC-rag-013", "DEC-rag-014"],
+      "capability_refs": ["CAP-dialogue-002", "CAP-dialogue-003"],
+      "analysis_refs": ["2026-05-21--R004-rag-dialogue.md §8 数据模型", "2026-05-21--R004-rag-dialogue.md §8 API 设计", "2026-05-21--R004-rag-dialogue.md §8 依赖注入模式"],
+      "risk_tags": ["network", "quality"],
+      "test_tasks": ["ChatService._rrf_fuse 单元测试（含 BM25 独有 chunk）", "ChatService cosine 阈值过滤测试", "ChatService Rerank 降级测试", "ChatService Token 截断测试", "ChatService handle_chat 全链路 mock 测试", "ChatRouter 请求/响应格式 + 错误码测试"],
+      "planning_notes": "本任务是 R004 最大的单一任务（~30min），包含 4 个文件的创建和 6 组单元测试。如执行时发现过大可拆分为 schemas+service 和 dependencies+router 两个任务。",
+      "journey_acceptance": "POST /api/chat 返回有效 ChatResponse（answer 非空 + sources 含 chunk_id/book/section/page + context_used > 0）；Rerank 降级时 degraded=true + degradation_reason 非空；检索 0 条时 404；LLM 失败时 503",
+      "evidence_required": true,
+      "smoke_required": true
+    },
+    {
+      "id": "BB005",
+      "phase": 3,
+      "module": "main",
+      "name": "main.py 集成 — 路由注册 + 启动初始化",
+      "description": "更新 main.py lifespan：初始化 BM25Retriever（从 ChromaDBStore.get_all_chunks() 加载全量 chunks 构建索引）、DashScopeReranker、LLMGenerator 并挂载到 app.state。注册 chat_router。确保 /api/retrieve 仍正常工作。不改变现有 lifespan 中 Embedding 和 VectorStore 的初始化逻辑。",
+      "verification": "L2 — app 启动无报错，/api/chat 端点可访问（curl 返回非 404），/api/retrieve 仍正常工作",
+      "depends_on": ["BB004"],
+      "status": "pending",
+      "priority": "high",
+      "developer_stories": "作为后端开发者，我希望 BM25/Reranker/Generator 在应用启动时初始化并挂载到 app.state，以便 DI providers 可通过 Request 获取",
+      "technical_success_picture": "app.state.bm25 为 BM25Retriever 实例（索引已构建）；app.state.reranker 为 DashScopeReranker 实例；app.state.generator 为 LLMGenerator 实例；chat_router 已注册到 app；/api/retrieve 仍正常响应",
+      "decision_refs": ["DEC-rag-012", "DEC-rag-013"],
+      "analysis_refs": ["2026-05-21--R004-rag-dialogue.md §8 依赖注入模式"],
+      "risk_tags": ["startup", "config"],
+      "test_tasks": ["app 启动冒烟测试", "app.state 各组件实例化验证", "/api/retrieve 回归测试"],
+      "smoke_required": true
+    },
+    {
+      "id": "BB006",
+      "phase": 4,
+      "module": "evaluation/graders",
+      "name": "EvalItem 扩展 + 确定性评分器",
+      "description": "扩展 eval_types.py 的 EvalItem：新增 key_facts (list[str])、reference_answer (str)、suite (str='regression') 字段（均有默认值，向后兼容）。新建 evaluation/graders/deterministic.py：0 成本前置检查（answer 非空、sources 非空、引用页码在 context 范围内、无重复 chunk_id），任一不通过直接标记 FAIL 跳过 LLM judge。包含单元测试。",
+      "verification": "L2 — EvalItem 向后兼容（现有字段不变，新字段有默认值）；DeterministicGrader.check 正确判定 pass/fail",
+      "depends_on": ["BF001"],
+      "status": "pending",
+      "priority": "medium",
+      "user_stories": "作为开发者，我希望在 Faithfulness 评估前先用确定性检查过滤明显错误，避免浪费 LLM 调用",
+      "success_picture": "DeterministicGrader.check(answer='', sources=[], context=[]) 返回 FAIL；check(answer='有效', sources=[...], context=[...]) 返回 PASS；EvalItem 不带新字段时默认值正确",
+      "decision_refs": ["DEC-rag-009"],
+      "capability_refs": ["CAP-dialogue-006"],
+      "analysis_refs": ["2026-05-21--R004-rag-dialogue.md §8 评估模块扩展设计"],
+      "risk_tags": ["quality"],
+      "test_tasks": ["EvalItem 向后兼容测试", "DeterministicGrader 全场景测试（空 answer、空 sources、页码超范围、重复 chunk_id）"],
+      "smoke_required": false
+    },
+    {
+      "id": "BB007",
+      "phase": 4,
+      "module": "evaluation",
+      "name": "LLM Judge + Context Precision + Faithfulness + 回归模式",
+      "description": "新建 evaluation/graders/llm_judge.py（LLMJudge：Faithfulness + Coverage 合并评估，含 Unknown 选项）。扩展 eval_runner.py：新增 run_context_precision()（section_id 匹配计算 Precision@K）、run_faithfulness()（确定性前置→LLM Judge）、run_regression()（R003 Span Hit@5 基线）、run_full()（全量评估）。EvalRunner 构造器新增可选参数 reranker/generator/settings。包含单元测试（mock LLM response）。",
+      "verification": "L2 — run_context_precision 输出 Precision@K 数值（0-1）；run_faithfulness 输出 Faithfulness 分数（0-1）+ Unknown 比例；run_regression 输出 Span Hit@5；run_full 包含所有指标；LLM Judge prompt 正确处理 Unknown",
+      "depends_on": ["BB003", "BB006"],
+      "status": "pending",
+      "priority": "medium",
+      "user_stories": "作为开发者，我希望运行 eval --mode context_precision/faithfulness/regression/full 来量化检索和生成质量",
+      "success_picture": "python -m backend.app.evaluation.eval_runner --mode context_precision 输出 Precision@K=0.85；--mode faithfulness 输出 Faithfulness=0.72, Coverage=0.68, Unknown=0.05；--mode regression 输出 Span Hit@5=0.979；--mode full 包含所有指标汇总",
+      "decision_refs": ["DEC-rag-002", "DEC-rag-004", "DEC-rag-008", "DEC-rag-010", "DEC-rag-011"],
+      "capability_refs": ["CAP-dialogue-001", "CAP-dialogue-004", "CAP-dialogue-005", "CAP-dialogue-007"],
+      "analysis_refs": ["2026-05-21--R004-rag-dialogue.md §8 评估模块扩展设计", "2026-05-21--R004-rag-dialogue.md §8 LLM Judge Prompt 设计"],
+      "risk_tags": ["third_party", "network", "quality", "regression"],
+      "test_tasks": ["LLMJudge Faithfulness + Coverage mock 测试", "LLMJudge Unknown 选项测试", "run_context_precision 测试", "run_faithfulness 全链路测试", "run_regression 回归测试", "run_full 汇总测试", "EvalRunner 可选依赖缺失时 RuntimeError 测试"],
+      "journey_acceptance": "eval --mode faithfulness 输出 Faithfulness 分数（0-1）+ Coverage 分数 + Unknown 比例；eval --mode regression 输出 Span Hit@5；eval --mode context_precision 输出 Precision@K；所有模式可独立运行，faithfulness 缺少依赖时抛出 RuntimeError",
+      "evidence_required": true,
+      "smoke_required": false
+    },
+    {
+      "id": "BB008",
+      "phase": 5,
+      "module": "architecture",
+      "name": "architecture.md 更新",
+      "description": "按分析文档「架构文档变更清单」执行 8 项更新：1) 版本头 v2.0→v3.0 R004；2) 系统拓扑 +LLM+BM25+DashScope Reranker；3) 关键决策 +4 条；4) 权威边界 +3 条；5) 不变量 +3 条；6) 禁止模式 #3 删除（R003 不做 BM25/Reranker）；7) 禁止模式 #4 更新（R004 不做认证→R005+）；8) 新增 3 条禁止模式（不做 SSE/多轮/UI）。",
+      "verification": "L2 — architecture.md 版本头为 v3.0 | R004；禁止模式 #3 已删除；新增决策/边界/不变量/禁止模式正确",
+      "depends_on": ["BB005"],
+      "status": "pending",
+      "priority": "medium",
+      "developer_stories": "作为后端开发者，我希望 architecture.md 反映 R004 的架构变更，以便后续需求（R005）能基于最新架构约束",
+      "technical_success_picture": "architecture.md 版本 v3.0；系统拓扑含 LLM + BM25；禁止模式 #3 已删除；新增 LLM 调用统一在 Backend、Reranker 降级、BM25 静态索引等不变量",
+      "decision_refs": ["DEC-rag-012"],
+      "analysis_refs": ["2026-05-21--R004-rag-dialogue.md §8 架构文档变更清单"],
+      "test_tasks": ["architecture.md 格式检查", "8 项变更逐条验证"],
+      "risk_tags": ["config"],
+      "smoke_required": false
+    },
+    {
+      "id": "BB009",
+      "phase": 5,
+      "module": "integration",
+      "name": "端到端集成验证",
+      "description": "端到端集成测试：1) POST /api/chat 真实服务调用（answer 非空 + sources 非空 + context_used > 0）；2) Rerank 降级路径验证（mock Rerank 异常→回答仍正常，degraded=true）；3) Context Precision 评估运行；4) Regression 模式运行（Span Hit@5 ≥ 97%）；5) Faithfulness 评估运行（需已标注 eval_set 数据）。",
+      "verification": "L3 — POST /api/chat 返回有效 ChatResponse；Rerank 降级路径工作；Context Precision 输出数值；Span Hit@5 ≥ 97%",
+      "depends_on": ["BB005", "BB007"],
+      "status": "pending",
+      "priority": "high",
+      "user_stories": "作为开发者，我希望端到端验证 POST /api/chat 管线和所有评估模式，确保 R004 不降低 R003 检索基线",
+      "success_picture": "curl POST /api/chat 返回 answer + sources + context_used；Rerank 失败后 degraded=true 但回答正常；eval --mode regression 输出 Span Hit@5=97%+；eval --mode context_precision 输出 Precision@K；eval --mode faithfulness 输出 Faithfulness 分数",
+      "decision_refs": ["DEC-rag-011"],
+      "capability_refs": ["CAP-dialogue-001", "CAP-dialogue-002", "CAP-dialogue-003", "CAP-dialogue-004", "CAP-dialogue-007"],
+      "analysis_refs": ["2026-05-21--R004-rag-dialogue.md §11 集成测试要求"],
+      "risk_tags": ["network", "third_party", "regression"],
+      "test_tasks": ["POST /api/chat 端到端测试", "Rerank 降级集成测试", "Context Precision 评估集成测试", "Regression 模式集成测试", "Faithfulness 评估集成测试（依赖标注数据）"],
+      "journey_acceptance": "POST /api/chat 端到端返回 answer + sources + context_used；Rerank 降级路径验证（degraded=true 但回答正常）；eval --mode regression 输出 Span Hit@5 ≥ 97%（不降低 R003 基线）；eval --mode context_precision 输出有效数值",
+      "evidence_required": true,
+      "smoke_required": true
+    }
+  ],
+  "summary": {
+    "total": 11,
+    "completed": 1
+  },
+  "open_issues": [
+    {
+      "id": "OI-001",
+      "summary": "eval_set.json 数据标注 — 20 条核心样本需补充 key_facts + reference_answer",
+      "reason": "Faithfulness 和 Coverage 评估依赖标注数据（key_facts, reference_answer），当前 eval_set 只有 section_id 和 required_keywords",
+      "recovery": "在 BB007 执行前完成 20 条核心样本标注，标注规范见分析文档 §8 数据标注规范",
+      "related_tasks": ["BB007", "BB009"]
+    },
+    {
+      "id": "OI-002",
+      "summary": "similarity_threshold 调参 — 默认 0.70 需实际运行后根据效果调整",
+      "reason": "cosine 阈值 0.70 是初始值，需根据实际检索效果（噪声 vs 召回率）调整",
+      "recovery": "BB009 端到端验证后，根据 Context Precision 和回归结果调参"
+    },
+    {
+      "id": "OI-003",
+      "summary": "Judge 可信度基线建立 — 需人工抽样复核",
+      "reason": "LLM-as-judge 使用同一模型（glm-5.1）自评存在偏差，需人工抽样复核建立可信度基线",
+      "recovery": "BB007 完成后，抽取 10% 样本人工复核，偏差 >20% 时引入更强 judge 模型"
+    },
+    {
+      "id": "OI-004",
+      "summary": "集成测试方式未确认",
+      "reason": "R004 依赖真实 OpenAI 兼容 LLM 服务和 DashScope API，集成测试需要真实 API 凭证",
+      "recovery": "用户确认集成测试运行方式和 API 凭证配置"
+    }
+  ],
+  "out_of_scope_notes": [
+    {
+      "id": "OOS-001",
+      "content": "SSE 流式输出（DEC-rag-006，R005 跟前端 UI 一起做）",
+      "decision_refs": ["DEC-rag-006"]
+    },
+    {
+      "id": "OOS-002",
+      "content": "多轮对话上下文（DEC-rag-007，R005 跟前端 UI 一起做）",
+      "decision_refs": ["DEC-rag-007"]
+    },
+    {
+      "id": "OOS-003",
+      "content": "前端 Chat UI（R005）"
+    },
+    {
+      "id": "OOS-004",
+      "content": "用户认证打通（R005+）"
+    },
+    {
+      "id": "OOS-005",
+      "content": "ingestion/ 从 rag/ 拆分重构（R004 后续，R004 期间 rag/ 中 readers/chunkers/classifiers 保持原位）",
+      "decision_refs": ["DEC-rag-012"]
+    }
+  ]
+}

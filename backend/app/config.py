@@ -34,6 +34,17 @@ class Settings(BaseSettings):
     data_parsed_dir: str = "data/parsed"
     data_images_dir: str = "data/images"
 
+    # R004: Reranker 配置
+    rerank_top_n: int = 3
+    rerank_model: str = "gte-rerank"
+    chat_max_context_tokens: int = 3000
+
+    # R004: BM25 + RRF 配置
+    bm25_enabled: bool = True
+    rrf_k: int = 60
+    retrieval_top_k: int = 20
+    similarity_threshold: float = 0.70
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",

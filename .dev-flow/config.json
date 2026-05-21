@@ -1,7 +1,7 @@
 {
   "version": "3.0",
   "project": "OctoTutor",
-  "active_rc": null,
+  "active_rc": "R004",
   "default_workflow": {
     "name": "XLFoundry",
     "mode": "A",
@@ -15,6 +15,6 @@
     { "id": "R003", "name": "knowledge-base", "archive_dir": "R003", "total_tasks": 17, "completed_at": "2026-05-21" }
   ],
   "rc_queue": [
-    { "id": "R004", "name": "rag-dialogue", "depends_on": "R003", "status": "analyzed", "analysis_topic": "检索优化 + AI 对话（纯后端）" }
+    { "id": "R004", "name": "rag-dialogue", "depends_on": "R003", "status": "planned", "analysis_topic": "检索优化 + AI 对话（纯后端）" }
   ]
 }
