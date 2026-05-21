@@ -149,7 +149,7 @@
       "description": "新建 infra/llm.py（LLMGenerator），实现 Generator Protocol。通过 OpenAI 兼容协议调用 LLM（当前 glm-5.1，可通过配置切换）。构建带编号标记的 context prompt，调用 chat.completions.create，从 context_chunks.metadata 构建 sources（非从 LLM 输出解析）。SourceReference 定义在 domain/models.py。包含单元测试（mock OpenAI response）。",
       "verification": "L2 — LLMGenerator.generate 返回 (answer, sources) tuple，answer 非空，sources 包含所有 context_chunks 的引用信息",
       "depends_on": ["BF001"],
-      "status": "in_progress",
+      "status": "completed",
       "priority": "high",
       "user_stories": "作为开发者，我希望 LLM Generator 可基于教材 context 生成助教式回答并附带引用来源",
       "success_picture": "给定 query + 3 条 context_chunks，generate 返回回答文本和 3 条 SourceReference（chunk_id/book/section/page_start/page_end 来自 context_chunks.metadata）；OpenAI client 创建方式复用 block_type_classifier.py 的模式",
@@ -171,7 +171,7 @@
       "description": "新建 chat/ 模块：schemas.py（ChatRequest/ChatResponse，SourceReference 在 domain/models.py）、service.py（ChatService 核心编排：Embed→Vector→Threshold→BM25→RRF→Rerank→Truncate→Generate，含 _rrf_fuse 和 _truncate_by_tokens 静态方法）、dependencies.py（DI providers，通过 Request→app.state）、router.py（POST /api/chat）。Rerank 失败降级在 ChatService 统一处理。包含完整的单元测试覆盖。",
       "verification": "L2 — ChatService 全链路 mock 测试通过：RRF 融合正确、BM25 独有 chunk 保留、cosine 阈值过滤、Rerank 降级（degraded=true）、Token 截断保底；Router 返回正确 HTTP 状态码和响应格式",
       "depends_on": ["BF001", "BF002", "BB001", "BB002", "BB003"],
-      "status": "pending",
+      "status": "in_progress",
       "priority": "high",
       "user_stories": "作为开发者，我希望 POST /api/chat 端到端可用，发送数学问题后获得 AI 回答和教材引用来源",
       "success_picture": "POST /api/chat {question: '二次函数怎么求顶点'} 返回 {answer: '...', sources: [{chunk_id, book, section, page_start, page_end}], context_used: 3, degraded: false, degradation_reason: null}；Rerank 失败时 degraded=true；检索返回 0 条时 404；LLM 失败时 503",
@@ -285,7 +285,7 @@
   ],
   "summary": {
     "total": 11,
-    "completed": 4
+    "completed": 5
   },
   "open_issues": [
     {
