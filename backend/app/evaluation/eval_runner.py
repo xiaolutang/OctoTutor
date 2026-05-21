@@ -3,6 +3,8 @@
 基于评估集运行检索质量评估，计算 Hit Rate@K 和 MRR，
 支持 ANY/ALL mode 判定，输出结构化评估报告。
 
+扩展：Context Precision、Faithfulness、Regression、Full 评估模式。
+
 Usage:
     from app.evaluation.eval_runner import EvalRunner
     from app.evaluation.eval_set_loader import EvalSetLoader
@@ -24,6 +26,8 @@ import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
 
+from app.config import Settings
+from app.domain.protocols import Generator, Reranker
 from app.evaluation.eval_set_loader import EvalSetLoader
 from app.evaluation.eval_types import EvalItem, EvalSource
 from app.rag.embeddings import DashScopeEmbedding
@@ -163,10 +167,149 @@ class EvalReport:
         return {
             "overall": self.overall.to_dict(),
             "by_book": {
-                book: metrics.to_dict()
-                for book, metrics in self.by_book.items()
+                book: metrics.to_dict() for book, metrics in self.by_book.items()
             },
             "details": [d.to_dict() for d in self.details],
+        }
+
+
+# ---------------------------------------------------------------------------
+# 扩展评估数据模型 (BB007)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ContextPrecisionDetail:
+    """单条 Context Precision 评估结果
+
+    Attributes:
+        item_id: 评估问题 ID
+        question: 查询问题文本
+        precision_at_k: Precision@K 分数 (0.0~1.0)
+        matched_count: 匹配 truth source 的检索结果数
+        total_k: 检索结果总数 K
+    """
+
+    item_id: str
+    question: str
+    precision_at_k: float
+    matched_count: int
+    total_k: int
+
+    def to_dict(self) -> dict:
+        return {
+            "item_id": self.item_id,
+            "question": self.question,
+            "precision_at_k": self.precision_at_k,
+            "matched_count": self.matched_count,
+            "total_k": self.total_k,
+        }
+
+
+@dataclass
+class ContextPrecisionReport:
+    """Context Precision 评估报告
+
+    Attributes:
+        overall_precision: 平均 Precision@K
+        details: 逐条评估详情
+    """
+
+    overall_precision: float
+    details: list[ContextPrecisionDetail]
+
+    def to_dict(self) -> dict:
+        return {
+            "overall_precision": self.overall_precision,
+            "details": [d.to_dict() for d in self.details],
+        }
+
+
+@dataclass
+class FaithfulnessDetail:
+    """单条 Faithfulness 评估结果
+
+    Attributes:
+        item_id: 评估问题 ID
+        question: 查询问题文本
+        faithfulness: 忠实度分数 (0.0~1.0)
+        coverage: 覆盖度分数 (0.0~1.0)
+        unknown_ratio: Unknown 声明占比 (0.0~1.0)
+        deterministic_passed: 确定性检查是否通过
+        claims: 事实声明判定列表
+        coverage_results: 知识点覆盖度判定列表
+    """
+
+    item_id: str
+    question: str
+    faithfulness: float
+    coverage: float
+    unknown_ratio: float
+    deterministic_passed: bool
+    claims: list[dict] = field(default_factory=list)
+    coverage_results: list[dict] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            "item_id": self.item_id,
+            "question": self.question,
+            "faithfulness": self.faithfulness,
+            "coverage": self.coverage,
+            "unknown_ratio": self.unknown_ratio,
+            "deterministic_passed": self.deterministic_passed,
+            "claims": self.claims,
+            "coverage_results": self.coverage_results,
+        }
+
+
+@dataclass
+class FaithfulnessReport:
+    """Faithfulness 评估报告
+
+    Attributes:
+        overall_faithfulness: 平均忠实度分数
+        overall_coverage: 平均覆盖度分数
+        avg_unknown_ratio: 平均 Unknown 比例
+        details: 逐条评估详情
+    """
+
+    overall_faithfulness: float
+    overall_coverage: float
+    avg_unknown_ratio: float
+    details: list[FaithfulnessDetail]
+
+    def to_dict(self) -> dict:
+        return {
+            "overall_faithfulness": self.overall_faithfulness,
+            "overall_coverage": self.overall_coverage,
+            "avg_unknown_ratio": self.avg_unknown_ratio,
+            "details": [d.to_dict() for d in self.details],
+        }
+
+
+@dataclass
+class FullEvalReport:
+    """全量评估报告（汇总所有指标）
+
+    Attributes:
+        regression: 回归测试报告 (None 如果无 regression items)
+        context_precision: Context Precision 报告
+        faithfulness: Faithfulness 报告
+    """
+
+    regression: EvalReport | None
+    context_precision: ContextPrecisionReport | None
+    faithfulness: FaithfulnessReport | None
+
+    def to_dict(self) -> dict:
+        return {
+            "regression": self.regression.to_dict() if self.regression else None,
+            "context_precision": (
+                self.context_precision.to_dict() if self.context_precision else None
+            ),
+            "faithfulness": (
+                self.faithfulness.to_dict() if self.faithfulness else None
+            ),
         }
 
 
@@ -184,6 +327,9 @@ class EvalRunner:
         embedding_service: DashScopeEmbedding 实例（提供 embed_query）
         vector_store: ChromaDBStore 实例（提供 query）
         eval_loader: EvalSetLoader 实例（提供 load），为 None 时使用默认路径
+        reranker: Reranker 实例（可选，run_faithfulness/run_full 需要）
+        generator: Generator 实例（可选，run_faithfulness/run_full 需要）
+        settings: Settings 实例（可选，提供 similarity_threshold 等配置）
     """
 
     def __init__(
@@ -191,10 +337,16 @@ class EvalRunner:
         embedding_service: DashScopeEmbedding,
         vector_store: ChromaDBStore,
         eval_loader: EvalSetLoader | None = None,
+        reranker: Reranker | None = None,
+        generator: Generator | None = None,
+        settings: Settings | None = None,
     ) -> None:
         self._embedding_service = embedding_service
         self._vector_store = vector_store
         self._eval_loader = eval_loader or EvalSetLoader()
+        self._reranker = reranker
+        self._generator = generator
+        self._settings = settings
         self._indexed_pages_by_book: dict[str, list[int]] | None = None
 
     def run(
@@ -249,6 +401,348 @@ class EvalRunner:
             report.overall.mrr,
         )
 
+        return report
+
+    # ------------------------------------------------------------------
+    # BB007: 扩展评估方法
+    # ------------------------------------------------------------------
+
+    def run_context_precision(
+        self,
+        eval_filename: str = "eval_set.json",
+        top_k: int = 10,
+    ) -> ContextPrecisionReport:
+        """运行 Context Precision 评估
+
+        对评估集中的每条问题，执行检索并计算 section_id 匹配的 Precision@K。
+        Precision@K = 匹配 truth source 的检索结果数 / K
+
+        Args:
+            eval_filename: 评估集文件名
+            top_k: 检索 top-K 值
+
+        Returns:
+            ContextPrecisionReport
+        """
+        items = self._eval_loader.load(eval_filename)
+        logger.info("Context Precision 评估集加载完成: %d 条", len(items))
+
+        details: list[ContextPrecisionDetail] = []
+        for item in items:
+            # 跳过 NEGATIVE 模式
+            if item.retrieval_truth.mode == "NEGATIVE":
+                details.append(
+                    ContextPrecisionDetail(
+                        item_id=item.id,
+                        question=item.question,
+                        precision_at_k=0.0,
+                        matched_count=0,
+                        total_k=0,
+                    )
+                )
+                continue
+
+            # 执行检索
+            query_embedding = self._embedding_service.embed_query(item.question)
+            results = self._vector_store.query(
+                query_embedding=query_embedding,
+                top_k=top_k,
+            )
+
+            # 计算 section_id 匹配数
+            matched = 0
+            truth_section_ids = set()
+            for source in item.retrieval_truth.sources:
+                if source.section_id:
+                    truth_section_ids.add(source.section_id)
+
+            for r in results:
+                chunk_section_id = getattr(r.metadata, "section_id", None)
+                if chunk_section_id and chunk_section_id in truth_section_ids:
+                    matched += 1
+                elif not truth_section_ids:
+                    # 无 section_id 时 fallback 到 page range 匹配
+                    for source in item.retrieval_truth.sources:
+                        if source.overlaps_page_range(
+                            r.metadata.book,
+                            r.metadata.page_start,
+                            r.metadata.page_end,
+                        ):
+                            matched += 1
+                            break
+
+            actual_k = len(results)
+            precision = matched / actual_k if actual_k > 0 else 0.0
+
+            details.append(
+                ContextPrecisionDetail(
+                    item_id=item.id,
+                    question=item.question,
+                    precision_at_k=precision,
+                    matched_count=matched,
+                    total_k=actual_k,
+                )
+            )
+
+        overall = (
+            sum(d.precision_at_k for d in details) / len(details) if details else 0.0
+        )
+
+        report = ContextPrecisionReport(
+            overall_precision=overall,
+            details=details,
+        )
+        logger.info("Context Precision 完成: overall=%.4f", overall)
+        return report
+
+    def run_faithfulness(
+        self,
+        eval_filename: str = "eval_set.json",
+        top_k: int = 10,
+    ) -> FaithfulnessReport:
+        """运行 Faithfulness + Coverage 评估
+
+        管线: embed -> vector_store.query -> threshold filter -> rerank -> generate
+              -> deterministic check -> LLM judge
+
+        需要 reranker + generator，缺失时抛出 RuntimeError。
+
+        Args:
+            eval_filename: 评估集文件名
+            top_k: 检索 top-K 值
+
+        Returns:
+            FaithfulnessReport
+
+        Raises:
+            RuntimeError: 缺少 reranker 或 generator
+        """
+        if self._reranker is None:
+            raise RuntimeError(
+                "run_faithfulness 需要 reranker，请在构造 EvalRunner 时传入"
+            )
+        if self._generator is None:
+            raise RuntimeError(
+                "run_faithfulness 需要 generator，请在构造 EvalRunner 时传入"
+            )
+
+        from app.evaluation.graders.deterministic import DeterministicGrader
+        from app.evaluation.graders.llm_judge import LLMJudge
+
+        threshold = self._settings.similarity_threshold if self._settings else 0.70
+        rerank_top_n = self._settings.rerank_top_n if self._settings else 3
+
+        items = self._eval_loader.load(eval_filename)
+        logger.info("Faithfulness 评估集加载完成: %d 条", len(items))
+
+        # 初始化 graders
+        deterministic_grader = DeterministicGrader()
+
+        llm_judge = LLMJudge(
+            api_key=self._settings.newapi_api_key if self._settings else "",
+            base_url=self._settings.newapi_base_url
+            if self._settings
+            else "http://localhost:13000/v1",
+            model=self._settings.llm_model if self._settings else "glm-5.1",
+        )
+
+        details: list[FaithfulnessDetail] = []
+        for item in items:
+            detail = self._evaluate_faithfulness_item(
+                item=item,
+                top_k=top_k,
+                threshold=threshold,
+                rerank_top_n=rerank_top_n,
+                deterministic_grader=deterministic_grader,
+                llm_judge=llm_judge,
+            )
+            details.append(detail)
+
+        # 汇总指标
+        if details:
+            overall_faith = sum(d.faithfulness for d in details) / len(details)
+            overall_cov = sum(d.coverage for d in details) / len(details)
+            avg_unknown = sum(d.unknown_ratio for d in details) / len(details)
+        else:
+            overall_faith = 0.0
+            overall_cov = 0.0
+            avg_unknown = 0.0
+
+        report = FaithfulnessReport(
+            overall_faithfulness=overall_faith,
+            overall_coverage=overall_cov,
+            avg_unknown_ratio=avg_unknown,
+            details=details,
+        )
+        logger.info(
+            "Faithfulness 完成: faith=%.4f, coverage=%.4f, unknown=%.4f",
+            overall_faith,
+            overall_cov,
+            avg_unknown,
+        )
+        return report
+
+    def _evaluate_faithfulness_item(
+        self,
+        item: EvalItem,
+        top_k: int,
+        threshold: float,
+        rerank_top_n: int,
+        deterministic_grader,
+        llm_judge,
+    ) -> FaithfulnessDetail:
+        """评估单条 Faithfulness item
+
+        Args:
+            item: 评估条目
+            top_k: 检索 top-K 值
+            threshold: 相似度阈值
+            rerank_top_n: reranker 返回结果数
+            deterministic_grader: 确定性评分器实例
+            llm_judge: LLM Judge 实例
+
+        Returns:
+            FaithfulnessDetail
+        """
+        # 1. embed -> vector_store.query
+        query_embedding = self._embedding_service.embed_query(item.question)
+        results = self._vector_store.query(
+            query_embedding=query_embedding,
+            top_k=top_k,
+        )
+
+        # 2. cosine 阈值过滤
+        filtered = [r for r in results if r.score >= threshold]
+
+        # 3. rerank（如 reranker 可用）
+        if filtered and self._reranker is not None:
+            filtered = self._reranker.rerank(item.question, filtered, rerank_top_n)
+
+        # 4. generator.generate
+        if not filtered:
+            return FaithfulnessDetail(
+                item_id=item.id,
+                question=item.question,
+                faithfulness=0.0,
+                coverage=0.0,
+                unknown_ratio=0.0,
+                deterministic_passed=False,
+            )
+
+        answer, sources = self._generator.generate(item.question, filtered)
+
+        # 5. deterministic check
+        det_result = deterministic_grader.check(answer, sources, filtered)
+
+        # 6. LLM judge（合并 context 文本）
+        context_text = "\n\n".join(r.text for r in filtered)
+        judge_result = llm_judge.judge(
+            answer=answer,
+            context=context_text,
+            key_facts=item.key_facts,
+        )
+
+        return FaithfulnessDetail(
+            item_id=item.id,
+            question=item.question,
+            faithfulness=judge_result.faithfulness,
+            coverage=judge_result.coverage_score,
+            unknown_ratio=judge_result.unknown_ratio,
+            deterministic_passed=det_result.passed,
+            claims=[
+                {"claim": c.claim, "verdict": c.verdict} for c in judge_result.claims
+            ],
+            coverage_results=[
+                {"fact": cr.fact, "status": cr.status} for cr in judge_result.coverage
+            ],
+        )
+
+    def run_regression(
+        self,
+        eval_filename: str = "eval_set.json",
+        top_k_values: list[int] | None = None,
+    ) -> EvalReport:
+        """运行回归测试
+
+        筛选 suite="regression" 的 items，调用现有 run() 的底层逻辑。
+
+        Args:
+            eval_filename: 评估集文件名
+            top_k_values: 需要计算的 K 值列表，默认 [5, 10]
+
+        Returns:
+            EvalReport
+        """
+        if top_k_values is None:
+            top_k_values = [5, 10]
+
+        max_k = max(top_k_values)
+
+        # 加载全部 items，筛选 regression
+        all_items = self._eval_loader.load(eval_filename)
+        regression_items = [item for item in all_items if item.suite == "regression"]
+        logger.info("回归测试: %d/%d 条", len(regression_items), len(all_items))
+
+        # 复用现有评估逻辑
+        details: list[EvalDetail] = []
+        for item in regression_items:
+            detail = self._evaluate_item(item, max_k)
+            details.append(detail)
+
+        report = self._build_report(details, regression_items, top_k_values)
+        logger.info(
+            "回归测试完成: Hit Rate@5=%.4f, Hit Rate@10=%.4f, MRR=%.4f",
+            report.overall.hit_rate_at_5,
+            report.overall.hit_rate_at_10,
+            report.overall.mrr,
+        )
+        return report
+
+    def run_full(
+        self,
+        eval_filename: str = "eval_set.json",
+        top_k_values: list[int] | None = None,
+    ) -> FullEvalReport:
+        """运行全量评估（汇总所有指标）
+
+        汇总 regression + context_precision + faithfulness。
+        需要 reranker + generator。
+
+        Args:
+            eval_filename: 评估集文件名
+            top_k_values: 需要计算的 K 值列表，默认 [5, 10]
+
+        Returns:
+            FullEvalReport
+
+        Raises:
+            RuntimeError: 缺少 reranker 或 generator
+        """
+        if self._reranker is None:
+            raise RuntimeError("run_full 需要 reranker，请在构造 EvalRunner 时传入")
+        if self._generator is None:
+            raise RuntimeError("run_full 需要 generator，请在构造 EvalRunner 时传入")
+
+        if top_k_values is None:
+            top_k_values = [5, 10]
+
+        top_k = max(top_k_values)
+
+        # 1. Regression
+        regression_report = self.run_regression(eval_filename, top_k_values)
+
+        # 2. Context Precision
+        context_precision_report = self.run_context_precision(eval_filename, top_k)
+
+        # 3. Faithfulness
+        faithfulness_report = self.run_faithfulness(eval_filename, top_k)
+
+        report = FullEvalReport(
+            regression=regression_report,
+            context_precision=context_precision_report,
+            faithfulness=faithfulness_report,
+        )
+        logger.info("全量评估完成")
         return report
 
     def _evaluate_item(self, item: EvalItem, max_k: int) -> EvalDetail:
@@ -345,7 +839,9 @@ class EvalRunner:
         try:
             data = collection.get(include=["metadatas"])
         except Exception:
-            logger.debug("读取 Chroma indexed pages 失败，退化为单页命中判定", exc_info=True)
+            logger.debug(
+                "读取 Chroma indexed pages 失败，退化为单页命中判定", exc_info=True
+            )
             self._indexed_pages_by_book = {}
             return self._indexed_pages_by_book
 
@@ -357,8 +853,7 @@ class EvalRunner:
             indexed_pages[str(book)].add(int(page))
 
         self._indexed_pages_by_book = {
-            book: sorted(pages)
-            for book, pages in indexed_pages.items()
+            book: sorted(pages) for book, pages in indexed_pages.items()
         }
         return self._indexed_pages_by_book
 
