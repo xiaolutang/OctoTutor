@@ -171,7 +171,7 @@
       "description": "新建 chat/ 模块：schemas.py（ChatRequest/ChatResponse，SourceReference 在 domain/models.py）、service.py（ChatService 核心编排：Embed→Vector→Threshold→BM25→RRF→Rerank→Truncate→Generate，含 _rrf_fuse 和 _truncate_by_tokens 静态方法）、dependencies.py（DI providers，通过 Request→app.state）、router.py（POST /api/chat）。Rerank 失败降级在 ChatService 统一处理。包含完整的单元测试覆盖。",
       "verification": "L2 — ChatService 全链路 mock 测试通过：RRF 融合正确、BM25 独有 chunk 保留、cosine 阈值过滤、Rerank 降级（degraded=true）、Token 截断保底；Router 返回正确 HTTP 状态码和响应格式",
       "depends_on": ["BF001", "BF002", "BB001", "BB002", "BB003"],
-      "status": "in_progress",
+      "status": "completed",
       "priority": "high",
       "user_stories": "作为开发者，我希望 POST /api/chat 端到端可用，发送数学问题后获得 AI 回答和教材引用来源",
       "success_picture": "POST /api/chat {question: '二次函数怎么求顶点'} 返回 {answer: '...', sources: [{chunk_id, book, section, page_start, page_end}], context_used: 3, degraded: false, degradation_reason: null}；Rerank 失败时 degraded=true；检索返回 0 条时 404；LLM 失败时 503",
@@ -193,7 +193,7 @@
       "description": "更新 main.py lifespan：初始化 BM25Retriever（从 ChromaDBStore.get_all_chunks() 加载全量 chunks 构建索引）、DashScopeReranker、LLMGenerator 并挂载到 app.state。注册 chat_router。确保 /api/retrieve 仍正常工作。不改变现有 lifespan 中 Embedding 和 VectorStore 的初始化逻辑。",
       "verification": "L2 — app 启动无报错，/api/chat 端点可访问（curl 返回非 404），/api/retrieve 仍正常工作",
       "depends_on": ["BB004"],
-      "status": "pending",
+      "status": "in_progress",
       "priority": "high",
       "developer_stories": "作为后端开发者，我希望 BM25/Reranker/Generator 在应用启动时初始化并挂载到 app.state，以便 DI providers 可通过 Request 获取",
       "technical_success_picture": "app.state.bm25 为 BM25Retriever 实例（索引已构建）；app.state.reranker 为 DashScopeReranker 实例；app.state.generator 为 LLMGenerator 实例；chat_router 已注册到 app；/api/retrieve 仍正常响应",
@@ -285,7 +285,7 @@
   ],
   "summary": {
     "total": 11,
-    "completed": 5
+    "completed": 6
   },
   "open_issues": [
     {
