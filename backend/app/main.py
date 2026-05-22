@@ -29,7 +29,6 @@ async def lifespan(application: FastAPI):
         dimension=settings.dashscope_embedding_dimension,
     )
     application.state.embedding_service = embedding_service
-    application.state.embedding = embedding_service  # 兼容 chat/dependencies.py
 
     # 初始化 BM25Retriever（从 ChromaDB 加载全量 chunks 构建索引）
     bm25 = BM25Retriever()

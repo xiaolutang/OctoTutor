@@ -121,7 +121,7 @@ class TestParseResponse:
 
 
 class TestFaithfulnessCalc:
-    """测试 Faithfulness 分数计算"""
+    """测试 Faithfulness 分数和 Unknown 比例计算"""
 
     def test_all_yes(self):
         """全部 Yes -> faithfulness = 1.0"""
@@ -129,7 +129,9 @@ class TestFaithfulnessCalc:
             ClaimVerdict(claim="c1", verdict="Yes"),
             ClaimVerdict(claim="c2", verdict="Yes"),
         ]
-        assert LLMJudge._calc_faithfulness(claims) == 1.0
+        f, u = LLMJudge._calc_faithfulness_and_unknown(claims)
+        assert f == 1.0
+        assert u == 0.0
 
     def test_all_no(self):
         """全部 No -> faithfulness = 0.0"""
@@ -137,7 +139,9 @@ class TestFaithfulnessCalc:
             ClaimVerdict(claim="c1", verdict="No"),
             ClaimVerdict(claim="c2", verdict="No"),
         ]
-        assert LLMJudge._calc_faithfulness(claims) == 0.0
+        f, u = LLMJudge._calc_faithfulness_and_unknown(claims)
+        assert f == 0.0
+        assert u == 0.0
 
     def test_mixed_yes_no(self):
         """混合 Yes/No -> faithfulness = 2/4 = 0.5"""
@@ -147,7 +151,9 @@ class TestFaithfulnessCalc:
             ClaimVerdict(claim="c3", verdict="No"),
             ClaimVerdict(claim="c4", verdict="No"),
         ]
-        assert LLMJudge._calc_faithfulness(claims) == pytest.approx(0.5)
+        f, u = LLMJudge._calc_faithfulness_and_unknown(claims)
+        assert f == pytest.approx(0.5)
+        assert u == 0.0
 
     def test_unknown_excluded_from_faithfulness(self):
         """Unknown 不计入分子分母"""
@@ -157,19 +163,25 @@ class TestFaithfulnessCalc:
             ClaimVerdict(claim="c3", verdict="No"),
         ]
         # supported=1, unsupported=1 -> faithfulness = 1/(1+1) = 0.5
-        assert LLMJudge._calc_faithfulness(claims) == pytest.approx(0.5)
+        f, u = LLMJudge._calc_faithfulness_and_unknown(claims)
+        assert f == pytest.approx(0.5)
+        assert u == pytest.approx(1 / 3)
 
     def test_all_unknown(self):
-        """全部 Unknown -> faithfulness = 0.0（分母为 0）"""
+        """全部 Unknown -> faithfulness = 0.0, unknown_ratio = 1.0"""
         claims = [
             ClaimVerdict(claim="c1", verdict="Unknown"),
             ClaimVerdict(claim="c2", verdict="Unknown"),
         ]
-        assert LLMJudge._calc_faithfulness(claims) == 0.0
+        f, u = LLMJudge._calc_faithfulness_and_unknown(claims)
+        assert f == 0.0
+        assert u == 1.0
 
     def test_empty_claims(self):
-        """空 claims -> faithfulness = 0.0"""
-        assert LLMJudge._calc_faithfulness([]) == 0.0
+        """空 claims -> faithfulness = 0.0, unknown_ratio = 0.0"""
+        f, u = LLMJudge._calc_faithfulness_and_unknown([])
+        assert f == 0.0
+        assert u == 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -220,46 +232,6 @@ class TestCoverageCalc:
     def test_empty_coverage(self):
         """空 coverage -> 0.0"""
         assert LLMJudge._calc_coverage([]) == 0.0
-
-
-# ---------------------------------------------------------------------------
-# 测试 Unknown ratio 计算
-# ---------------------------------------------------------------------------
-
-
-class TestUnknownRatio:
-    """测试 Unknown 比例计算"""
-
-    def test_no_unknown(self):
-        """无 Unknown -> ratio = 0.0"""
-        claims = [
-            ClaimVerdict(claim="c1", verdict="Yes"),
-            ClaimVerdict(claim="c2", verdict="No"),
-        ]
-        assert LLMJudge._calc_unknown_ratio(claims) == 0.0
-
-    def test_all_unknown(self):
-        """全部 Unknown -> ratio = 1.0"""
-        claims = [
-            ClaimVerdict(claim="c1", verdict="Unknown"),
-            ClaimVerdict(claim="c2", verdict="Unknown"),
-        ]
-        assert LLMJudge._calc_unknown_ratio(claims) == 1.0
-
-    def test_partial_unknown(self):
-        """部分 Unknown -> ratio = 2/5"""
-        claims = [
-            ClaimVerdict(claim="c1", verdict="Yes"),
-            ClaimVerdict(claim="c2", verdict="Unknown"),
-            ClaimVerdict(claim="c3", verdict="No"),
-            ClaimVerdict(claim="c4", verdict="Unknown"),
-            ClaimVerdict(claim="c5", verdict="Yes"),
-        ]
-        assert LLMJudge._calc_unknown_ratio(claims) == pytest.approx(0.4)
-
-    def test_empty_claims(self):
-        """空 claims -> ratio = 0.0"""
-        assert LLMJudge._calc_unknown_ratio([]) == 0.0
 
 
 # ---------------------------------------------------------------------------

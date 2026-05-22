@@ -10,7 +10,7 @@ def get_settings():
 
 
 def get_embedding(request: Request):
-    return request.app.state.embedding
+    return request.app.state.embedding_service
 
 
 def get_vector_store(request: Request):

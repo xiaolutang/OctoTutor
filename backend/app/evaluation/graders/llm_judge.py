@@ -251,9 +251,8 @@ class LLMJudge:
             relevance_str = "not_relevant"
 
         # 计算指标
-        faithfulness = self._calc_faithfulness(claims)
+        faithfulness, unknown_ratio = self._calc_faithfulness_and_unknown(claims)
         coverage_score = self._calc_coverage(coverage_results)
-        unknown_ratio = self._calc_unknown_ratio(claims)
 
         return JudgeResult(
             claims=claims,
@@ -266,18 +265,28 @@ class LLMJudge:
         )
 
     @staticmethod
-    def _calc_faithfulness(claims: list[ClaimVerdict]) -> float:
-        """计算 Faithfulness 分数
+    def _calc_faithfulness_and_unknown(claims: list[ClaimVerdict]) -> tuple[float, float]:
+        """计算 Faithfulness 分数和 Unknown 比例（单次遍历）
 
-        Faithfulness = supported / (supported + unsupported)
-        Unknown 不计入分子分母。
+        Faithfulness = supported / (supported + unsupported)，Unknown 不计入分子分母。
+        Unknown ratio = unknown_count / total_claims。
         """
-        supported = sum(1 for c in claims if c.verdict == "Yes")
-        unsupported = sum(1 for c in claims if c.verdict == "No")
-        total = supported + unsupported
-        if total == 0:
-            return 0.0
-        return supported / total
+        if not claims:
+            return 0.0, 0.0
+        supported = 0
+        unsupported = 0
+        unknown_count = 0
+        for c in claims:
+            if c.verdict == "Yes":
+                supported += 1
+            elif c.verdict == "No":
+                unsupported += 1
+            else:
+                unknown_count += 1
+        total_known = supported + unsupported
+        faithfulness = supported / total_known if total_known > 0 else 0.0
+        unknown_ratio = unknown_count / len(claims)
+        return faithfulness, unknown_ratio
 
     @staticmethod
     def _calc_coverage(coverage_results: list[CoverageResult]) -> float:
@@ -295,14 +304,3 @@ class LLMJudge:
             elif cr.status == "partially_covered":
                 score += 0.5
         return score / total
-
-    @staticmethod
-    def _calc_unknown_ratio(claims: list[ClaimVerdict]) -> float:
-        """计算 Unknown 比例
-
-        Unknown ratio = unknown_count / total_claims
-        """
-        if not claims:
-            return 0.0
-        unknown_count = sum(1 for c in claims if c.verdict == "Unknown")
-        return unknown_count / len(claims)

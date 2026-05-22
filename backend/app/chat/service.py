@@ -1,5 +1,3 @@
-from fastapi import HTTPException
-
 from app.rag.models import QueryResult
 from app.domain.protocols import Reranker, Generator
 from app.chat.schemas import ChatResponse
@@ -33,7 +31,7 @@ class ChatService:
             fused = vector_results
 
         if not fused:
-            raise HTTPException(status_code=404, detail="未找到相关教材内容")
+            return None
 
         # 2. Rerank 精炼（失败降级）
         degraded = False
@@ -49,8 +47,8 @@ class ChatService:
             degraded = True
             degradation_reason = "rerank_failed"
 
-        # 3. Token 截断保护
-        context_chunks = self._truncate_by_tokens(
+        # 3. 字符数截断保护
+        context_chunks = self._truncate_by_chars(
             reranked, self._settings.chat_max_context_tokens
         )
 
@@ -79,10 +77,10 @@ class ChatService:
         sorted_ids = sorted(scores, key=scores.get, reverse=True)
         return [chunk_map[cid] for cid in sorted_ids if cid in chunk_map]
 
-    def _truncate_by_tokens(self, chunks, max_tokens):
+    def _truncate_by_chars(self, chunks, max_chars):
         if not chunks:
             return []
-        if max_tokens <= 0:
+        if max_chars <= 0:
             return [chunks[0]]
         total = 0
         result = []
@@ -90,7 +88,7 @@ class ChatService:
             if not chunk.text:
                 continue
             est = len(chunk.text)
-            if total + est > max_tokens:
+            if total + est > max_chars:
                 break
             result.append(chunk)
             total += est

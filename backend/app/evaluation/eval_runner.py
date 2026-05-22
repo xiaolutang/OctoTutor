@@ -458,25 +458,11 @@ class EvalRunner:
 
             # 计算 section_id 匹配数
             matched = 0
-            truth_section_ids = set()
-            for source in item.retrieval_truth.sources:
-                if source.section_id:
-                    truth_section_ids.add(source.section_id)
-
             for r in results:
-                chunk_section_id = getattr(r.metadata, "section_id", None)
-                if chunk_section_id and chunk_section_id in truth_section_ids:
-                    matched += 1
-                elif not truth_section_ids:
-                    # 无 section_id 时 fallback 到 page range 匹配
-                    for source in item.retrieval_truth.sources:
-                        if source.overlaps_page_range(
-                            r.metadata.book,
-                            r.metadata.page_start,
-                            r.metadata.page_end,
-                        ):
-                            matched += 1
-                            break
+                for source in item.retrieval_truth.sources:
+                    if self._section_matches(source, r):
+                        matched += 1
+                        break
 
             actual_k = len(results)
             precision = matched / actual_k if actual_k > 0 else 0.0
@@ -536,8 +522,13 @@ class EvalRunner:
         from app.evaluation.graders.deterministic import DeterministicGrader
         from app.evaluation.graders.llm_judge import LLMJudge
 
-        threshold = self._settings.similarity_threshold if self._settings else 0.70
-        rerank_top_n = self._settings.rerank_top_n if self._settings else 3
+        if not self._settings:
+            raise RuntimeError(
+                "run_faithfulness 需要 settings，请在构造 EvalRunner 时传入"
+            )
+
+        threshold = self._settings.similarity_threshold
+        rerank_top_n = self._settings.rerank_top_n
 
         items = self._eval_loader.load(eval_filename)
         logger.info("Faithfulness 评估集加载完成: %d 条", len(items))
@@ -546,11 +537,9 @@ class EvalRunner:
         deterministic_grader = DeterministicGrader()
 
         llm_judge = LLMJudge(
-            api_key=self._settings.newapi_api_key if self._settings else "",
-            base_url=self._settings.newapi_base_url
-            if self._settings
-            else "http://localhost:13000/v1",
-            model=self._settings.llm_model if self._settings else "glm-5.1",
+            api_key=self._settings.newapi_api_key,
+            base_url=self._settings.newapi_base_url,
+            model=self._settings.llm_model,
         )
 
         details: list[FaithfulnessDetail] = []

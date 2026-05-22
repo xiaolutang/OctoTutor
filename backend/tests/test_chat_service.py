@@ -9,7 +9,7 @@
 6. Rerank 降级（返回空）— degraded=True, reason="rerank_empty"
 7. Token 截断 — 超限截断，保底至少 1 个 chunk
 8. handle_chat 全链路 — mock 全部依赖，验证返回 ChatResponse
-9. 检索 0 条 — 抛出 HTTPException 404
+9. 检索 0 条 — 返回 None
 10. BM25 关闭 — 跳过 RRF，短路返回向量结果
 """
 
@@ -19,7 +19,7 @@ from unittest.mock import MagicMock
 
 os.environ.setdefault("DASHSCOPE_API_KEY", "test-api-key-for-testing")
 
-from fastapi import HTTPException
+
 
 from app.rag.models import ChunkMetadata, QueryResult
 from app.chat.service import ChatService
@@ -308,8 +308,8 @@ class TestTokenTruncation:
         # 即使 chat_max_context_tokens=5，也应至少保留 1 个 chunk
         assert resp.context_used >= 1
 
-    def test_truncate_by_tokens_direct(self):
-        """直接测试 _truncate_by_tokens 方法"""
+    def test_truncate_by_chars_direct(self):
+        """直接测试 _truncate_by_chars 方法"""
         mock_settings = make_settings()
         svc = ChatService(
             MagicMock(), MagicMock(), MagicMock(),
@@ -324,7 +324,7 @@ class TestTokenTruncation:
 
         # max_tokens=150，第一个 chunk 100 < 150 可以进入，
         # 但 total=100 + 100 = 200 > 150，第二个进不去
-        result = svc._truncate_by_tokens(chunks, 150)
+        result = svc._truncate_by_chars(chunks, 150)
         assert len(result) == 1
         assert result[0].chunk_id == "c1"
 
@@ -335,7 +335,7 @@ class TestTokenTruncation:
             MagicMock(), MagicMock(), MagicMock(),
             MagicMock(), MagicMock(), mock_settings,
         )
-        result = svc._truncate_by_tokens([], 1000)
+        result = svc._truncate_by_chars([], 1000)
         assert result == []
 
     def test_truncate_max_tokens_zero(self):
@@ -346,7 +346,7 @@ class TestTokenTruncation:
             MagicMock(), MagicMock(), mock_settings,
         )
         chunks = [make_query_result("c1", "text", 0.9)]
-        result = svc._truncate_by_tokens(chunks, 0)
+        result = svc._truncate_by_chars(chunks, 0)
         assert len(result) == 1
 
 
@@ -414,13 +414,13 @@ class TestHandleChatFullPipeline:
 
 
 # ---------------------------------------------------------------------------
-# 测试 9: 检索 0 条 — 抛出 HTTPException 404
+# 测试 9: 检索 0 条 — 返回 None（由 router 层转 404）
 # ---------------------------------------------------------------------------
 
 
 class TestNoResults:
-    def test_no_results_raises_404(self):
-        """检索结果为空时抛出 HTTPException(404)"""
+    def test_no_results_returns_none(self):
+        """检索结果为空时返回 None（由 router 层转换为 404）"""
         settings = make_settings(similarity_threshold=0.70)
 
         mock_embedding = MagicMock()
@@ -440,11 +440,8 @@ class TestNoResults:
             mock_reranker, mock_generator, settings,
         )
 
-        with pytest.raises(HTTPException) as exc_info:
-            svc.handle_chat("不相关的问题", 10)
-
-        assert exc_info.value.status_code == 404
-        assert "未找到相关教材内容" in exc_info.value.detail
+        result = svc.handle_chat("不相关的问题", 10)
+        assert result is None
 
 
 # ---------------------------------------------------------------------------

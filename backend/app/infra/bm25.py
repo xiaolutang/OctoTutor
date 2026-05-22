@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import heapq
+
 import jieba
 from rank_bm25 import BM25Okapi
 
@@ -56,10 +58,10 @@ class BM25Retriever:
 
         tokenized_query = list(jieba.cut(query))
         scores = self._bm25.get_scores(tokenized_query)
-        ranked = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
+        ranked = heapq.nlargest(top_k, enumerate(scores), key=lambda x: x[1])
 
         results: list[QueryResult] = []
-        for i, score in ranked[:top_k]:
+        for i, score in ranked:
             if i < len(self._chunk_ids):
                 chunk_id = self._chunk_ids[i]
                 chunk = self._chunk_map[chunk_id]
