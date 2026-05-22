@@ -324,7 +324,7 @@
       "depends_on": [
         "FF001"
       ],
-      "status": "pending",
+      "status": "completed",
       "priority": 6,
       "user_stories": [
         "作为用户，我希望发送消息时自动携带登录凭证，无需手动操作"
@@ -350,7 +350,12 @@
         "单元测试：URL 路径为 /chat/stream（非 /api/chat/stream）",
         "单元测试：apiClient 401 自动重试 → chatStreamFetch 只看到最终 Response（无感知 token 问题）",
         "集成测试：登录 → 发送消息 → 正常收到 SSE 流"
-      ]
+      ],
+      "started_at": "2026-05-22",
+      "completed_at": "2026-05-22",
+      "evidence_file": "R006/evidence/R006_FB001.md",
+      "execution_state": "evaluated",
+      "commit": "77a278a"
     },
     {
       "id": "FB002",

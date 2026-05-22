@@ -1,7 +1,7 @@
 import { useRef, useState, useCallback } from 'react';
 import { parseSSEEvents } from './parse-sse';
 import type { SSECallbacks, SourceReference } from './types';
-import { API_BASE } from './api';
+import { fetchWithAuth } from '../lib/api-client';
 
 interface UseChatStreamReturn {
   sendMessage: (question: string, callbacks: SSECallbacks) => void;
@@ -22,7 +22,7 @@ export function chatStreamFetch(
   let firstEventReceived = false;
   let remaining = '';
 
-  fetch(`${API_BASE}/chat/stream`, {
+  fetchWithAuth('/chat/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ question, top_k: 10 }),
