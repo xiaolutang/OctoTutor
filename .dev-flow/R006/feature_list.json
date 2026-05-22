@@ -374,7 +374,7 @@
         "FF002",
         "BB002"
       ],
-      "status": "pending",
+      "status": "completed",
       "priority": 7,
       "user_stories": [
         "作为用户，我希望登录后无缝使用所有功能，token 过期时自动恢复",
@@ -406,7 +406,12 @@
         "E2E：无 token → 发送消息 → 跳转登录页",
         "E2E：/api/health 无 token → 200",
         "验证：前端构建无报错（npm run build）"
-      ]
+      ],
+      "started_at": "2026-05-22",
+      "completed_at": "2026-05-22",
+      "evidence_file": "R006/evidence/R006_FB002.md",
+      "execution_state": "evaluated",
+      "commit": "e281fe4"
     }
   ],
   "decision_coverage": {
