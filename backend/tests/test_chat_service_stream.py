@@ -357,3 +357,152 @@ class TestHandleChatEmptyRetrieval:
 
         result = svc.handle_chat("不相关的问题", 10)
         assert result is None
+
+
+# ---------------------------------------------------------------------------
+# 测试 7 (S-ERR-04): LLM ConnectionError → error code 02201
+# ---------------------------------------------------------------------------
+
+
+class TestLLMConnectionError:
+    def test_connection_error_code(self):
+        """generate_stream 抛 ConnectionError → LLM_CONNECT_FAILED (02201)"""
+        async def _failing_stream_conn(query, chunks):
+            raise ConnectionError("Connection refused")
+            yield  # make it async gen
+
+        svc = _build_normal_service(tokens=["你"])
+        svc._generator.generate_stream = _failing_stream_conn
+
+        events = asyncio.run(_collect_events(svc, question="什么是集合？"))
+        types = [e.type for e in events]
+
+        # 应有 status(retrieving), sources, status(generating), error
+        assert "error" in types
+        error_event = [e for e in events if e.type == "error"][0]
+        assert error_event.data["code"] == ChatErrorCode.LLM_CONNECT_FAILED.value
+        # 不应有 done
+        assert "done" not in types
+
+
+# ---------------------------------------------------------------------------
+# 测试 8 (S-ERR-05): LLM TimeoutError → error code 02204
+# ---------------------------------------------------------------------------
+
+
+class TestLLMTimeoutError:
+    def test_timeout_error_code(self):
+        """generate_stream 抛 TimeoutError → LLM_TIMEOUT (02204)"""
+        async def _failing_stream_timeout(query, chunks):
+            raise TimeoutError("LLM request timed out")
+            yield  # make it async gen
+
+        svc = _build_normal_service(tokens=["你"])
+        svc._generator.generate_stream = _failing_stream_timeout
+
+        events = asyncio.run(_collect_events(svc, question="什么是集合？"))
+        types = [e.type for e in events]
+
+        assert "error" in types
+        error_event = [e for e in events if e.type == "error"][0]
+        assert error_event.data["code"] == ChatErrorCode.LLM_TIMEOUT.value
+        assert "done" not in types
+
+
+# ---------------------------------------------------------------------------
+# 测试 9 (S-ERR-06): LLM RuntimeError → error code 02202
+# ---------------------------------------------------------------------------
+
+
+class TestLLMRuntimeError:
+    def test_runtime_error_code(self):
+        """generate_stream 抛 RuntimeError → LLM_STREAM_ERROR (02202)"""
+        async def _failing_stream_runtime(query, chunks):
+            raise RuntimeError("Unexpected LLM failure")
+            yield  # make it async gen
+
+        svc = _build_normal_service(tokens=["你"])
+        svc._generator.generate_stream = _failing_stream_runtime
+
+        events = asyncio.run(_collect_events(svc, question="什么是集合？"))
+        types = [e.type for e in events]
+
+        assert "error" in types
+        error_event = [e for e in events if e.type == "error"][0]
+        assert error_event.data["code"] == ChatErrorCode.LLM_STREAM_ERROR.value
+        assert "done" not in types
+
+
+# ---------------------------------------------------------------------------
+# 测试 10 (S-ERR-08): 意图分类 direct（输入"你好"）→ 跳过检索
+# ---------------------------------------------------------------------------
+
+
+class TestDirectIntentSkipRetrieval:
+    def test_direct_intent_skips_retrieval(self):
+        """输入 '你好' 被分类为 direct，跳过检索阶段"""
+        async def _fake_stream(query, chunks):
+            yield "你好"
+
+        svc = _build_normal_service()
+        svc._generator.generate_stream = _fake_stream
+
+        events = asyncio.run(_collect_events(svc, question="你好"))
+        types = [e.type for e in events]
+
+        # 不应有 retrieving 状态和 sources 事件
+        assert all(
+            not (e.type == "status" and e.data.stage == "retrieving")
+            for e in events
+        )
+        assert "sources" not in types
+
+        # 应有 generating 状态
+        assert any(
+            e.type == "status" and e.data.stage == "generating"
+            for e in events
+        )
+        # 应有 token
+        assert "token" in types
+        # 应有 done
+        assert "done" in types
+        # 不应有 error
+        assert "error" not in types
+
+
+# ---------------------------------------------------------------------------
+# 测试 11 (S-ERR-09): 意图分类 direct + LLM 空响应 → error
+# ---------------------------------------------------------------------------
+
+
+class TestDirectIntentEmptyResponse:
+    def test_direct_intent_empty_response_error(self):
+        """输入 '嗨' 被分类为 direct，generate_stream 无 token → LLM_EMPTY_RESPONSE"""
+        async def _empty_stream(query, chunks):
+            return
+            yield  # make it async gen
+
+        svc = _build_normal_service()
+        svc._generator.generate_stream = _empty_stream
+
+        events = asyncio.run(_collect_events(svc, question="嗨"))
+        types = [e.type for e in events]
+
+        # 不应有 retrieving 和 sources
+        assert all(
+            not (e.type == "status" and e.data.stage == "retrieving")
+            for e in events
+        )
+        assert "sources" not in types
+
+        # 应有 generating 状态
+        assert any(
+            e.type == "status" and e.data.stage == "generating"
+            for e in events
+        )
+        # 应有 error
+        assert "error" in types
+        error_event = [e for e in events if e.type == "error"][0]
+        assert error_event.data["code"] == ChatErrorCode.LLM_EMPTY_RESPONSE.value
+        # 不应有 done
+        assert "done" not in types

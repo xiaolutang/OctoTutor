@@ -215,4 +215,110 @@ describe('chatStreamFetch', () => {
     // finally: setStreaming(false) still runs
     expect(setStreaming).toHaveBeenCalledWith(false);
   });
+
+  // F-ERR-01: 后端 error event → onError 被调用
+  it('should call onError when backend sends error event', async () => {
+    const events = [
+      { type: 'error', data: { code: '02202', message: '生成中断', action: 'retry' } },
+    ];
+    fetchSpy.mockResolvedValue(mockFetchSSE(events));
+    const cbs = createCallbacks();
+    const abortController = new AbortController();
+    const setStreaming = vi.fn();
+    chatStreamFetch('test', cbs, abortController, setStreaming);
+    await vi.waitFor(() => expect(cbs.onError).toHaveBeenCalled());
+    expect(cbs.onError).toHaveBeenCalledWith({ code: '02202', message: '生成中断', action: 'retry' });
+    expect(cbs.onDone).not.toHaveBeenCalled();
+  });
+
+  // F-ERR-02: error event 前有 token → onToken + onError
+  it('should call onToken then onError when error follows tokens', async () => {
+    const events = [
+      { type: 'status', data: { stage: 'retrieving', message: '...' } },
+      { type: 'token', data: '部分' },
+      { type: 'error', data: { code: '02202', message: '生成中断', action: 'retry' } },
+    ];
+    fetchSpy.mockResolvedValue(mockFetchSSE(events));
+    const cbs = createCallbacks();
+    const abortController = new AbortController();
+    const setStreaming = vi.fn();
+    chatStreamFetch('test', cbs, abortController, setStreaming);
+    await vi.waitFor(() => expect(cbs.onError).toHaveBeenCalled());
+    expect(cbs.onToken).toHaveBeenCalledWith('部分');
+    expect(cbs.onError).toHaveBeenCalledWith({ code: '02202', message: '生成中断', action: 'retry' });
+    expect(cbs.onDone).not.toHaveBeenCalled();
+    // verify order: onStatus -> onToken -> onError
+    expect(cbs.callbackOrder).toEqual([
+      'onStatus:retrieving',
+      'onToken',
+      'onError',
+    ]);
+  });
+
+  // F-ERR-03: SSE 缺 event 行 → 静默跳过
+  it('should silently skip SSE events without event line', async () => {
+    const encoder = new TextEncoder();
+    // 只发送 data 行，没有 event 行
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode('data: "hello"\n\n'));
+        controller.close();
+      },
+    });
+    fetchSpy.mockResolvedValue({ ok: true, status: 200, body: stream });
+    const cbs = createCallbacks();
+    const abortController = new AbortController();
+    const setStreaming = vi.fn();
+    chatStreamFetch('test', cbs, abortController, setStreaming);
+    // 等待 stream 完成
+    await new Promise((r) => setTimeout(r, 100));
+    // 没有 event 行 → parseSSEEvents 不产出事件 → 无回调被调用
+    expect(cbs.onToken).not.toHaveBeenCalled();
+    expect(cbs.onStatus).not.toHaveBeenCalled();
+    expect(cbs.onError).not.toHaveBeenCalled();
+    expect(cbs.onDone).not.toHaveBeenCalled();
+    // 不崩溃，setStreaming 最终被调用
+    expect(setStreaming).toHaveBeenCalledWith(false);
+  });
+
+  // F-ERR-04: 多事件合并 chunk → 两个回调都触发
+  it('should parse multiple SSE events in single chunk', async () => {
+    const sseText = 'event: token\ndata: "hello"\n\nevent: token\ndata: "world"\n\n';
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(sseText));
+        controller.close();
+      },
+    });
+    fetchSpy.mockResolvedValue({ ok: true, status: 200, body: stream });
+    const cbs = createCallbacks();
+    const abortController = new AbortController();
+    const setStreaming = vi.fn();
+    chatStreamFetch('test', cbs, abortController, setStreaming);
+    await new Promise((r) => setTimeout(r, 100));
+    expect(cbs.onToken).toHaveBeenCalledTimes(2);
+    expect(cbs.onToken).toHaveBeenNthCalledWith(1, 'hello');
+    expect(cbs.onToken).toHaveBeenNthCalledWith(2, 'world');
+  });
+
+  // F-ERR-05: 不完整事件跨 chunk → 合并解析
+  it('should handle incomplete SSE event across chunks', async () => {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode('event: token\ndata: "hel'));
+        controller.enqueue(encoder.encode('lo"\n\n'));
+        controller.close();
+      },
+    });
+    fetchSpy.mockResolvedValue({ ok: true, status: 200, body: stream });
+    const cbs = createCallbacks();
+    const abortController = new AbortController();
+    const setStreaming = vi.fn();
+    chatStreamFetch('test', cbs, abortController, setStreaming);
+    await new Promise((r) => setTimeout(r, 100));
+    expect(cbs.onToken).toHaveBeenCalledTimes(1);
+    expect(cbs.onToken).toHaveBeenCalledWith('hello');
+  });
 });

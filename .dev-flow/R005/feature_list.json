@@ -322,6 +322,65 @@
       ],
       "journey_acceptance": "entry_action: 浏览器访问 /chat 页面, actual_endpoint: POST /api/chat/stream, streaming_token_received: token 逐字流出, sources_displayed: 来源卡片默认收起可展开, user_visible_success: 完整流式回答 + 数学公式渲染 + 来源卡片, failure_path_result: 发送失败撤回输入框 + 错误提示 + 重试按钮, no_result_fallback: 无 sources event → LLM 兜底回答 + 显示'未找到教材引用', error_recovery: 首事件前失败撤回/首事件后失败保留+重试按钮",
       "test_tasks": ["集成测试：curl POST /api/chat/stream 验证 SSE 事件流格式", "集成测试：检索无结果 → LLM 兜底回答（无 sources）+ 前端显示'未找到教材引用'", "集成测试：检索服务异常 → error event + 前端显示重试按钮", "集成测试：POST /api/chat 非流式接口回归验证", "E2E：Playwright 发送消息→流式文本→来源卡片", "E2E：Playwright 停止→重新生成→编辑", "E2E：Playwright 刷新恢复对话", "E2E：Playwright 发送失败→撤回输入框→重试"]
+    },
+    {
+      "id": "BT001",
+      "phase": 2,
+      "module": "chat",
+      "name": "后端 L1 异常路径测试补充",
+      "description": "补充后端单元测试覆盖 5 个遗漏的异常路径：(1) service.py stream_chat() LLM 异常三分支 — ConnectionError→LLM_CONNECT_FAILED(02201)、TimeoutError→LLM_TIMEOUT(02204)、Exception→LLM_STREAM_ERROR(02202)；(2) 意图分类 direct 路径 — 跳过检索直接走 LLM 生成 + direct+LLM 空响应；(3) llm.py 空 choices chunk — 最后一个 chunk choices=[] 不触发 IndexError；(4) stream_router error event 透传格式验证 + 缺 question 字段 422。使用 _failing_stream_after(tokens, fail_after, exc) helper 模拟 async gen 指定位置抛异常。注：L-ERR-02（delta.content=None 不 yield）已有 test_llm_generator_stream.py::TestGenerateStreamNoTokens 覆盖；R-ERR-02（正常完成无多余 error event）已有 test_chat_service_stream.py::TestNormalFlowEventSequence 覆盖，不再新增。",
+      "verification": "L2 — pytest 新增 8+ 个测试全部通过，覆盖 8 个错误码中未测试的 3 个（02201/02204/02202），验证意图分类 direct 事件序列无 retrieving/sources",
+      "depends_on": [],
+      "status": "completed",
+      "started_at": "2026-05-22",
+      "completed_at": "2026-05-22",
+      "actual_minutes": 12,
+      "execution_state": {"current_step": "completed", "retry_count": 0},
+      "summary": "后端 L1 异常路径测试补充完成：5 个 stream_chat 测试(LLM ConnectionError/Timeout/Exception + 意图分类 direct + direct 空响应) + 1 个空 choices chunk 测试 + 2 个 stream_router 测试(error 格式透传 + 422 验证)，全部 53 个测试通过",
+      "priority": 6,
+      "developer_stories": ["作为后端开发者，我希望所有异常路径都有对应单元测试，以便后续重构时不会意外破坏错误恢复逻辑"],
+      "technical_success_picture": "pytest tests/test_chat_service_stream.py tests/test_llm_generator_stream.py tests/test_stream_router.py -v 全部通过；新增测试覆盖 LLM ConnectionError/Timeout/Exception、意图分类 direct、空 choices chunk、error event SSE 格式、422 验证",
+      "decision_refs": ["DEC-test-001", "DEC-test-004"],
+      "analysis_refs": ["2026-05-22--R005-error-scenario-test-strategy"],
+      "test_tasks": ["单元测试：S-ERR-04 LLM ConnectionError → error code 02201", "单元测试：S-ERR-05 LLM TimeoutError → error code 02204", "单元测试：S-ERR-06 LLM Exception → error code 02202", "单元测试：S-ERR-08 意图分类 direct → 无 retrieving/sources，直接 generating", "单元测试：S-ERR-09 意图分类 direct + LLM 空响应 → error", "单元测试：L-ERR-01 空 choices chunk 不触发 IndexError", "单元测试：R-ERR-01 error event SSE 格式透传验证", "单元测试：R-ERR-03 缺 question 字段 → 422 Validation Error"]
+    },
+    {
+      "id": "FT001",
+      "phase": 2,
+      "module": "frontend",
+      "name": "前端 L1 异常路径测试补充",
+      "description": "补充前端单元测试覆盖 2 个遗漏维度：(1) use-chat-stream.ts — 后端 SSE error event 到达前端时的 onError 行为、error event 前有 token 的混合场景、SSE 格式异常（缺 event 行）静默跳过、多事件合并 chunk 解析、不完整事件跨 chunk 解析；(2) chat-ui 核心逻辑 — 后端 error event 触发 onError 后 AI 消息 status='error'、连续快速发送防护、handleStop 在 retrieving/generating 两种状态的区分行为。需扩展 mockFetchSSE helper 支持不完整 chunk 场景。",
+      "verification": "L2 — vitest 新增 9 个测试全部通过，验证 use-chat-stream 错误回调 + SSE 解析鲁棒性 + ChatUI 错误恢复状态",
+      "depends_on": [],
+      "status": "completed",
+      "started_at": "2026-05-22",
+      "completed_at": "2026-05-22",
+      "actual_minutes": 10,
+      "execution_state": {"current_step": "completed", "retry_count": 0},
+      "summary": "前端 L1 异常路径测试补充完成：5 个 use-chat-stream 测试(error event 回调 + token 后 error + SSE 格式异常 + 多事件合并 + 跨 chunk 不完整) + 4 个 chat-ui 测试(error 状态标记 + 快速发送阻止 + stop retrieving + stop generating)，63/63 前端测试通过",
+      "priority": 7,
+      "developer_stories": ["作为前端开发者，我希望 SSE 解析和网络异常场景都有测试覆盖，以便重构 hook 逻辑时不会破坏错误恢复"],
+      "technical_success_picture": "vitest 54(已有) + 9(新增) = 63 个测试全部通过；新增测试覆盖 error event 回调、SSE 格式异常、跨 chunk 解析、stop 状态区分",
+      "decision_refs": ["DEC-test-002", "DEC-test-004"],
+      "analysis_refs": ["2026-05-22--R005-error-scenario-test-strategy"],
+      "test_tasks": ["单元测试：F-ERR-01 后端 error event → onError 被调用", "单元测试：F-ERR-02 error event 前有 token → onToken + onError", "单元测试：F-ERR-03 SSE 缺 event 行 → 静默跳过", "单元测试：F-ERR-04 多事件合并 chunk → 两个回调触发", "单元测试：F-ERR-05 不完整事件跨 chunk → 合并解析", "单元测试：U-ERR-01 后端 error → AI 消息 status=error", "单元测试：U-ERR-02 连续快速发送 → 第二次被阻止", "单元测试：U-ERR-03 stop 在 retrieving → content='' status=stopped", "单元测试：U-ERR-04 stop 在 generating → content=已有 token status=stopped"]
+    },
+    {
+      "id": "IT001",
+      "phase": 2,
+      "module": "deploy",
+      "name": "L2 SSE 集成测试 — Docker 异常场景验证",
+      "description": "在 Docker 环境中执行 4 个集成测试用例，通过 docker-compose override 模拟异常：(1) LLM 不可达（NEWAPI_BASE_URL 指向 localhost:1）→ 验证 SSE error event code=02201；(2) Embedding 认证失败（DASHSCOPE_API_KEY=invalid）→ 验证 SSE error event code=02102；(3) 正常数学问题 → 验证完整 status→sources→status→token×N→done；(4) 闲聊意图分类 → 验证无 retrieving/sources，直接 generating→token→done。创建 compose override 文件 + 测试脚本，测试后用 deploy.sh --backend-only 恢复正常环境。",
+      "verification": "L3 — Docker 环境集成测试脚本执行通过，4 个 curl 断言验证成功",
+      "depends_on": ["BT001"],
+      "status": "pending",
+      "priority": 8,
+      "developer_stories": ["作为后端开发者，我希望在真实 Docker 环境中验证异常场景的 SSE 输出，以便确认 Traefik 透传 + 错误恢复链路在生产环境也正常"],
+      "technical_success_picture": "docker compose -f ... -f override.yml up → curl 验证 4 个场景 → 全部通过 → deploy.sh --backend-only 恢复正常环境",
+      "decision_refs": ["DEC-test-003"],
+      "analysis_refs": ["2026-05-22--R005-error-scenario-test-strategy"],
+      "risk_tags": ["network", "third_party"],
+      "test_tasks": ["集成测试：I-ERR-01 LLM 不可达 → curl 验证 error code=02201", "集成测试：I-ERR-02 Embedding 认证失败 → curl 验证 error code=02102", "集成测试：I-ERR-03 正常数学问题 → curl 验证完整事件序列", "集成测试：I-ERR-04 闲聊不检索 → curl 验证无 sources 直接 generating"]
     }
   ],
   "decision_coverage": {
@@ -335,6 +394,9 @@
       "DEC-chatui-028", "DEC-chatui-029", "DEC-chatui-031", "DEC-chatui-032",
       "DEC-chatui-033", "DEC-chatui-034", "DEC-chatui-035", "DEC-chatui-036",
       "DEC-chatui-037", "DEC-chatui-038", "DEC-chatui-039"
+    ],
+    "test_supplement": [
+      "DEC-test-001", "DEC-test-002", "DEC-test-003", "DEC-test-004"
     ],
     "no_action_needed": [
       "DEC-chatui-002",

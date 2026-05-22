@@ -270,3 +270,43 @@ class TestGenerateStreamNoTokens:
 
         tokens = asyncio.run(_run())
         assert tokens == []
+
+
+# ---------------------------------------------------------------------------
+# Test (L-ERR-01): 空 choices chunk 不触发 IndexError
+# ---------------------------------------------------------------------------
+
+
+class TestEmptyChoicesChunk:
+    """最后一个 chunk 的 choices=[] 时不触发 IndexError，正确跳过"""
+
+    def _make_empty_choices_chunk(self):
+        mock_chunk = MagicMock()
+        mock_chunk.choices = []
+        return mock_chunk
+
+    def test_empty_choices_no_index_error(self):
+        chunks = [
+            _make_mock_chunk("你"),
+            _make_mock_chunk("好"),
+            self._make_empty_choices_chunk(),
+        ]
+        mock_stream = MockAsyncStream(chunks)
+
+        async def _run():
+            gen = _create_generator()
+            with patch.object(
+                gen._async_client.chat.completions,
+                "create",
+                new_callable=AsyncMock,
+                return_value=mock_stream,
+            ):
+                tokens = []
+                async for token in gen.generate_stream(
+                    "什么是集合？", [_make_query_result()]
+                ):
+                    tokens.append(token)
+            return tokens
+
+        tokens = asyncio.run(_run())
+        assert tokens == ["你", "好"]

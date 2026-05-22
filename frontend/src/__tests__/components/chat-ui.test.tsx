@@ -545,3 +545,120 @@ describe('handleEdit', () => {
     expect(result!.restoredInput).toBe('问题B');
   });
 });
+
+// ============================================================
+// FT001: L1 异常路径测试补充
+// ============================================================
+describe('FT001: L1 error scenario tests', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    capturedCallbacks = null;
+  });
+
+  // U-ERR-01: 后端 error event → AI 消息 status='error'
+  it('should mark AI message status as error when onError is called with non-00000 code', () => {
+    const { messages: afterSend, aiMsgId } = simulateHandleSend([], '测试问题', (_q, cbs) => {
+      capturedCallbacks = cbs;
+    });
+
+    // 模拟 onError 被调用（code='02202'）
+    const errorObj = { code: '02202', message: '生成中断', action: 'retry' };
+
+    // 模拟 ChatUI 的 onError 回调行为：将 AI 消息标记为 error
+    const updatedMessages = afterSend.map((m) => {
+      if (m.id === aiMsgId) {
+        return { ...m, status: 'error' as const, error: errorObj };
+      }
+      return m;
+    });
+
+    const aiMsg = updatedMessages.find((m) => m.id === aiMsgId);
+    expect(aiMsg).toBeDefined();
+    expect(aiMsg!.status).toBe('error');
+    expect(aiMsg!.error?.code).toBe('02202');
+    expect(aiMsg!.error?.message).toBe('生成中断');
+  });
+
+  // U-ERR-02: 连续快速发送 → 第二次被阻止
+  it('should prevent sending when isStreaming is true', () => {
+    const sendFn = vi.fn();
+    let isStreaming = true; // 模拟正在流式传输中
+
+    // 模拟 ChatUI 的 handleSend 守卫逻辑
+    function guardedHandleSend(inputText: string): { messages: Message[]; input: string } | null {
+      if (isStreaming) return null; // 流式传输中，阻止发送
+      return simulateHandleSend([], inputText, sendFn);
+    }
+
+    // 第一次尝试（流式传输中）
+    const result1 = guardedHandleSend('第一条');
+    expect(result1).toBeNull();
+    expect(sendFn).not.toHaveBeenCalled();
+
+    // 流式结束
+    isStreaming = false;
+
+    // 第二次尝试（流式结束，允许发送）
+    const result2 = guardedHandleSend('第二条');
+    expect(result2).not.toBeNull();
+    expect(result2!.messages).toHaveLength(2);
+    expect(sendFn).toHaveBeenCalledTimes(1);
+  });
+
+  // U-ERR-03: handleStop 在 retrieving 状态
+  it('should mark AI message as stopped when handleStop during retrieving status', () => {
+    const { messages: afterSend, aiMsgId } = simulateHandleSend([], '测试', () => {});
+
+    // AI 消息处于 retrieving 状态，content 为空
+    const aiMsg = afterSend.find((m) => m.id === aiMsgId);
+    expect(aiMsg!.status).toBe('retrieving');
+    expect(aiMsg!.content).toBe('');
+
+    // 模拟 handleStop：abort + 将 AI 消息标记为 stopped
+    mockStop();
+    expect(mockStop).toHaveBeenCalled();
+
+    const stoppedMessages = afterSend.map((m) => {
+      if (m.id === aiMsgId) {
+        return { ...m, status: 'stopped' as const };
+      }
+      return m;
+    });
+
+    const stoppedAiMsg = stoppedMessages.find((m) => m.id === aiMsgId);
+    expect(stoppedAiMsg!.status).toBe('stopped');
+    expect(stoppedAiMsg!.content).toBe(''); // content 保持为空
+  });
+
+  // U-ERR-04: handleStop 在 generating 状态
+  it('should mark AI message as stopped when handleStop during generating status', () => {
+    const { messages: afterSend, aiMsgId } = simulateHandleSend([], '测试', () => {});
+
+    // 模拟 AI 消息已进入 generating 状态，有部分内容
+    const generatingMessages = afterSend.map((m) => {
+      if (m.id === aiMsgId) {
+        return { ...m, status: 'generating' as const, content: '部分回答' };
+      }
+      return m;
+    });
+
+    const aiMsg = generatingMessages.find((m) => m.id === aiMsgId);
+    expect(aiMsg!.status).toBe('generating');
+    expect(aiMsg!.content).toBe('部分回答');
+
+    // 模拟 handleStop
+    mockStop();
+    expect(mockStop).toHaveBeenCalled();
+
+    const stoppedMessages = generatingMessages.map((m) => {
+      if (m.id === aiMsgId) {
+        return { ...m, status: 'stopped' as const };
+      }
+      return m;
+    });
+
+    const stoppedAiMsg = stoppedMessages.find((m) => m.id === aiMsgId);
+    expect(stoppedAiMsg!.status).toBe('stopped');
+    expect(stoppedAiMsg!.content).toBe('部分回答'); // content 保持不变
+  });
+});

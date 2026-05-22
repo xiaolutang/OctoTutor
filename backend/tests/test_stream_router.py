@@ -215,3 +215,56 @@ def test_non_stream_chat_still_works(client: TestClient, mock_service):
     )
     # handle_chat 返回 None -> 404
     assert resp.status_code == 404
+
+
+# ------------------------------------------------------------------
+# 6 (R-ERR-01): error event SSE 格式透传
+# ------------------------------------------------------------------
+
+def test_error_event_sse_format(client: TestClient, mock_service):
+    """service.stream_chat yield error event 时 SSE 格式正确透传"""
+
+    async def _stream_with_error(question, top_k):
+        yield StreamEvent(type="status", data=StatusPayload(stage="generating", message="生成中..."))
+        yield StreamEvent(type="error", data=make_error(ChatErrorCode.LLM_STREAM_ERROR))
+
+    mock_service.stream_chat = MagicMock(return_value=_stream_with_error("", 10))
+
+    resp = client.post(
+        "/api/chat/stream",
+        json={"question": "测试错误", "top_k": 5},
+    )
+    assert resp.status_code == 200
+    text = resp.text.strip()
+
+    assert "event: error" in text
+
+    # 解析 error 帧
+    lines = text.split("\n")
+    event_line = [l for l in lines if l.startswith("event: error")]
+    data_line = [l for l in lines if l.startswith("data: ") and "error" in text]
+    assert len(event_line) >= 1
+
+    # 找到 error 帧对应的 data 行
+    error_idx = next(i for i, l in enumerate(lines) if l == "event: error")
+    data_line_text = lines[error_idx + 1]
+    assert data_line_text.startswith("data: ")
+
+    payload = json.loads(data_line_text.replace("data: ", ""))
+    expected = make_error(ChatErrorCode.LLM_STREAM_ERROR)
+    assert payload["code"] == expected["code"]
+    assert payload["message"] == expected["message"]
+    assert payload["action"] == expected["action"]
+
+
+# ------------------------------------------------------------------
+# 7 (R-ERR-03): 缺 question 字段 → 422
+# ------------------------------------------------------------------
+
+def test_missing_question_returns_422(client: TestClient):
+    """POST body 缺少 question 字段时返回 422 Validation Error"""
+    resp = client.post(
+        "/api/chat/stream",
+        json={"top_k": 5},
+    )
+    assert resp.status_code == 422
