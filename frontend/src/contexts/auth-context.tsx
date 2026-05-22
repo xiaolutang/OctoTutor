@@ -9,7 +9,8 @@ import {
   useRef,
   type ReactNode,
 } from "react"
-import { AuthService, type UserInfo, type AuthState } from "@xlfoundry/auth-sdk-web"
+import { AuthService, TokenManager, type UserInfo, type AuthState } from "@xlfoundry/auth-sdk-web"
+import { registerGetToken } from "../lib/api-client"
 
 /** 运行时配置，从 /api/config 加载 */
 export interface RuntimeConfig {
@@ -33,6 +34,8 @@ export interface AuthContextValue {
   isInitialized: boolean
   /** 初始化错误信息 */
   initError: string | null
+  /** 获取有效的 access_token（过期自动刷新） */
+  getAccessToken: () => Promise<string | null>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -57,6 +60,16 @@ function getAuthService(): AuthService {
     authService = new AuthService()
   }
   return authService
+}
+
+/** 独立 TokenManager 实例（与 AuthService 内部的 TokenManager 共享 localStorage） */
+let tokenManager: TokenManager | null = null
+
+function getTokenManager(): TokenManager {
+  if (!tokenManager) {
+    tokenManager = new TokenManager()
+  }
+  return tokenManager
 }
 
 /**
@@ -88,6 +101,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return res.json()
       })
       .then((config: RuntimeConfig) => {
+        // ★ 初始化独立 TokenManager 实例
+        const tm = getTokenManager()
+        tm.setConfig({
+          clientId: config.clientId,
+          authCenterBaseURL: config.authCenterBaseURL,
+          redirectUri: window.location.origin + "/callback",
+          onSessionExpired: () => {
+            setAuthState({ isAuthenticated: false, user: null })
+          },
+        })
+
+        // ★ 注册 getAccessToken 到 apiClient
+        registerGetToken(() => tm.ensureValidToken())
+
         return service.init({
           clientId: config.clientId,
           authCenterBaseURL: config.authCenterBaseURL,
@@ -106,6 +133,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.error("[AuthContext] SDK 初始化失败:", err)
         setInitError(err.message || "认证初始化失败")
       })
+  }, [])
+
+  // 监听 api-client 触发的 session-expired 事件，跳转登录
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      const service = getAuthService()
+      service.login()
+    }
+    window.addEventListener("auth:session-expired", handleSessionExpired)
+    return () => window.removeEventListener("auth:session-expired", handleSessionExpired)
   }, [])
 
   const login = useCallback(async () => {
@@ -128,6 +165,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return user
   }, [])
 
+  const getAccessToken = useCallback(async () => {
+    return getTokenManager().ensureValidToken()
+  }, [])
+
   const value: AuthContextValue = {
     isAuthenticated: authState.isAuthenticated,
     user: authState.user,
@@ -136,6 +177,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     handleCallback,
     isInitialized,
     initError,
+    getAccessToken,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

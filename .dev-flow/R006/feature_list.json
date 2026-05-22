@@ -280,7 +280,7 @@
       "depends_on": [
         "FF001"
       ],
-      "status": "pending",
+      "status": "completed",
       "priority": 5,
       "developer_stories": [
         "作为前端开发者，我希望 AuthContext 提供 token 获取能力并注册到 apiClient，以便 apiClient 自动处理认证"
@@ -307,7 +307,12 @@
         "单元测试：getAccessToken() 返回有效 token（ensureValidToken 正常）",
         "单元测试：auth:session-expired 事件触发 service.login()",
         "单元测试：两个 TokenManager 实例共享 localStorage — 一个刷新后另一个能读到新 token"
-      ]
+      ],
+      "started_at": "2026-05-22",
+      "completed_at": "2026-05-22",
+      "evidence_file": "R006/evidence/R006_FF002.md",
+      "execution_state": "evaluated",
+      "commit": "be0d3b8"
     },
     {
       "id": "FB001",
