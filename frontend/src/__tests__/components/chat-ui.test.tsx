@@ -1,10 +1,11 @@
 /**
- * FB001 ChatUI 逻辑测试
+ * FB001 + FB002 ChatUI 逻辑测试
  *
  * 由于项目未安装 @testing-library/react 且 vitest 环境为 node，
  * 本测试直接测试 ChatUI 的核心逻辑：
  * - 通过 mock useChatStream 和 useChatStorage 验证回调绑定
  * - 通过模拟 React 组件行为验证状态管理逻辑
+ * - FB002: handleRegenerate / handleEdit 纯逻辑验证
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Message, SSECallbacks } from '@/chat/types';
@@ -86,6 +87,76 @@ function simulateHandleSend(
 }
 
 // ============================================================
+// FB002: 模拟 handleRegenerate 纯函数
+// ============================================================
+function simulateHandleRegenerate(
+  currentMessages: Message[],
+  aiMessageId: string,
+  isStreaming: boolean,
+): {
+  messages: Message[];
+  regeneratedAiMsgId: string;
+  userText: string;
+  error?: string;
+} | null {
+  if (isStreaming) return null;
+
+  const msgIndex = currentMessages.findIndex((m) => m.id === aiMessageId);
+  if (msgIndex < 0) return null;
+
+  const aiMsg = currentMessages[msgIndex];
+  if (aiMsg.role !== 'ai') return null;
+
+  // 向前查找最近的用户消息
+  let userMsgIndex = msgIndex - 1;
+  while (userMsgIndex >= 0 && currentMessages[userMsgIndex].role !== 'user') {
+    userMsgIndex--;
+  }
+  if (userMsgIndex < 0) return null;
+
+  const userText = currentMessages[userMsgIndex].content;
+  const newAiMsgId = createId();
+
+  const newAiMsg: Message = {
+    id: newAiMsgId,
+    role: 'ai',
+    content: '',
+    status: 'retrieving',
+    timestamp: Date.now(),
+  };
+
+  const newMessages = [...currentMessages];
+  newMessages[msgIndex] = newAiMsg;
+
+  return { messages: newMessages, regeneratedAiMsgId: newAiMsgId, userText };
+}
+
+// ============================================================
+// FB002: 模拟 handleEdit 纯函数
+// ============================================================
+function simulateHandleEdit(
+  currentMessages: Message[],
+  userMessageId: string,
+  isStreaming: boolean,
+): {
+  remainingMessages: Message[];
+  restoredInput: string;
+} | null {
+  if (isStreaming) return null;
+
+  const msgIndex = currentMessages.findIndex((m) => m.id === userMessageId);
+  if (msgIndex < 0) return null;
+
+  const userMsg = currentMessages[msgIndex];
+  if (userMsg.role !== 'user') return null;
+
+  const remainingMessages = currentMessages.slice(0, msgIndex);
+  const restoredInput = userMsg.content;
+
+  return { remainingMessages, restoredInput };
+}
+
+// ============================================================
 // 测试用例
 // ============================================================
 describe('ChatUI 核心逻辑', () => {
@@ -100,7 +171,6 @@ describe('ChatUI 核心逻辑', () => {
   });
 
   it('should load messages from localStorage on mount', () => {
-    // 模拟 useEffect 加载历史
     const storedMessages: Message[] = [
       {
         id: 'stored1',
@@ -190,7 +260,6 @@ describe('ChatUI 核心逻辑', () => {
   });
 
   it('should call stop() on handleStop', () => {
-    // 直接调用 mock 的 stop
     mockStop();
     expect(mockStop).toHaveBeenCalledOnce();
   });
@@ -201,7 +270,6 @@ describe('ChatUI 核心逻辑', () => {
       { id: '2', role: 'ai', content: 'hello', status: 'done', timestamp: 2 },
     ];
 
-    // 模拟 saveMessages 调用
     mockSaveMessages(messages);
     expect(mockSaveMessages).toHaveBeenCalledWith(messages);
     expect(mockSaveMessages).toHaveBeenCalledOnce();
@@ -300,5 +368,180 @@ describe('message persistence', () => {
 
     mockSaveMessages([{ ...msgs[0], status: 'stopped' }]);
     expect(mockSaveMessages).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ============================================================
+// FB002: handleRegenerate 验证
+// ============================================================
+describe('handleRegenerate', () => {
+  it('should replace old AI message with a new one', () => {
+    const messages: Message[] = [
+      { id: 'u1', role: 'user', content: '问题1', status: 'done', timestamp: 1 },
+      { id: 'a1', role: 'ai', content: '回答1', status: 'done', timestamp: 2 },
+    ];
+
+    const result = simulateHandleRegenerate(messages, 'a1', false);
+    expect(result).not.toBeNull();
+    expect(result!.messages).toHaveLength(2);
+    expect(result!.messages[0].id).toBe('u1'); // 用户消息不变
+    expect(result!.messages[1].id).not.toBe('a1'); // AI 消息被替换
+    expect(result!.messages[1].role).toBe('ai');
+    expect(result!.messages[1].content).toBe('');
+    expect(result!.messages[1].status).toBe('retrieving');
+  });
+
+  it('should extract correct user question for SSE', () => {
+    const messages: Message[] = [
+      { id: 'u1', role: 'user', content: '什么是微积分？', status: 'done', timestamp: 1 },
+      { id: 'a1', role: 'ai', content: '微积分是...', status: 'done', timestamp: 2 },
+    ];
+
+    const result = simulateHandleRegenerate(messages, 'a1', false);
+    expect(result!.userText).toBe('什么是微积分？');
+  });
+
+  it('should return null when isStreaming is true', () => {
+    const messages: Message[] = [
+      { id: 'u1', role: 'user', content: '问题', status: 'done', timestamp: 1 },
+      { id: 'a1', role: 'ai', content: '回答', status: 'done', timestamp: 2 },
+    ];
+
+    const result = simulateHandleRegenerate(messages, 'a1', true);
+    expect(result).toBeNull();
+  });
+
+  it('should return null when messageId not found', () => {
+    const messages: Message[] = [
+      { id: 'u1', role: 'user', content: '问题', status: 'done', timestamp: 1 },
+    ];
+
+    const result = simulateHandleRegenerate(messages, 'nonexistent', false);
+    expect(result).toBeNull();
+  });
+
+  it('should return null when messageId is not an AI message', () => {
+    const messages: Message[] = [
+      { id: 'u1', role: 'user', content: '问题', status: 'done', timestamp: 1 },
+      { id: 'a1', role: 'ai', content: '回答', status: 'done', timestamp: 2 },
+    ];
+
+    const result = simulateHandleRegenerate(messages, 'u1', false);
+    expect(result).toBeNull();
+  });
+
+  it('should find the nearest preceding user message', () => {
+    const messages: Message[] = [
+      { id: 'u1', role: 'user', content: '问题A', status: 'done', timestamp: 1 },
+      { id: 'a1', role: 'ai', content: '回答A', status: 'done', timestamp: 2 },
+      { id: 'u2', role: 'user', content: '问题B', status: 'done', timestamp: 3 },
+      { id: 'a2', role: 'ai', content: '回答B', status: 'done', timestamp: 4 },
+    ];
+
+    // 重新生成 a2 应该使用 u2 的问题
+    const result = simulateHandleRegenerate(messages, 'a2', false);
+    expect(result!.userText).toBe('问题B');
+  });
+
+  it('should preserve messages before the AI message', () => {
+    const messages: Message[] = [
+      { id: 'u1', role: 'user', content: '问题1', status: 'done', timestamp: 1 },
+      { id: 'a1', role: 'ai', content: '回答1', status: 'done', timestamp: 2 },
+      { id: 'u2', role: 'user', content: '问题2', status: 'done', timestamp: 3 },
+      { id: 'a2', role: 'ai', content: '回答2', status: 'done', timestamp: 4 },
+    ];
+
+    const result = simulateHandleRegenerate(messages, 'a2', false);
+    expect(result!.messages[0].id).toBe('u1');
+    expect(result!.messages[1].id).toBe('a1');
+    expect(result!.messages[2].id).toBe('u2');
+  });
+});
+
+// ============================================================
+// FB002: handleEdit 验证
+// ============================================================
+describe('handleEdit', () => {
+  it('should remove the user message and all subsequent messages', () => {
+    const messages: Message[] = [
+      { id: 'u1', role: 'user', content: '问题1', status: 'done', timestamp: 1 },
+      { id: 'a1', role: 'ai', content: '回答1', status: 'done', timestamp: 2 },
+      { id: 'u2', role: 'user', content: '问题2', status: 'done', timestamp: 3 },
+      { id: 'a2', role: 'ai', content: '回答2', status: 'done', timestamp: 4 },
+    ];
+
+    const result = simulateHandleEdit(messages, 'u2', false);
+    expect(result).not.toBeNull();
+    expect(result!.remainingMessages).toHaveLength(2);
+    expect(result!.remainingMessages[0].id).toBe('u1');
+    expect(result!.remainingMessages[1].id).toBe('a1');
+  });
+
+  it('should restore original text to input', () => {
+    const messages: Message[] = [
+      { id: 'u1', role: 'user', content: '问题1', status: 'done', timestamp: 1 },
+      { id: 'a1', role: 'ai', content: '回答1', status: 'done', timestamp: 2 },
+      { id: 'u2', role: 'user', content: '编辑这条消息', status: 'done', timestamp: 3 },
+    ];
+
+    const result = simulateHandleEdit(messages, 'u2', false);
+    expect(result!.restoredInput).toBe('编辑这条消息');
+  });
+
+  it('should return null when isStreaming is true', () => {
+    const messages: Message[] = [
+      { id: 'u1', role: 'user', content: '问题', status: 'done', timestamp: 1 },
+    ];
+
+    const result = simulateHandleEdit(messages, 'u1', true);
+    expect(result).toBeNull();
+  });
+
+  it('should return null when messageId not found', () => {
+    const messages: Message[] = [
+      { id: 'u1', role: 'user', content: '问题', status: 'done', timestamp: 1 },
+    ];
+
+    const result = simulateHandleEdit(messages, 'nonexistent', false);
+    expect(result).toBeNull();
+  });
+
+  it('should return null when messageId is not a user message', () => {
+    const messages: Message[] = [
+      { id: 'u1', role: 'user', content: '问题', status: 'done', timestamp: 1 },
+      { id: 'a1', role: 'ai', content: '回答', status: 'done', timestamp: 2 },
+    ];
+
+    const result = simulateHandleEdit(messages, 'a1', false);
+    expect(result).toBeNull();
+  });
+
+  it('should handle editing the first message (result in empty array)', () => {
+    const messages: Message[] = [
+      { id: 'u1', role: 'user', content: '第一条消息', status: 'done', timestamp: 1 },
+      { id: 'a1', role: 'ai', content: '回答', status: 'done', timestamp: 2 },
+    ];
+
+    const result = simulateHandleEdit(messages, 'u1', false);
+    expect(result!.remainingMessages).toHaveLength(0);
+    expect(result!.restoredInput).toBe('第一条消息');
+  });
+
+  it('should handle editing in the middle of conversation', () => {
+    const messages: Message[] = [
+      { id: 'u1', role: 'user', content: '问题A', status: 'done', timestamp: 1 },
+      { id: 'a1', role: 'ai', content: '回答A', status: 'done', timestamp: 2 },
+      { id: 'u2', role: 'user', content: '问题B', status: 'done', timestamp: 3 },
+      { id: 'a2', role: 'ai', content: '回答B', status: 'done', timestamp: 4 },
+      { id: 'u3', role: 'user', content: '问题C', status: 'done', timestamp: 5 },
+      { id: 'a3', role: 'ai', content: '回答C', status: 'done', timestamp: 6 },
+    ];
+
+    // 编辑 u2，应删除 u2 及后续所有消息 (a2, u3, a3)
+    const result = simulateHandleEdit(messages, 'u2', false);
+    expect(result!.remainingMessages).toHaveLength(2);
+    expect(result!.remainingMessages[0].id).toBe('u1');
+    expect(result!.remainingMessages[1].id).toBe('a1');
+    expect(result!.restoredInput).toBe('问题B');
   });
 });
