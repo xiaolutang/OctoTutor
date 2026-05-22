@@ -248,6 +248,8 @@ class FaithfulnessDetail:
     deterministic_passed: bool
     claims: list[dict] = field(default_factory=list)
     coverage_results: list[dict] = field(default_factory=list)
+    relevance: float = 0.0
+    relevance_label: str = "not_relevant"
 
     def to_dict(self) -> dict:
         return {
@@ -259,6 +261,8 @@ class FaithfulnessDetail:
             "deterministic_passed": self.deterministic_passed,
             "claims": self.claims,
             "coverage_results": self.coverage_results,
+            "relevance": self.relevance,
+            "relevance_label": self.relevance_label,
         }
 
 
@@ -270,12 +274,14 @@ class FaithfulnessReport:
         overall_faithfulness: 平均忠实度分数
         overall_coverage: 平均覆盖度分数
         avg_unknown_ratio: 平均 Unknown 比例
+        overall_relevance: 平均相关性分数
         details: 逐条评估详情
     """
 
     overall_faithfulness: float
     overall_coverage: float
     avg_unknown_ratio: float
+    overall_relevance: float
     details: list[FaithfulnessDetail]
 
     def to_dict(self) -> dict:
@@ -283,6 +289,7 @@ class FaithfulnessReport:
             "overall_faithfulness": self.overall_faithfulness,
             "overall_coverage": self.overall_coverage,
             "avg_unknown_ratio": self.avg_unknown_ratio,
+            "overall_relevance": self.overall_relevance,
             "details": [d.to_dict() for d in self.details],
         }
 
@@ -568,17 +575,25 @@ class EvalRunner:
             overall_cov = 0.0
             avg_unknown = 0.0
 
+        # 只对有检索结果（deterministic_passed）的条目计算 relevance 均值
+        eligible = [d for d in details if d.deterministic_passed]
+        overall_relevance = (
+            sum(d.relevance for d in eligible) / len(eligible) if eligible else 0.0
+        )
+
         report = FaithfulnessReport(
             overall_faithfulness=overall_faith,
             overall_coverage=overall_cov,
             avg_unknown_ratio=avg_unknown,
+            overall_relevance=overall_relevance,
             details=details,
         )
         logger.info(
-            "Faithfulness 完成: faith=%.4f, coverage=%.4f, unknown=%.4f",
+            "Faithfulness 完成: faith=%.4f, coverage=%.4f, unknown=%.4f, relevance=%.4f",
             overall_faith,
             overall_cov,
             avg_unknown,
+            overall_relevance,
         )
         return report
 
@@ -640,6 +655,7 @@ class EvalRunner:
             answer=answer,
             context=context_text,
             key_facts=item.key_facts,
+            question=item.question,
         )
 
         return FaithfulnessDetail(
@@ -655,6 +671,8 @@ class EvalRunner:
             coverage_results=[
                 {"fact": cr.fact, "status": cr.status} for cr in judge_result.coverage
             ],
+            relevance=judge_result.relevance,
+            relevance_label=judge_result.relevance_label,
         )
 
     def run_regression(

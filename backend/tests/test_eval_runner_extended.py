@@ -353,6 +353,7 @@ class TestRunFaithfulness:
             overall_faithfulness=0.8,
             overall_coverage=0.6,
             avg_unknown_ratio=0.1,
+            overall_relevance=0.7,
             details=[
                 FaithfulnessDetail(
                     item_id="q001",
@@ -361,6 +362,8 @@ class TestRunFaithfulness:
                     coverage=0.6,
                     unknown_ratio=0.1,
                     deterministic_passed=True,
+                    relevance=0.7,
+                    relevance_label="partially_relevant",
                 ),
             ],
         )
@@ -368,6 +371,7 @@ class TestRunFaithfulness:
         assert d["overall_faithfulness"] == 0.8
         assert d["overall_coverage"] == 0.6
         assert d["avg_unknown_ratio"] == 0.1
+        assert d["overall_relevance"] == 0.7
         assert len(d["details"]) == 1
 
     @patch("app.evaluation.graders.llm_judge.OpenAI")
@@ -680,3 +684,194 @@ class TestExistingRunUnaffected:
 
         report = runner.run("test.json")
         assert isinstance(report, EvalReport)
+
+
+# ---------------------------------------------------------------------------
+# 测试 Relevance 相关性评估
+# ---------------------------------------------------------------------------
+
+
+class TestRelevance:
+    """测试 Relevance 相关性评估指标"""
+
+    def test_parse_relevance_relevant(self):
+        """_parse_response 正确解析 relevant"""
+        from app.evaluation.graders.llm_judge import LLMJudge
+
+        judge = LLMJudge.__new__(LLMJudge)
+        raw = json.dumps({
+            "claims": [{"claim": "测试", "verdict": "Yes"}],
+            "coverage": [{"fact": "知识点", "status": "covered"}],
+            "relevance": "relevant",
+        })
+        result = judge._parse_response(raw)
+        assert result.relevance == 1.0
+        assert result.relevance_label == "relevant"
+
+    def test_parse_relevance_partially(self):
+        """_parse_response 正确解析 partially_relevant"""
+        from app.evaluation.graders.llm_judge import LLMJudge
+
+        judge = LLMJudge.__new__(LLMJudge)
+        raw = json.dumps({
+            "claims": [{"claim": "测试", "verdict": "Yes"}],
+            "coverage": [{"fact": "知识点", "status": "covered"}],
+            "relevance": "partially_relevant",
+        })
+        result = judge._parse_response(raw)
+        assert result.relevance == 0.5
+        assert result.relevance_label == "partially_relevant"
+
+    def test_parse_relevance_not_relevant(self):
+        """_parse_response 正确解析 not_relevant"""
+        from app.evaluation.graders.llm_judge import LLMJudge
+
+        judge = LLMJudge.__new__(LLMJudge)
+        raw = json.dumps({
+            "claims": [{"claim": "测试", "verdict": "Yes"}],
+            "coverage": [{"fact": "知识点", "status": "covered"}],
+            "relevance": "not_relevant",
+        })
+        result = judge._parse_response(raw)
+        assert result.relevance == 0.0
+        assert result.relevance_label == "not_relevant"
+
+    def test_parse_relevance_fallback(self):
+        """_parse_response 在无 relevance 字段时 fallback 为 not_relevant"""
+        from app.evaluation.graders.llm_judge import LLMJudge
+
+        judge = LLMJudge.__new__(LLMJudge)
+        raw = json.dumps({
+            "claims": [{"claim": "测试", "verdict": "Yes"}],
+            "coverage": [{"fact": "知识点", "status": "covered"}],
+        })
+        result = judge._parse_response(raw)
+        assert result.relevance == 0.0
+        assert result.relevance_label == "not_relevant"
+
+    def test_parse_relevance_invalid_value_fallback(self):
+        """_parse_response 在 relevance 为无效值时 fallback 为 not_relevant"""
+        from app.evaluation.graders.llm_judge import LLMJudge
+
+        judge = LLMJudge.__new__(LLMJudge)
+        raw = json.dumps({
+            "claims": [{"claim": "测试", "verdict": "Yes"}],
+            "coverage": [{"fact": "知识点", "status": "covered"}],
+            "relevance": "invalid_value",
+        })
+        result = judge._parse_response(raw)
+        assert result.relevance == 0.0
+        assert result.relevance_label == "not_relevant"
+
+    def test_faithfulness_detail_contains_relevance(self):
+        """FaithfulnessDetail.to_dict 包含 relevance 和 relevance_label"""
+        detail = FaithfulnessDetail(
+            item_id="q001",
+            question="测试问题",
+            faithfulness=0.8,
+            coverage=0.6,
+            unknown_ratio=0.1,
+            deterministic_passed=True,
+            relevance=1.0,
+            relevance_label="relevant",
+        )
+        d = detail.to_dict()
+        assert "relevance" in d
+        assert d["relevance"] == 1.0
+        assert "relevance_label" in d
+        assert d["relevance_label"] == "relevant"
+
+    def test_faithfulness_detail_default_relevance(self):
+        """FaithfulnessDetail 默认 relevance 值为 0.0 / not_relevant"""
+        detail = FaithfulnessDetail(
+            item_id="q001",
+            question="测试",
+            faithfulness=0.0,
+            coverage=0.0,
+            unknown_ratio=0.0,
+            deterministic_passed=False,
+        )
+        assert detail.relevance == 0.0
+        assert detail.relevance_label == "not_relevant"
+
+    @patch("app.evaluation.graders.llm_judge.OpenAI")
+    def test_faithfulness_report_contains_overall_relevance(self, mock_openai_cls):
+        """FaithfulnessReport 包含 overall_relevance 字段"""
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+        mock_choice = MagicMock()
+        mock_choice.message.content = json.dumps({
+            "claims": [{"claim": "函数是映射", "verdict": "Yes"}],
+            "coverage": [{"fact": "定义域", "status": "covered"}],
+            "relevance": "relevant",
+        })
+        mock_client.chat.completions.create.return_value.choices = [mock_choice]
+
+        items = [
+            make_eval_item(
+                item_id="q001",
+                question="什么是函数？",
+                key_facts=["定义域"],
+            ),
+        ]
+
+        mock_loader = MagicMock()
+        mock_loader.load.return_value = items
+
+        mock_embedding = MagicMock()
+        mock_embedding.embed_query.return_value = [0.1, 0.2]
+
+        mock_store = MagicMock()
+        qr = make_query_result(score=0.95)
+        mock_store.query.return_value = [qr]
+
+        mock_reranker = MagicMock()
+        mock_reranker.rerank.return_value = [qr]
+
+        mock_generator = MagicMock()
+        mock_generator.generate.return_value = (
+            "函数是一种映射关系",
+            [SourceReference(
+                chunk_id=qr.chunk_id,
+                book=qr.metadata.book,
+                section=qr.metadata.section,
+                page_start=qr.metadata.page_start,
+                page_end=qr.metadata.page_end,
+            )],
+        )
+
+        mock_settings = MagicMock(spec=Settings)
+        mock_settings.similarity_threshold = 0.7
+        mock_settings.rerank_top_n = 3
+        mock_settings.newapi_api_key = "test-key"
+        mock_settings.newapi_base_url = "http://test.local"
+        mock_settings.llm_model = "test-model"
+
+        runner = make_runner(
+            embedding_service=mock_embedding,
+            vector_store=mock_store,
+            eval_loader=mock_loader,
+            reranker=mock_reranker,
+            generator=mock_generator,
+            settings=mock_settings,
+        )
+
+        report = runner.run_faithfulness("test.json")
+
+        assert report.details[0].relevance == 1.0
+        assert report.details[0].relevance_label == "relevant"
+        assert report.overall_relevance == 1.0
+
+    def test_judge_result_default_relevance(self):
+        """JudgeResult 默认 relevance 值为 0.0 / not_relevant"""
+        from app.evaluation.graders.llm_judge import JudgeResult
+
+        result = JudgeResult(
+            claims=[],
+            coverage=[],
+            faithfulness=0.0,
+            coverage_score=0.0,
+            unknown_ratio=1.0,
+        )
+        assert result.relevance == 0.0
+        assert result.relevance_label == "not_relevant"

@@ -62,6 +62,12 @@
       "name": "回归套件正式化",
       "must_plan": true,
       "covered_by": ["BB007", "BB009"]
+    },
+    {
+      "capability_id": "CAP-eval-001",
+      "name": "Relevance 相关性评估",
+      "must_plan": true,
+      "covered_by": ["BB010"]
     }
   ],
   "features": [
@@ -193,7 +199,7 @@
       "description": "更新 main.py lifespan：初始化 BM25Retriever（从 ChromaDBStore.get_all_chunks() 加载全量 chunks 构建索引）、DashScopeReranker、LLMGenerator 并挂载到 app.state。注册 chat_router。确保 /api/retrieve 仍正常工作。不改变现有 lifespan 中 Embedding 和 VectorStore 的初始化逻辑。",
       "verification": "L2 — app 启动无报错，/api/chat 端点可访问（curl 返回非 404），/api/retrieve 仍正常工作",
       "depends_on": ["BB004"],
-      "status": "in_progress",
+      "status": "completed",
       "priority": "high",
       "developer_stories": "作为后端开发者，我希望 BM25/Reranker/Generator 在应用启动时初始化并挂载到 app.state，以便 DI providers 可通过 Request 获取",
       "technical_success_picture": "app.state.bm25 为 BM25Retriever 实例（索引已构建）；app.state.reranker 为 DashScopeReranker 实例；app.state.generator 为 LLMGenerator 实例；chat_router 已注册到 app；/api/retrieve 仍正常响应",
@@ -211,7 +217,7 @@
       "description": "扩展 eval_types.py 的 EvalItem：新增 key_facts (list[str])、reference_answer (str)、suite (str='regression') 字段（均有默认值，向后兼容）。新建 evaluation/graders/deterministic.py：0 成本前置检查（answer 非空、sources 非空、引用页码在 context 范围内、无重复 chunk_id），任一不通过直接标记 FAIL 跳过 LLM judge。包含单元测试。",
       "verification": "L2 — EvalItem 向后兼容（现有字段不变，新字段有默认值）；DeterministicGrader.check 正确判定 pass/fail",
       "depends_on": ["BF001"],
-      "status": "pending",
+      "status": "completed",
       "priority": "medium",
       "user_stories": "作为开发者，我希望在 Faithfulness 评估前先用确定性检查过滤明显错误，避免浪费 LLM 调用",
       "success_picture": "DeterministicGrader.check(answer='', sources=[], context=[]) 返回 FAIL；check(answer='有效', sources=[...], context=[...]) 返回 PASS；EvalItem 不带新字段时默认值正确",
@@ -230,7 +236,7 @@
       "description": "新建 evaluation/graders/llm_judge.py（LLMJudge：Faithfulness + Coverage 合并评估，含 Unknown 选项）。扩展 eval_runner.py：新增 run_context_precision()（section_id 匹配计算 Precision@K）、run_faithfulness()（确定性前置→LLM Judge）、run_regression()（R003 Span Hit@5 基线）、run_full()（全量评估）。EvalRunner 构造器新增可选参数 reranker/generator/settings。包含单元测试（mock LLM response）。",
       "verification": "L2 — run_context_precision 输出 Precision@K 数值（0-1）；run_faithfulness 输出 Faithfulness 分数（0-1）+ Unknown 比例；run_regression 输出 Span Hit@5；run_full 包含所有指标；LLM Judge prompt 正确处理 Unknown",
       "depends_on": ["BB003", "BB006"],
-      "status": "pending",
+      "status": "completed",
       "priority": "medium",
       "user_stories": "作为开发者，我希望运行 eval --mode context_precision/faithfulness/regression/full 来量化检索和生成质量",
       "success_picture": "python -m backend.app.evaluation.eval_runner --mode context_precision 输出 Precision@K=0.85；--mode faithfulness 输出 Faithfulness=0.72, Coverage=0.68, Unknown=0.05；--mode regression 输出 Span Hit@5=0.979；--mode full 包含所有指标汇总",
@@ -251,7 +257,7 @@
       "description": "按分析文档「架构文档变更清单」执行 8 项更新：1) 版本头 v2.0→v3.0 R004；2) 系统拓扑 +LLM+BM25+DashScope Reranker；3) 关键决策 +4 条；4) 权威边界 +3 条；5) 不变量 +3 条；6) 禁止模式 #3 删除（R003 不做 BM25/Reranker）；7) 禁止模式 #4 更新（R004 不做认证→R005+）；8) 新增 3 条禁止模式（不做 SSE/多轮/UI）。",
       "verification": "L2 — architecture.md 版本头为 v3.0 | R004；禁止模式 #3 已删除；新增决策/边界/不变量/禁止模式正确",
       "depends_on": ["BB005"],
-      "status": "pending",
+      "status": "completed",
       "priority": "medium",
       "developer_stories": "作为后端开发者，我希望 architecture.md 反映 R004 的架构变更，以便后续需求（R005）能基于最新架构约束",
       "technical_success_picture": "architecture.md 版本 v3.0；系统拓扑含 LLM + BM25；禁止模式 #3 已删除；新增 LLM 调用统一在 Backend、Reranker 降级、BM25 静态索引等不变量",
@@ -269,7 +275,7 @@
       "description": "端到端集成测试：1) POST /api/chat 真实服务调用（answer 非空 + sources 非空 + context_used > 0）；2) Rerank 降级路径验证（mock Rerank 异常→回答仍正常，degraded=true）；3) Context Precision 评估运行；4) Regression 模式运行（Span Hit@5 ≥ 97%）；5) Faithfulness 评估运行（需已标注 eval_set 数据）。",
       "verification": "L3 — POST /api/chat 返回有效 ChatResponse；Rerank 降级路径工作；Context Precision 输出数值；Span Hit@5 ≥ 97%",
       "depends_on": ["BB005", "BB007"],
-      "status": "pending",
+      "status": "completed",
       "priority": "high",
       "user_stories": "作为开发者，我希望端到端验证 POST /api/chat 管线和所有评估模式，确保 R004 不降低 R003 检索基线",
       "success_picture": "curl POST /api/chat 返回 answer + sources + context_used；Rerank 失败后 degraded=true 但回答正常；eval --mode regression 输出 Span Hit@5=97%+；eval --mode context_precision 输出 Precision@K；eval --mode faithfulness 输出 Faithfulness 分数",
@@ -281,11 +287,34 @@
       "journey_acceptance": "POST /api/chat 端到端返回 answer + sources + context_used；Rerank 降级路径验证（degraded=true 但回答正常）；eval --mode regression 输出 Span Hit@5 ≥ 97%（不降低 R003 基线）；eval --mode context_precision 输出有效数值",
       "evidence_required": true,
       "smoke_required": true
+    },
+    {
+      "id": "BB010",
+      "phase": "evaluation",
+      "module": "evaluation",
+      "name": "Relevance 相关性评估指标",
+      "description": "为 LLM Judge 补齐 Relevance（相关性）指标，评估生成回答是否切题。在现有 Faithfulness+Coverage 合并 Prompt 中追加任务三（Relevance 判定），扩展 JudgeResult/FaithfulnessDetail/FaithfulnessReport 数据模型，补充单元测试和集成测试。不增加额外 LLM API 调用成本。",
+      "verification": "L3",
+      "depends_on": ["BB007"],
+      "status": "completed",
+      "priority": 1,
+      "started_at": "2026-05-22",
+      "completed_at": "2026-05-22",
+      "developer_stories": [
+        "作为开发者，我希望 run_faithfulness 输出的 FaithfulnessDetail 包含 relevance 字段，以便一次评估得到 Faithfulness × Relevance × Coverage 三角指标"
+      ],
+      "technical_success_picture": "LLMJudge.judge() 返回的 JudgeResult 包含 relevance + relevance_label；FaithfulnessDetail 包含 relevance；FaithfulnessReport 包含 overall_relevance；现有测试全部通过（向后兼容）；新增 Relevance 相关测试通过",
+      "decision_refs": ["DEC-rel-001", "DEC-rel-002", "DEC-rel-003"],
+      "analysis_refs": ["2026-05-22--R004-eval-relevance.md"],
+      "capability_refs": ["CAP-eval-001"],
+      "contract_refs": ["new:relevance-evaluation"],
+      "test_tasks": ["LLMJudge._parse_response 解析 relevance 字段含 fallback", "FaithfulnessDetail.to_dict 包含 relevance", "run_faithfulness 输出 FaithfulnessReport 包含 overall_relevance", "向后兼容：现有测试全部通过"],
+      "smoke_required": true
     }
   ],
   "summary": {
-    "total": 11,
-    "completed": 6
+    "total": 12,
+    "completed": 12
   },
   "open_issues": [
     {

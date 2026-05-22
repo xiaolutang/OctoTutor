@@ -60,6 +60,8 @@ class JudgeResult:
         faithfulness: 忠实度分数 (0.0~1.0)，Unknown 不计入分子分母
         coverage_score: 覆盖度分数 (0.0~1.0)，partially_covered 算 0.5
         unknown_ratio: Unknown 声明占比 (0.0~1.0)
+        relevance: 相关性分数 (1.0 / 0.5 / 0.0)
+        relevance_label: 相关性标签 "relevant" / "partially_relevant" / "not_relevant"
     """
 
     claims: list[ClaimVerdict]
@@ -67,6 +69,8 @@ class JudgeResult:
     faithfulness: float
     coverage_score: float
     unknown_ratio: float
+    relevance: float = 0.0
+    relevance_label: str = "not_relevant"
 
 
 # ---------------------------------------------------------------------------
@@ -75,7 +79,7 @@ class JudgeResult:
 
 JUDGE_SYSTEM_PROMPT = """你是评估助手。你的任务是严格按照指定 JSON 格式输出评估结果，不要添加任何额外文本。"""
 
-JUDGE_USER_PROMPT_TEMPLATE = """你是评估助手。给定学生的回答和参考教材内容，完成以下两个任务：
+JUDGE_USER_PROMPT_TEMPLATE = """你是评估助手。给定原始问题、学生的回答和参考教材内容，完成以下三个任务：
 
 任务一：忠实度评估
 将学生的回答拆分为独立的事实声明，对每个声明判断：
@@ -88,11 +92,21 @@ JUDGE_USER_PROMPT_TEMPLATE = """你是评估助手。给定学生的回答和参
 {key_facts}
 对每个知识点判断：covered / not_covered / partially_covered
 
+任务三：相关性评估
+判断学生的回答是否切题，即是否正面回应了原始问题。
+- relevant：回答直接回应了问题的核心
+- partially_relevant：回答与问题相关但未直接回答核心问题
+- not_relevant：回答与问题无关或完全偏离主题
+
 输出 JSON 格式：
 {{
   "claims": [{{"claim": "...", "verdict": "Yes|No|Unknown"}}],
-  "coverage": [{{"fact": "...", "status": "covered|not_covered|partially_covered"}}]
+  "coverage": [{{"fact": "...", "status": "covered|not_covered|partially_covered"}}],
+  "relevance": "relevant|partially_relevant|not_relevant"
 }}
+
+原始问题：
+{question}
 
 参考教材内容：
 {context}
@@ -128,16 +142,18 @@ class LLMJudge:
         answer: str,
         context: str,
         key_facts: list[str],
+        question: str = "",
     ) -> JudgeResult:
-        """执行 Faithfulness + Coverage 合并评估
+        """执行 Faithfulness + Coverage + Relevance 合并评估
 
         Args:
             answer: 学生回答文本
             context: 参考教材内容
             key_facts: 期望覆盖的关键知识点列表
+            question: 原始问题文本（可选，用于相关性评估）
 
         Returns:
-            JudgeResult 包含 faithfulness, coverage_score, unknown_ratio 等指标
+            JudgeResult 包含 faithfulness, coverage_score, unknown_ratio, relevance 等指标
         """
         key_facts_text = (
             "\n".join(f"- {fact}" for fact in key_facts)
@@ -147,6 +163,7 @@ class LLMJudge:
 
         prompt = JUDGE_USER_PROMPT_TEMPLATE.format(
             key_facts=key_facts_text,
+            question=question,
             context=context,
             answer=answer,
         )
@@ -196,6 +213,8 @@ class LLMJudge:
                 faithfulness=0.0,
                 coverage_score=0.0,
                 unknown_ratio=1.0,
+                relevance=0.0,
+                relevance_label="not_relevant",
             )
 
         # 解析 claims
@@ -224,6 +243,13 @@ class LLMJudge:
                 )
             )
 
+        # 解析 relevance
+        relevance_str = data.get("relevance", "not_relevant")
+        relevance_map = {"relevant": 1.0, "partially_relevant": 0.5, "not_relevant": 0.0}
+        relevance_score = relevance_map.get(relevance_str, 0.0)
+        if relevance_str not in relevance_map:
+            relevance_str = "not_relevant"
+
         # 计算指标
         faithfulness = self._calc_faithfulness(claims)
         coverage_score = self._calc_coverage(coverage_results)
@@ -235,6 +261,8 @@ class LLMJudge:
             faithfulness=faithfulness,
             coverage_score=coverage_score,
             unknown_ratio=unknown_ratio,
+            relevance=relevance_score,
+            relevance_label=relevance_str,
         )
 
     @staticmethod
