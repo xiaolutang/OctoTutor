@@ -1,7 +1,7 @@
 {
   "version": "3.0",
   "project": "OctoTutor",
-  "active_rc": null,
+  "active_rc": "R005",
   "default_workflow": {
     "name": "XLFoundry",
     "mode": "A",
@@ -12,9 +12,10 @@
   "archived_requirement_cycles": [
     { "id": "R001", "name": "项目初始化", "archive_dir": "R001", "total_tasks": 6, "completed_at": "2026-05-20" },
     { "id": "R002", "name": "dev-sandbox-enhancement", "archive_dir": "R002", "total_tasks": 2, "completed_at": "2026-05-20" },
-    { "id": "R003", "name": "knowledge-base", "archive_dir": "R003", "total_tasks": 17, "completed_at": "2026-05-21" }
+    { "id": "R003", "name": "knowledge-base", "archive_dir": "R003", "total_tasks": 17, "completed_at": "2026-05-21" },
+    { "id": "R004", "name": "rag-dialogue", "archive_dir": "R004", "total_tasks": 12, "completed_at": "2026-05-22" }
   ],
   "rc_queue": [
-    { "id": "R004", "name": "rag-dialogue", "depends_on": "R003", "status": "analyzed", "analysis_topic": "检索优化 + AI 对话（纯后端）" }
+    { "id": "R005", "name": "chat-ui-sse", "depends_on": "R004", "status": "planned", "analysis_topic": "前端对话 UI + SSE 流式输出", "analysis_ref": "R005/analysis/2026-05-21--R005-chat-ui-sse.md", "plan_ref": "R005/feature_list.json" }
   ]
 }

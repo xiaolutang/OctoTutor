@@ -1,6 +1,6 @@
 # OctoTutor Development Summary
 
-最后更新: 2026-05-21
+最后更新: 2026-05-22
 
 ## 需求包索引
 
@@ -9,6 +9,7 @@
 | R001 | 项目初始化 | 6 | archived | 2026-05-20 |
 | R002 | dev-sandbox-enhancement | 2 | archived | 2026-05-20 |
 | R003 | knowledge-base | 17 | archived | 2026-05-21 |
+| R004 | rag-dialogue | 12 | archived | 2026-05-22 |
 
 ## 模块清单
 
@@ -24,6 +25,8 @@
 | retrieve | POST /api/retrieve + GET /api/health |
 | spot-check | 入库抽检（页码 + 内容 + 结构 + 元数据） |
 | evaluation | EvalRunner + EvalSetLoader + 分层评估指标 |
+| chat | ChatService 对话管线（混合检索 + Rerank + LLM 生成） |
+| infra | LLM Generator + Reranker + BM25Retriever 基础设施层 |
 | docker-deploy | Docker Compose 双容器 + Traefik 路由 |
 | classifiers | BlockType LLM 分类（NewAPI glm-5.1） |
 
@@ -40,8 +43,22 @@
 | CAP-rag-002 | 父子索引 Chunk + 元数据扩展 |
 | CAP-rag-003 | BlockType LLM 分类 |
 | CAP-rag-004 | 向量检索 API |
+| CAP-dialogue-001 | Context Precision 评估 |
+| CAP-dialogue-002 | BM25+RRF 混合检索 |
+| CAP-dialogue-003 | Reranker 精炼 + 降级 |
+| CAP-dialogue-004 | LLM 对话生成 + Token 截断 |
+| CAP-dialogue-007 | Faithfulness + Coverage + Relevance 三角评估 |
+| CAP-eval-001 | Relevance 相关性评估（BB010 补齐） |
 
 ## 变更记录
+
+### R004 rag-dialogue (2026-05-22)
+
+- ChatService 对话管线：向量检索 + BM25 RRF 混合检索 + Reranker 精炼（失败降级）+ LLM 生成
+- 完整评估管线扩展：Context Precision + Faithfulness + Coverage + Relevance 四维评估，200 条评估集
+- 基础设施层：LLMGenerator + DashScopeReranker + BM25Retriever（jieba + rank_bm25）
+- Architecture v3.0：domain/protocols → infra → chat 分层，Protocol 驱动依赖反转
+- 评估基线：HR@5=97.5%, Faithfulness=0.84, Relevance=0.85, Coverage=0.62
 
 ### R003 knowledge-base (2026-05-21)
 

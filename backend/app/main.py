@@ -5,8 +5,12 @@ from fastapi import FastAPI
 from app.config import settings
 from app.rag.embeddings import DashScopeEmbedding
 from app.rag.vector_store import ChromaDBStore
+from app.infra.bm25 import BM25Retriever
+from app.infra.reranker import DashScopeReranker
+from app.infra.llm import LLMGenerator
 from app.api.routes.health import router as health_router
 from app.api.routes.retrieve import router as retrieve_router
+from app.chat.router import router as chat_router
 
 
 @asynccontextmanager
@@ -26,6 +30,31 @@ async def lifespan(application: FastAPI):
     )
     application.state.embedding_service = embedding_service
 
+    # 初始化 BM25Retriever（从 ChromaDB 加载全量 chunks 构建索引）
+    bm25 = BM25Retriever()
+    chunks = store.get_all_chunks()
+    if chunks:
+        bm25.build_index(chunks)
+        print(f"[startup] BM25 index built with {len(chunks)} chunks")
+    application.state.bm25 = bm25
+
+    # 初始化 DashScope Reranker
+    reranker = DashScopeReranker(
+        api_key=settings.dashscope_api_key,
+        model=settings.rerank_model,
+    )
+    application.state.reranker = reranker
+    print(f"[startup] Reranker initialized (model={settings.rerank_model})")
+
+    # 初始化 LLM Generator
+    generator = LLMGenerator(
+        api_key=settings.newapi_api_key,
+        base_url=settings.newapi_base_url,
+        model=settings.llm_model,
+    )
+    application.state.generator = generator
+    print(f"[startup] LLM Generator initialized (model={settings.llm_model})")
+
     print(f"[startup] {settings.app_name} v{settings.app_version} started")
     yield
     print(f"[shutdown] {settings.app_name} stopped")
@@ -39,3 +68,4 @@ app = FastAPI(
 
 app.include_router(health_router)
 app.include_router(retrieve_router)
+app.include_router(chat_router)
