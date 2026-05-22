@@ -84,36 +84,43 @@ export function ChatUI() {
     [sendMessage, updateMsgAndSave],
   );
 
+  const appendAndSend = useCallback(
+    (baseMessages: Message[], questionText: string) => {
+      const userMsg: Message = {
+        id: createId(),
+        role: 'user',
+        content: questionText,
+        status: 'sending',
+        timestamp: Date.now(),
+      };
+
+      const aiMsgId = createId();
+      aiMsgIdRef.current = aiMsgId;
+
+      const aiMsg: Message = {
+        id: aiMsgId,
+        role: 'ai',
+        content: '',
+        status: 'retrieving',
+        timestamp: Date.now(),
+      };
+
+      const newMessages = [...baseMessages, userMsg, aiMsg];
+      setMessages(newMessages);
+      saveMessages(newMessages);
+
+      startSSE(questionText, aiMsgId);
+    },
+    [startSSE],
+  );
+
   const handleSend = useCallback(() => {
     const text = input.trim();
     if (!text || isStreaming || editingId !== null) return;
 
-    const userMsg: Message = {
-      id: createId(),
-      role: 'user',
-      content: text,
-      status: 'sending',
-      timestamp: Date.now(),
-    };
-
-    const aiMsgId = createId();
-    aiMsgIdRef.current = aiMsgId;
-
-    const aiMsg: Message = {
-      id: aiMsgId,
-      role: 'ai',
-      content: '',
-      status: 'retrieving',
-      timestamp: Date.now(),
-    };
-
-    const newMessages = [...messages, userMsg, aiMsg];
-    setMessages(newMessages);
+    appendAndSend(messages, text);
     setInput('');
-    saveMessages(newMessages);
-
-    startSSE(text, aiMsgId);
-  }, [input, isStreaming, editingId, messages, startSSE]);
+  }, [input, isStreaming, editingId, messages, appendAndSend]);
 
   const handleStop = useCallback(() => {
     stop();
@@ -205,35 +212,11 @@ export function ChatUI() {
         return;
       }
 
-      // 截断到该消息之前
+      // 截断到该消息之前，然后用新文本发送
       const truncatedMessages = messages.slice(0, msgIndex);
-
-      // 创建新的用户消息
-      const newUserMsg: Message = {
-        id: createId(),
-        role: 'user',
-        content: trimmed,
-        status: 'sending',
-        timestamp: Date.now(),
-      };
-
-      // 创建新的 AI 消息
-      const newAiMsgId = createId();
-      aiMsgIdRef.current = newAiMsgId;
-      const newAiMsg: Message = {
-        id: newAiMsgId,
-        role: 'ai',
-        content: '',
-        status: 'retrieving',
-        timestamp: Date.now(),
-      };
-
-      const updatedMessages = [...truncatedMessages, newUserMsg, newAiMsg];
-      setMessages(updatedMessages);
-      saveMessages(updatedMessages);
       setEditingId(null);
 
-      startSSE(trimmed, newAiMsgId);
+      appendAndSend(truncatedMessages, trimmed);
     },
     [messages, startSSE],
   );

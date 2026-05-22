@@ -774,13 +774,17 @@ describe('FB004: E-EDIT inline edit tests', () => {
       { id: 'a1', role: 'ai', content: '回答1', status: 'done', timestamp: 2 },
     ];
 
-    // 取消 = editingId 设回 null，messages 不变
-    // 模拟 handleEditCancel: setEditingId(null)
+    // 先进入编辑态
+    const editResult = simulateHandleEdit(messages, 'u1', false);
+    expect(editResult).not.toBeNull();
+    expect(editResult!.editingId).toBe('u1');
+
+    // 取消：editingId 清除，消息保持不变
     const editingIdAfterCancel: string | null = null;
     expect(editingIdAfterCancel).toBeNull();
-    // 消息应保持不变
     expect(messages).toHaveLength(2);
     expect(messages[0].content).toBe('问题1');
+    expect(messages[1].content).toBe('回答1');
   });
 
   // E-EDIT-04: 确认时空文本 → 视为取消
@@ -844,14 +848,21 @@ describe('FB004: E-EDIT inline edit tests', () => {
 
   // E-EDIT-07: Escape 键取消编辑（逻辑验证: editingId 清除）
   it('E-EDIT-07: should cancel edit on Escape key', () => {
-    // Escape 触发 handleEditCancel → setEditingId(null)
-    // 纯逻辑验证: editingId 从有值变为 null
-    let editingId: string | null = 'u1';
-    expect(editingId).toBe('u1');
+    const messages: Message[] = [
+      { id: 'u1', role: 'user', content: '问题1', status: 'done', timestamp: 1 },
+      { id: 'a1', role: 'ai', content: '回答1', status: 'done', timestamp: 2 },
+    ];
 
-    // 模拟 Escape → handleEditCancel
-    editingId = null;
-    expect(editingId).toBeNull();
+    // 进入编辑态
+    const editResult = simulateHandleEdit(messages, 'u1', false);
+    expect(editResult!.editingId).toBe('u1');
+
+    // Escape 触发 handleEditCancel → setEditingId(null)
+    const editingIdAfterEscape: string | null = null;
+    expect(editingIdAfterEscape).toBeNull();
+    // 消息保持不变
+    expect(messages).toHaveLength(2);
+    expect(messages[0].content).toBe('问题1');
   });
 
   // E-EDIT-08: 确认后旧消息已从列表删除（localStorage 已更新）

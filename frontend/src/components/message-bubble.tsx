@@ -26,6 +26,9 @@ const statusLabels: Record<string, string> = {
   error: '',
 };
 
+const remarkPlugins = [remarkMath];
+const rehypePlugins = [[rehypeKatex, { throwOnError: false }]];
+
 function EditArea({
   initialContent,
   onConfirm,
@@ -155,8 +158,8 @@ export function MessageBubble({
                   <div className="whitespace-pre-wrap">{message.content}</div>
                 ) : (
                   <ReactMarkdown
-                    remarkPlugins={[remarkMath]}
-                    rehypePlugins={[[rehypeKatex, { throwOnError: false }]]}
+                    remarkPlugins={remarkPlugins}
+                    rehypePlugins={rehypePlugins}
                   >
                     {message.content}
                   </ReactMarkdown>
