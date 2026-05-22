@@ -16,6 +16,7 @@ export function ChatUI() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [mounted, setMounted] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const { sendMessage, stop, isStreaming } = useChatStream();
   const aiMsgIdRef = useRef<string>('');
 
@@ -85,7 +86,7 @@ export function ChatUI() {
 
   const handleSend = useCallback(() => {
     const text = input.trim();
-    if (!text || isStreaming) return;
+    if (!text || isStreaming || editingId !== null) return;
 
     const userMsg: Message = {
       id: createId(),
@@ -112,7 +113,7 @@ export function ChatUI() {
     saveMessages(newMessages);
 
     startSSE(text, aiMsgId);
-  }, [input, isStreaming, messages, startSSE]);
+  }, [input, isStreaming, editingId, messages, startSSE]);
 
   const handleStop = useCallback(() => {
     stop();
@@ -169,7 +170,7 @@ export function ChatUI() {
   );
 
   /**
-   * 编辑用户消息：删除该消息及其后续所有消息，原文放回输入框
+   * 编辑用户消息：进入原地编辑模式
    */
   const handleEdit = useCallback(
     (messageId: string) => {
@@ -181,16 +182,68 @@ export function ChatUI() {
       const userMsg = messages[msgIndex];
       if (userMsg.role !== 'user') return;
 
-      // 保留该消息之前的所有消息
-      const remainingMessages = messages.slice(0, msgIndex);
-      setMessages(remainingMessages);
-      saveMessages(remainingMessages);
-
-      // 原文放回输入框
-      setInput(userMsg.content);
+      setEditingId(messageId);
     },
     [isStreaming, messages],
   );
+
+  /**
+   * 确认编辑：截断消息 + 重新发送
+   */
+  const handleEditConfirm = useCallback(
+    (messageId: string, newContent: string) => {
+      const trimmed = newContent.trim();
+      if (!trimmed) {
+        // 空文本视为取消
+        setEditingId(null);
+        return;
+      }
+
+      const msgIndex = messages.findIndex((m) => m.id === messageId);
+      if (msgIndex < 0) {
+        setEditingId(null);
+        return;
+      }
+
+      // 截断到该消息之前
+      const truncatedMessages = messages.slice(0, msgIndex);
+
+      // 创建新的用户消息
+      const newUserMsg: Message = {
+        id: createId(),
+        role: 'user',
+        content: trimmed,
+        status: 'sending',
+        timestamp: Date.now(),
+      };
+
+      // 创建新的 AI 消息
+      const newAiMsgId = createId();
+      aiMsgIdRef.current = newAiMsgId;
+      const newAiMsg: Message = {
+        id: newAiMsgId,
+        role: 'ai',
+        content: '',
+        status: 'retrieving',
+        timestamp: Date.now(),
+      };
+
+      const updatedMessages = [...truncatedMessages, newUserMsg, newAiMsg];
+      setMessages(updatedMessages);
+      saveMessages(updatedMessages);
+      setEditingId(null);
+
+      startSSE(trimmed, newAiMsgId);
+    },
+    [messages, startSSE],
+  );
+
+  /**
+   * 取消编辑
+   */
+  const handleEditCancel = useCallback(() => {
+    setEditingId(null);
+  }, []);
 
   if (!mounted) {
     return (
@@ -213,8 +266,12 @@ export function ChatUI() {
             <MessageBubble
               key={msg.id}
               message={msg}
-              onRegenerate={handleRegenerate}
+              isStreaming={isStreaming}
+              isEditing={editingId === msg.id}
               onEdit={handleEdit}
+              onEditConfirm={handleEditConfirm}
+              onEditCancel={handleEditCancel}
+              onRegenerate={handleRegenerate}
             />
           ))
         )}
@@ -227,6 +284,7 @@ export function ChatUI() {
         onSend={handleSend}
         onStop={handleStop}
         isStreaming={isStreaming}
+        disabled={isStreaming || editingId !== null}
       />
     </div>
   );

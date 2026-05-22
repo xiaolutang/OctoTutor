@@ -56,27 +56,13 @@ class LLMGenerator:
             - answer: LLM 生成的回答文本
             - sources: 所有 context chunks 的引用来源列表
         """
-        # 1. 构建 context（带编号标记）
-        if context_chunks:
-            context_text = self._build_numbered_context(context_chunks)
-            messages = [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": f"参考教材内容：\n{context_text}\n\n学生问题：{query}",
-                },
-            ]
-        else:
-            messages = [
-                {"role": "system", "content": MATH_JUDGE_PROMPT},
-                {"role": "user", "content": query},
-            ]
+        messages = self._build_messages(query, context_chunks)
         response = self._client.chat.completions.create(
             model=self._model, messages=messages
         )
         answer = response.choices[0].message.content
 
-        # 3. 从 context_chunks metadata 构建 sources（非从 LLM 输出解析）
+        # 从 context_chunks metadata 构建 sources（非从 LLM 输出解析）
         sources = [
             SourceReference(
                 chunk_id=chunk.chunk_id,
@@ -101,21 +87,7 @@ class LLMGenerator:
         Yields:
             LLM 生成的 token 字符串
         """
-        if context_chunks:
-            context_text = self._build_numbered_context(context_chunks)
-            messages = [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": f"参考教材内容：\n{context_text}\n\n学生问题：{query}",
-                },
-            ]
-        else:
-            messages = [
-                {"role": "system", "content": MATH_JUDGE_PROMPT},
-                {"role": "user", "content": query},
-            ]
-
+        messages = self._build_messages(query, context_chunks)
         stream = await self._async_client.chat.completions.create(
             model=self._model, messages=messages, stream=True
         )
@@ -147,3 +119,21 @@ class LLMGenerator:
                 f"{chunk.text}"
             )
         return "\n\n".join(parts)
+
+    def _build_messages(
+        self, query: str, context_chunks: list[QueryResult]
+    ) -> list[dict[str, str]]:
+        """根据是否有 context 构建不同的 messages 列表"""
+        if context_chunks:
+            context_text = self._build_numbered_context(context_chunks)
+            return [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": f"参考教材内容：\n{context_text}\n\n学生问题：{query}",
+                },
+            ]
+        return [
+            {"role": "system", "content": MATH_JUDGE_PROMPT},
+            {"role": "user", "content": query},
+        ]

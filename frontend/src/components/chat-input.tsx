@@ -33,7 +33,7 @@ export function ChatInput({
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if (!isStreaming && value.trim()) {
+      if (!isStreaming && !disabled && value.trim()) {
         onSend();
       }
     }

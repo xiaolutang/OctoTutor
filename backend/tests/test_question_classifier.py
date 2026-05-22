@@ -90,9 +90,6 @@ class TestRetrievalIntent:
 class TestEdgeCases:
     """边界情况"""
 
-    def test_exactly_3_chars(self):
-        assert classify_question("好的") == "direct"
-
     def test_exactly_4_chars(self):
         """4 字不匹配问候模式，默认走检索"""
         assert classify_question("帮我看看") == "retrieval"

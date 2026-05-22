@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from typing import Protocol
 
 from app.domain.models import SourceReference
@@ -27,3 +28,5 @@ class Generator(Protocol):
     """
 
     def generate(self, query: str, context_chunks: list[QueryResult]) -> tuple[str, list[SourceReference]]: ...
+
+    async def generate_stream(self, query: str, context_chunks: list[QueryResult]) -> AsyncIterator[str]: ...

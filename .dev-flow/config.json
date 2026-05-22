@@ -16,6 +16,8 @@
     { "id": "R004", "name": "rag-dialogue", "archive_dir": "R004", "total_tasks": 12, "completed_at": "2026-05-22" }
   ],
   "rc_queue": [
-    { "id": "R005", "name": "chat-ui-sse", "depends_on": "R004", "status": "planned", "analysis_topic": "前端对话 UI + SSE 流式输出", "analysis_ref": "R005/analysis/2026-05-21--R005-chat-ui-sse.md", "plan_ref": "R005/feature_list.json" }
+    { "id": "R005", "name": "chat-ui-sse", "depends_on": "R004", "status": "planned", "analysis_topic": "前端对话 UI + SSE 流式输出", "analysis_ref": "R005/analysis/2026-05-21--R005-chat-ui-sse.md", "plan_ref": "R005/feature_list.json" },
+    { "id": "R006", "name": "auth-integration", "depends_on": "R005", "status": "planned", "analysis_topic": "用户认证打通", "analysis_ref": "R006/analysis/2026-05-22--R006-auth-integration.md", "plan_ref": "R006/feature_list.json" },
+    { "id": "R007", "name": "message-persistence", "depends_on": "R006", "status": "queued", "analysis_topic": "消息持久化 + 对话管理" }
   ]
 }

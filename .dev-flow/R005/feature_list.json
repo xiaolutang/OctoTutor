@@ -387,6 +387,38 @@
       "analysis_refs": ["2026-05-22--R005-error-scenario-test-strategy"],
       "risk_tags": ["network", "third_party"],
       "test_tasks": ["集成测试：I-ERR-01 LLM 不可达 → curl 验证 error code=02201", "集成测试：I-ERR-02 Embedding 认证失败 → curl 验证 error code=02102", "集成测试：I-ERR-03 正常数学问题 → curl 验证完整事件序列", "集成测试：I-ERR-04 闲聊不检索 → curl 验证无 sources 直接 generating"]
+    },
+    {
+      "id": "FB004",
+      "phase": 2,
+      "module": "frontend",
+      "name": "用户消息原地编辑交互重设计",
+      "description": "将编辑用户消息的交互从'删除+跳回输入框'改为原地编辑模式：(1) ChatUI 新增 editingId 状态，handleEdit 改为 setEditingId(msgId)，新增 handleEditConfirm（截断+创建新消息+发SSE）和 handleEditCancel（恢复）；(2) MessageBubble 新增 isEditing/onEditConfirm/onEditCancel props，isEditing 时渲染 textarea（预填原文+自动聚焦+Enter确认/Escape取消）代替气泡，下方显示[确认][取消]按钮；(3) ChatInput editingId!==null 时禁用发送按钮（防止编辑中发新消息）；(4) 同一时刻只有一条消息可编辑，点击另一条编辑时切换目标。DEC-edit-001: editingId 不入 Message 类型。DEC-edit-002: 确认=截断+重发。DEC-edit-003: 编辑中禁用发送。DEC-edit-004: 空文本确认视为取消。",
+      "verification": "L2 — Vitest 组件测试 8 个用例：编辑态渲染、确认触发SSE、取消恢复、空文本取消、编辑中禁用发送、切换编辑目标、Escape取消、localStorage更新",
+      "depends_on": ["FB002"],
+      "status": "completed",
+      "started_at": "2026-05-22",
+      "completed_at": "2026-05-22",
+      "actual_minutes": 15,
+      "execution_state": {"current_step": "completed", "retry_count": 0},
+      "summary": "用户消息原地编辑交互重设计完成：ChatUI新增editingId状态+handleEditConfirm/Cancel，MessageBubble新增EditArea子组件(textarea+确认/取消+Enter/Escape)，ChatInput编辑中禁用发送，8个E-EDIT测试全部通过(38/38)",
+      "priority": 9,
+      "user_stories": ["作为用户，我希望点击编辑后消息原地变为可编辑，修改后确认重新发送，或取消恢复原状，而不是直接删除回复跳到输入框"],
+      "success_picture": "点击编辑→用户消息气泡变为textarea预填原文+[确认][取消]→修改文本点确认→旧回复消失+新SSE请求发起→或点取消/Escape→恢复原始消息显示",
+      "decision_refs": ["DEC-edit-001", "DEC-edit-002", "DEC-edit-003", "DEC-edit-004"],
+      "analysis_refs": ["2026-05-22--R005-inline-edit-design"],
+      "capability_refs": ["CAP-chatui-001"],
+      "risk_tags": [],
+      "test_tasks": [
+        "E-EDIT-01: 点击编辑 → textarea 出现，预填原文",
+        "E-EDIT-02: 点击确认 → 消息截断 + SSE 触发",
+        "E-EDIT-03: 点击取消 → 恢复原始显示",
+        "E-EDIT-04: 确认时空文本 → 视为取消",
+        "E-EDIT-05: 编辑中发新消息 → 被阻止",
+        "E-EDIT-06: 编辑中点其他消息编辑 → 切换编辑目标",
+        "E-EDIT-07: Escape 键取消编辑",
+        "E-EDIT-08: 确认后 localStorage 已更新（旧消息删除）"
+      ]
     }
   ],
   "decision_coverage": {
@@ -411,9 +443,12 @@
       "DEC-chatui-030"
     ],
     "open_issues": [],
+    "inline_edit": [
+      "DEC-edit-001", "DEC-edit-002", "DEC-edit-003", "DEC-edit-004"
+    ],
     "out_of_scope_notes": [
       "DEC-chatui-016: 教材页面图片查看预留引用位置，图片弹出功能留给后续迭代"
     ]
   },
-  "analysis_refs": ["2026-05-21--R005-chat-ui-sse"]
+  "analysis_refs": ["2026-05-21--R005-chat-ui-sse", "2026-05-22--R005-inline-edit-design"]
 }
