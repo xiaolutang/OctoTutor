@@ -10,6 +10,7 @@
 | R002 | dev-sandbox-enhancement | 2 | archived | 2026-05-20 |
 | R003 | knowledge-base | 17 | archived | 2026-05-21 |
 | R004 | rag-dialogue | 12 | archived | 2026-05-22 |
+| R005 | chat-ui-sse | 14 | archived | 2026-05-22 |
 
 ## 模块清单
 
@@ -29,6 +30,8 @@
 | infra | LLM Generator + Reranker + BM25Retriever 基础设施层 |
 | docker-deploy | Docker Compose 双容器 + Traefik 路由 |
 | classifiers | BlockType LLM 分类（NewAPI glm-5.1） |
+| chat-ui | Chat UI 组件（ChatUI + MessageBubble + ChatInput + useChatStream） |
+| sse | SSE 流式端点 + 事件序列化 + 断线检测 |
 
 ## 能力清单
 
@@ -49,8 +52,20 @@
 | CAP-dialogue-004 | LLM 对话生成 + Token 截断 |
 | CAP-dialogue-007 | Faithfulness + Coverage + Relevance 三角评估 |
 | CAP-eval-001 | Relevance 相关性评估（BB010 补齐） |
+| CAP-chatui-001 | SSE 流式回答（逐 token 推送 + 状态提示） |
+| CAP-chatui-002 | 检索无结果兜底回答 |
+| CAP-chatui-003 | 流式错误恢复（撤回 + 重试） |
+| CAP-chatui-004 | 非流式 API 兼容 |
 
 ## 变更记录
+
+### R005 chat-ui-sse (2026-05-22)
+
+- 后端 SSE 流式端点：AsyncOpenAI 双客户端 + 事件序列化 + 断线检测 + 闲聊分类跳过检索
+- 前端 Chat UI 完整交互：发送 + 流式显示 + 停止 + 来源卡片 + KaTeX 数学公式 + 消息持久化
+- 用户消息原地编辑：textarea + 确认/取消 + 截断重发（DEC-edit-001~004）
+- 测试覆盖：后端/前端 L1 异常路径 + Docker SSE 集成测试，38 个前端测试全部通过
+- 简化收敛：_build_messages 提取 + appendAndSend 辅助函数 + Protocol 补齐 generate_stream
 
 ### R004 rag-dialogue (2026-05-22)
 

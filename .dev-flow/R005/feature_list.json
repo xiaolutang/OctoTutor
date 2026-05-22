@@ -2,7 +2,7 @@
   "version": "3.0",
   "rc_id": "R005",
   "name": "chat-ui-sse",
-  "status": "active",
+  "status": "archived",
   "branch": "feat/R005-chat-ui-sse",
   "workflow": {
     "mode": "A",
@@ -18,7 +18,12 @@
         "cd frontend && npx vitest run"
       ],
       "mock_policy": "mock_allowed_for_unit_only",
-      "required_for": ["L3", "L4", "network", "third_party"],
+      "required_for": [
+        "L3",
+        "L4",
+        "network",
+        "third_party"
+      ],
       "confirmed_by_user": false,
       "notes": "R005 集成测试需 Docker 环境：真实 LLM + DashScope + ChromaDB。E2E 用 Playwright 验证完整对话流程。回归验证 /api/chat 非流式端点仍正常"
     }
@@ -28,27 +33,48 @@
       "capability_id": "CAP-chatui-001",
       "name": "SSE 流式回答",
       "must_plan": true,
-      "covered_by": ["BF001", "BB001", "BB002", "BB003", "BB004", "FF001", "FF002", "FB001", "FB003"]
+      "covered_by": [
+        "BF001",
+        "BB001",
+        "BB002",
+        "BB003",
+        "BB004",
+        "FF001",
+        "FF002",
+        "FB001",
+        "FB003"
+      ]
     },
     {
       "capability_id": "CAP-chatui-002",
       "name": "检索无结果兜底回答",
       "must_plan": true,
-      "covered_by": ["BB002", "BB004", "FB003"],
+      "covered_by": [
+        "BB002",
+        "BB004",
+        "FB003"
+      ],
       "journey_acceptance": "entry_action: 用户输入无匹配的问题, actual_endpoint: POST /api/chat/stream, streaming_token_received: LLM 兜底回答 token, sources_displayed: 无来源（显示'未找到教材引用'）, user_visible_success: LLM 正常回答, failure_path_result: 仅检索服务异常才 error event"
     },
     {
       "capability_id": "CAP-chatui-003",
       "name": "流式错误恢复",
       "must_plan": true,
-      "covered_by": ["BF001", "FF002", "FB001", "FB003"],
+      "covered_by": [
+        "BF001",
+        "FF002",
+        "FB001",
+        "FB003"
+      ],
       "journey_acceptance": "entry_action: 网络中断或 LLM 失败, actual_endpoint: POST /api/chat/stream, streaming_token_received: 可能已部分接收, sources_displayed: N/A, user_visible_success: 首事件前失败撤回输入框/首事件后失败保留已有内容+错误提示, failure_path_result: error event 或连接断开, error_recovery: 重试按钮重新发起请求"
     },
     {
       "capability_id": "CAP-chatui-004",
       "name": "非流式 API 兼容",
       "must_plan": false,
-      "covered_by": ["BB002"]
+      "covered_by": [
+        "BB002"
+      ]
     }
   ],
   "features": [
@@ -67,16 +93,35 @@
       "evidence_file": ".dev-flow/R005/evidence/R005_BF001.md",
       "commit": "bc1ad74",
       "summary": "schemas.py 新增 StreamEvent + StatusPayload；新建 errors.py 含 ChatErrorCode(8个MMPPN编码) + ErrorDef + ERROR_REGISTRY + make_error()；service.py 新增 RetrieveResult；19 个单元测试全部通过",
-      "execution_state": {"current_step": "completed", "retry_count": 0},
+      "execution_state": {
+        "current_step": "completed",
+        "retry_count": 0
+      },
       "priority": 1,
-      "developer_stories": ["作为后端开发者，我希望 SSE 事件模型和错误码体系在初始化阶段定义完成，以便 SSE 路由和服务层可基于稳定类型构建"],
+      "developer_stories": [
+        "作为后端开发者，我希望 SSE 事件模型和错误码体系在初始化阶段定义完成，以便 SSE 路由和服务层可基于稳定类型构建"
+      ],
       "technical_success_picture": "StreamEvent/StatusPayload 数据类可 import，ChatErrorCode 枚举 8 个错误码值均为字符串（避免前导零问题），ERROR_REGISTRY 映射完整，RetrieveResult(chunks=[], degraded=True, degradation_reason='...') 可正常构造",
-      "decision_refs": ["DEC-chatui-025", "DEC-chatui-030"],
-      "analysis_refs": ["2026-05-21--R005-chat-ui-sse"],
-      "contract_refs": ["new:sse-event-protocol"],
-      "capability_refs": ["CAP-chatui-001", "CAP-chatui-003"],
+      "decision_refs": [
+        "DEC-chatui-025",
+        "DEC-chatui-030"
+      ],
+      "analysis_refs": [
+        "2026-05-21--R005-chat-ui-sse"
+      ],
+      "contract_refs": [
+        "new:sse-event-protocol"
+      ],
+      "capability_refs": [
+        "CAP-chatui-001",
+        "CAP-chatui-003"
+      ],
       "risk_tags": [],
-      "test_tasks": ["单元测试：ChatErrorCode 枚举值验证", "单元测试：make_error() 返回格式验证", "单元测试：RetrieveResult 构造和默认值"]
+      "test_tasks": [
+        "单元测试：ChatErrorCode 枚举值验证",
+        "单元测试：make_error() 返回格式验证",
+        "单元测试：RetrieveResult 构造和默认值"
+      ]
     },
     {
       "id": "BB001",
@@ -93,16 +138,34 @@
       "evidence_file": ".dev-flow/R005/evidence/R005_BB001.md",
       "commit": "d987eb6",
       "summary": "LLMGenerator 新增 AsyncOpenAI 异步客户端 + generate_stream() 异步流式方法，空 chunks 用 MATH_JUDGE_PROMPT 兜底，async with 确保资源释放，6 个单元测试全部通过",
-      "execution_state": {"current_step": "completed", "retry_count": 0},
+      "execution_state": {
+        "current_step": "completed",
+        "retry_count": 0
+      },
       "priority": 1,
-      "user_stories": ["作为用户，我希望 AI 回答能够流式显示，以便实时看到解题过程而不需要等待完整回答"],
+      "user_stories": [
+        "作为用户，我希望 AI 回答能够流式显示，以便实时看到解题过程而不需要等待完整回答"
+      ],
       "success_picture": "LLMGenerator.generate_stream() 被调用后逐 token 产出回答，有上下文时带教材引用，无上下文时用数学判断模式；async with 确保流资源释放",
-      "decision_refs": ["DEC-chatui-023", "DEC-chatui-015"],
-      "analysis_refs": ["2026-05-21--R005-chat-ui-sse"],
+      "decision_refs": [
+        "DEC-chatui-023",
+        "DEC-chatui-015"
+      ],
+      "analysis_refs": [
+        "2026-05-21--R005-chat-ui-sse"
+      ],
       "contract_refs": [],
-      "capability_refs": ["CAP-chatui-001"],
-      "risk_tags": ["third_party"],
-      "test_tasks": ["单元测试：mock AsyncOpenAI，验证 token 逐个 yield", "单元测试：空 chunks 使用数学判断 prompt", "单元测试：async with 异常时资源释放"]
+      "capability_refs": [
+        "CAP-chatui-001"
+      ],
+      "risk_tags": [
+        "third_party"
+      ],
+      "test_tasks": [
+        "单元测试：mock AsyncOpenAI，验证 token 逐个 yield",
+        "单元测试：空 chunks 使用数学判断 prompt",
+        "单元测试：async with 异常时资源释放"
+      ]
     },
     {
       "id": "BB002",
@@ -111,7 +174,9 @@
       "name": "ChatService 检索重构 + stream_chat() 流式方法",
       "description": "重构 ChatService：(1) 抽取 _retrieve(question, top_k) -> RetrieveResult 私有方法，包含完整检索管线（Embed→Vector→Threshold→BM25→RRF→Rerank→Truncate），Reranker 失败时降级返回 degraded=True；(2) handle_chat() 改为调用 _retrieve()，空 chunks 时保持 R004 契约返回 404；(3) 新增 async stream_chat(question, top_k) -> AsyncIterator[StreamEvent]，空 chunks 时 LLM 兜底回答（与 handle_chat 行为不同）；(4) 检索阶段用 asyncio.to_thread 不阻塞事件循环；(5) 按阶段 try/except 捕获异常 yield error event。",
       "verification": "L2 — mock _embedding/_vector_store/_bm25/_reranker/_generator，验证 stream_chat() 产出正确事件序列；验证 _retrieve() Reranker 异常时返回 degraded=True；验证 handle_chat 空检索仍 404",
-      "depends_on": ["BB001"],
+      "depends_on": [
+        "BB001"
+      ],
       "status": "completed",
       "started_at": "2026-05-22",
       "completed_at": "2026-05-22",
@@ -119,17 +184,49 @@
       "evidence_file": ".dev-flow/R005/evidence/R005_BB002.md",
       "commit": "01ff7cc",
       "summary": "ChatService 重构：抽取 _retrieve() + handle_chat 调用重构 + 新增 stream_chat() 异步流式方法（asyncio.to_thread + 按阶段 yield StreamEvent + 完整错误分类），7 个新测试 + 16 个原测试全部通过",
-      "execution_state": {"current_step": "completed", "retry_count": 0},
+      "execution_state": {
+        "current_step": "completed",
+        "retry_count": 0
+      },
       "priority": 2,
-      "user_stories": ["作为用户，我希望发送问题后看到分阶段状态提示（检索中/生成中）和流式回答，以便知道系统在做什么"],
+      "user_stories": [
+        "作为用户，我希望发送问题后看到分阶段状态提示（检索中/生成中）和流式回答，以便知道系统在做什么"
+      ],
       "success_picture": "stream_chat() 按序 yield status(retrieving) → sources? → status(generating) → token×N → done；检索异常 yield error event；Reranker 失败降级继续；空检索 LLM 兜底无 sources",
-      "decision_refs": ["DEC-chatui-004", "DEC-chatui-006", "DEC-chatui-007", "DEC-chatui-024", "DEC-chatui-011", "DEC-chatui-028", "DEC-chatui-029", "DEC-chatui-031", "DEC-chatui-039"],
-      "analysis_refs": ["2026-05-21--R005-chat-ui-sse"],
-      "contract_refs": ["new:sse-event-protocol"],
-      "capability_refs": ["CAP-chatui-001", "CAP-chatui-002"],
-      "risk_tags": ["network", "third_party"],
+      "decision_refs": [
+        "DEC-chatui-004",
+        "DEC-chatui-006",
+        "DEC-chatui-007",
+        "DEC-chatui-024",
+        "DEC-chatui-011",
+        "DEC-chatui-028",
+        "DEC-chatui-029",
+        "DEC-chatui-031",
+        "DEC-chatui-039"
+      ],
+      "analysis_refs": [
+        "2026-05-21--R005-chat-ui-sse"
+      ],
+      "contract_refs": [
+        "new:sse-event-protocol"
+      ],
+      "capability_refs": [
+        "CAP-chatui-001",
+        "CAP-chatui-002"
+      ],
+      "risk_tags": [
+        "network",
+        "third_party"
+      ],
       "journey_acceptance": "entry_action: 用户输入问题点击发送, actual_endpoint: POST /api/chat/stream, streaming_token_received: 前端接收到 token event, sources_displayed: 来源卡片展示, user_visible_success: 回答完整显示, failure_path_result: error event + 重试按钮",
-      "test_tasks": ["单元测试：mock 检索组件，验证正常流程事件序列", "单元测试：检索异常 → error event", "单元测试：Reranker 失败 → degraded=True 继续流程", "单元测试：空检索 → 无 sources event + LLM 兜底 token", "单元测试：LLM 空响应 → error event", "单元测试：handle_chat 空检索 → 404 保持不变"]
+      "test_tasks": [
+        "单元测试：mock 检索组件，验证正常流程事件序列",
+        "单元测试：检索异常 → error event",
+        "单元测试：Reranker 失败 → degraded=True 继续流程",
+        "单元测试：空检索 → 无 sources event + LLM 兜底 token",
+        "单元测试：LLM 空响应 → error event",
+        "单元测试：handle_chat 空检索 → 404 保持不变"
+      ]
     },
     {
       "id": "BB003",
@@ -138,7 +235,10 @@
       "name": "SSE 路由 + 事件序列化 + 断线检测 + 路由注册 + architecture.md 更新",
       "description": "新建 stream_router.py：(1) POST /api/chat/stream SSE 端点，接收 ChatRequest，注入 ChatService；(2) event_generator() async generator 遍历 service.stream_chat()，按事件类型序列化（model_dump/asdict/list 多类型处理），格式化为 SSE 文本；(3) 每轮迭代检查 http_request.is_disconnected()，断线则 break；(4) 外层 try/except 兜底 yield INTERNAL_ERROR；(5) main.py 注册 include_router(stream_router)；(6) 更新 architecture.md：新增 SSE 入口到系统拓扑、新增关键决策、更新 API 兼容不变量（非流式 /api/chat + 流式 /api/chat/stream）、新增 SSE 不变量和禁止模式。",
       "verification": "L3 — pytest + TestClient，POST /api/chat/stream 返回 text/event-stream，验证事件格式和顺序；architecture.md 更新覆盖方案文档中 architecture_md_updates 所有条目",
-      "depends_on": ["BF001", "BB002"],
+      "depends_on": [
+        "BF001",
+        "BB002"
+      ],
       "status": "completed",
       "started_at": "2026-05-22",
       "completed_at": "2026-05-22",
@@ -146,18 +246,42 @@
       "evidence_file": ".dev-flow/R005/evidence/R005_BB003.md",
       "commit": "5d24d3f",
       "summary": "SSE 流式路由完成：POST /api/chat/stream 端点 + 5 种事件序列化 + 断线检测 + 兜底异常 + main.py 注册 + architecture.md 更新 7 处，5 组集成测试全部通过",
-      "execution_state": {"current_step": "completed", "retry_count": 0},
+      "execution_state": {
+        "current_step": "completed",
+        "retry_count": 0
+      },
       "priority": 2,
-      "user_stories": ["作为用户，我希望流式回答过程中可以随时停止，停止后不会产生错误提示，且原有非流式接口不受影响"],
+      "user_stories": [
+        "作为用户，我希望流式回答过程中可以随时停止，停止后不会产生错误提示，且原有非流式接口不受影响"
+      ],
       "success_picture": "POST /api/chat/stream 返回 SSE 事件流，5 种事件类型格式正确，断线检测有效；POST /api/chat 非流式仍正常工作（回归）；architecture.md 已更新包含 SSE 入口和相关约束",
-      "decision_refs": ["DEC-chatui-001", "DEC-chatui-002", "DEC-chatui-026", "DEC-chatui-027"],
-      "analysis_refs": ["2026-05-21--R005-chat-ui-sse"],
-      "contract_refs": ["new:sse-event-protocol"],
-      "capability_refs": ["CAP-chatui-001"],
-      "risk_tags": ["network"],
+      "decision_refs": [
+        "DEC-chatui-001",
+        "DEC-chatui-002",
+        "DEC-chatui-026",
+        "DEC-chatui-027"
+      ],
+      "analysis_refs": [
+        "2026-05-21--R005-chat-ui-sse"
+      ],
+      "contract_refs": [
+        "new:sse-event-protocol"
+      ],
+      "capability_refs": [
+        "CAP-chatui-001"
+      ],
+      "risk_tags": [
+        "network"
+      ],
       "journey_acceptance": "entry_action: POST SSE 连接建立, actual_endpoint: POST /api/chat/stream, streaming_token_received: SSE token event 格式正确, user_visible_success: 完整事件流输出, failure_path_result: error event 或断线静默终止",
       "planning_notes": "本任务同时负责更新 architecture.md（按方案文档 architecture_md_updates 清单），因为 architecture 更新与 SSE 路由注册在同一批次完成",
-      "test_tasks": ["集成测试：mock ChatService，验证 SSE 响应格式", "集成测试：验证 5 种事件类型序列化正确", "集成测试：验证断线检测 break 不触发 error event", "集成测试：验证 Router 层兜底捕获异常", "回归测试：POST /api/chat 非流式接口仍正常"]
+      "test_tasks": [
+        "集成测试：mock ChatService，验证 SSE 响应格式",
+        "集成测试：验证 5 种事件类型序列化正确",
+        "集成测试：验证断线检测 break 不触发 error event",
+        "集成测试：验证 Router 层兜底捕获异常",
+        "回归测试：POST /api/chat 非流式接口仍正常"
+      ]
     },
     {
       "id": "BB004",
@@ -166,26 +290,55 @@
       "name": "后端 SSE 集成验证 — Docker 环境全链路测试",
       "description": "在本地 Docker 环境中对后端 SSE 端点进行集成验证，使用真实组件（ChatService + ChromaDB + DashScope + LLM），不 mock 内部模块。",
       "verification": "L3 — Docker 环境集成测试",
-      "depends_on": ["BB003"],
+      "depends_on": [
+        "BB003"
+      ],
       "status": "completed",
       "started_at": "2026-05-22",
       "completed_at": "2026-05-22",
-      "execution_state": {"current_step": "completed", "retry_count": 0},
+      "execution_state": {
+        "current_step": "completed",
+        "retry_count": 0
+      },
       "evidence_file": ".dev-flow/R005/evidence/R005_BB004.md",
       "commit": "pending",
       "summary": "Docker 后端 SSE 集成验证通过：镜像重建 + ChromaDB 数据拷贝(1254 docs) + 5 种 SSE 事件类型通过 Traefik 透传验证 + 健康检查通过 + deploy.sh --backend-only 优化",
       "execution_notes": "修复了 docker-compose.local.yml 缺少 NewAPI 环境变量的问题，新增 host.docker.internal 地址映射。优化 deploy.sh --backend-only 支持只重启后端容器。",
       "priority": 3,
-      "user_stories": ["作为后端开发者，我希望 SSE 端点在真实 Docker 环境中完成全链路验证，以便确认与 ChromaDB/DashScope/LLM 的集成无误"],
+      "user_stories": [
+        "作为后端开发者，我希望 SSE 端点在真实 Docker 环境中完成全链路验证，以便确认与 ChromaDB/DashScope/LLM 的集成无误"
+      ],
       "success_picture": "deploy/deploy.sh local --backend-only 构建并启动后端容器 → 健康检查通过 → curl 正常流程验证完整事件序列（status→sources→status→token×N→done）→ 检索无结果验证无 sources + LLM 兜底 → 断线验证后端无 error 堆栈 → POST /api/chat 非流式回归通过",
-      "decision_refs": ["DEC-chatui-029", "DEC-chatui-031"],
-      "analysis_refs": ["2026-05-21--R005-chat-ui-sse"],
-      "contract_refs": ["new:sse-event-protocol"],
-      "capability_refs": ["CAP-chatui-001", "CAP-chatui-002"],
-      "risk_tags": ["network", "third_party"],
+      "decision_refs": [
+        "DEC-chatui-029",
+        "DEC-chatui-031"
+      ],
+      "analysis_refs": [
+        "2026-05-21--R005-chat-ui-sse"
+      ],
+      "contract_refs": [
+        "new:sse-event-protocol"
+      ],
+      "capability_refs": [
+        "CAP-chatui-001",
+        "CAP-chatui-002"
+      ],
+      "risk_tags": [
+        "network",
+        "third_party"
+      ],
       "journey_acceptance": "entry_action: deploy/deploy.sh local --backend-only 构建并启动后端 Docker 容器, actual_endpoint: POST /api/chat/stream (SSE), health_check: GET /api/health 返回 healthy, streaming_token_received: curl 验证 status→sources→status→token×N→done 完整事件序列, sources_displayed: 验证 sources event 包含 book/section/page_start/page_end, user_visible_success: 7 条硬性 curl 测试全部通过 + POST /api/chat 非流式回归, failure_path_result: 断线后端无 error 堆栈, no_result_fallback: 检索无结果 → 无 sources event + LLM 兜底 token",
       "planning_notes": "集成测试在本地 Docker 环境执行，使用 deploy/deploy.sh local --backend-only 标准化发布流程。前置条件：auth-center 已运行（cd ~/project/xlfoundryTest && ./deploy/deploy.sh local）。需要真实 API 凭证（LLM + DashScope）。观察项（不阻断）：LLM 故障/超时场景依赖外部服务状态可能无法稳定复现；Reranker 降级场景依赖真实 Reranker 状态，degraded 字段作为观察项",
-      "test_tasks": ["部署验证：deploy/deploy.sh local --backend-only 构建成功", "部署验证：GET /api/health 返回 healthy", "集成测试 #1（正常流程）：curl POST /api/chat/stream → 验证 status→sources→status→token×N→done 事件序列完整", "集成测试 #2（检索无结果）：输入无匹配问题 → 验证无 sources event + LLM 兜底 token + done", "集成测试 #3（断线检测）：curl SSE 请求中途中断 → 后端日志无 error 堆栈", "集成测试 #4（SSE 格式）：验证 event: type / data: json / 双换行分隔格式正确", "集成测试 #5（来源数据）：验证 sources event 包含 book/section/page_start/page_end 字段", "回归测试：POST /api/chat 非流式端点仍正常返回 200（有结果）或 404（无结果）"]
+      "test_tasks": [
+        "部署验证：deploy/deploy.sh local --backend-only 构建成功",
+        "部署验证：GET /api/health 返回 healthy",
+        "集成测试 #1（正常流程）：curl POST /api/chat/stream → 验证 status→sources→status→token×N→done 事件序列完整",
+        "集成测试 #2（检索无结果）：输入无匹配问题 → 验证无 sources event + LLM 兜底 token + done",
+        "集成测试 #3（断线检测）：curl SSE 请求中途中断 → 后端日志无 error 堆栈",
+        "集成测试 #4（SSE 格式）：验证 event: type / data: json / 双换行分隔格式正确",
+        "集成测试 #5（来源数据）：验证 sources event 包含 book/section/page_start/page_end 字段",
+        "回归测试：POST /api/chat 非流式端点仍正常返回 200（有结果）或 404（无结果）"
+      ]
     },
     {
       "id": "FF001",
@@ -202,16 +355,36 @@
       "evidence_file": ".dev-flow/R005/evidence/R005_FF001.md",
       "commit": "e637571",
       "summary": "前端基础层完成：types.ts 4 个类型定义、parse-sse.ts SSE 解析纯函数、api.ts API 配置、use-chat-storage.ts localStorage 封装，6 个单元测试全部通过",
-      "execution_state": {"current_step": "completed", "retry_count": 0},
+      "execution_state": {
+        "current_step": "completed",
+        "retry_count": 0
+      },
       "priority": 1,
-      "developer_stories": ["作为前端开发者，我希望 SSE 解析、API 配置和存储工具在初始化阶段就绪，以便 Chat UI 组件可直接消费"],
+      "developer_stories": [
+        "作为前端开发者，我希望 SSE 解析、API 配置和存储工具在初始化阶段就绪，以便 Chat UI 组件可直接消费"
+      ],
       "technical_success_picture": "parseSSEEvents 解析 'event: status\\ndata: {...}\\n\\n' 返回正确事件数组，不完整 chunk 保留在 remaining；useChatStorage.loadMessages() 返回 Message[]，损坏数据返回 []",
-      "decision_refs": ["DEC-chatui-035", "DEC-chatui-005", "DEC-chatui-010"],
-      "analysis_refs": ["2026-05-21--R005-chat-ui-sse"],
+      "decision_refs": [
+        "DEC-chatui-035",
+        "DEC-chatui-005",
+        "DEC-chatui-010"
+      ],
+      "analysis_refs": [
+        "2026-05-21--R005-chat-ui-sse"
+      ],
       "contract_refs": [],
-      "capability_refs": ["CAP-chatui-001"],
+      "capability_refs": [
+        "CAP-chatui-001"
+      ],
       "risk_tags": [],
-      "test_tasks": ["单元测试：parseSSEEvents 完整事件解析", "单元测试：parseSSEEvents 不完整 chunk 保留", "单元测试：parseSSEEvents 多事件合并解析", "单元测试：parseSSEEvents data=null 处理", "单元测试：useChatStorage 读写正常", "单元测试：useChatStorage 数据损坏返回空"]
+      "test_tasks": [
+        "单元测试：parseSSEEvents 完整事件解析",
+        "单元测试：parseSSEEvents 不完整 chunk 保留",
+        "单元测试：parseSSEEvents 多事件合并解析",
+        "单元测试：parseSSEEvents data=null 处理",
+        "单元测试：useChatStorage 读写正常",
+        "单元测试：useChatStorage 数据损坏返回空"
+      ]
     },
     {
       "id": "FF002",
@@ -220,7 +393,9 @@
       "name": "useChatStream hook — SSE 通信 + 错误分类 + AbortController",
       "description": "SSE 通信 hook（回调模式，不管 UI 状态）",
       "verification": "L2 — Vitest mock fetch/ReadableStream，验证回调按序触发",
-      "depends_on": ["FF001"],
+      "depends_on": [
+        "FF001"
+      ],
       "status": "completed",
       "started_at": "2026-05-22",
       "completed_at": "2026-05-22",
@@ -228,16 +403,42 @@
       "evidence_file": ".dev-flow/R005/evidence/R005_FF002.md",
       "commit": "pending",
       "summary": "useChatStream hook 完成：chatStreamFetch 纯函数封装 SSE 通信 + 错误分类（00000/00001）+ AbortController 管理，5 个单元测试全部通过",
-      "execution_state": {"current_step": "completed", "retry_count": 0},
+      "execution_state": {
+        "current_step": "completed",
+        "retry_count": 0
+      },
       "priority": 2,
-      "developer_stories": ["作为前端开发者，我希望 SSE 通信封装为独立 hook，通过回调模式通知 ChatUI，以便 UI 逻辑和网络逻辑解耦"],
+      "developer_stories": [
+        "作为前端开发者，我希望 SSE 通信封装为独立 hook，通过回调模式通知 ChatUI，以便 UI 逻辑和网络逻辑解耦"
+      ],
       "technical_success_picture": "useChatStream 返回 {sendMessage, stop, isStreaming}；mock SSE 事件流后 onStatus/onSources/onToken/onDone 按序触发；HTTP 500 → onError({code:'00000'})；首事件后网络断开 → onError({code:'00001'})；stop() → AbortError 不触发 onError",
-      "decision_refs": ["DEC-chatui-004", "DEC-chatui-034", "DEC-chatui-036", "DEC-chatui-008", "DEC-chatui-014"],
-      "analysis_refs": ["2026-05-21--R005-chat-ui-sse"],
-      "contract_refs": ["new:sse-event-protocol"],
-      "capability_refs": ["CAP-chatui-001", "CAP-chatui-003"],
-      "risk_tags": ["network"],
-      "test_tasks": ["单元测试：mock SSE 事件流，验证 onStatus→onSources→onToken→onDone 按序触发", "单元测试：HTTP 非 200 → onError({code:'00000'})", "单元测试：首事件后网络异常 → onError({code:'00001'})", "单元测试：首事件前网络异常 → onError({code:'00000'})", "单元测试：stop() → AbortError 不触发 onError"]
+      "decision_refs": [
+        "DEC-chatui-004",
+        "DEC-chatui-034",
+        "DEC-chatui-036",
+        "DEC-chatui-008",
+        "DEC-chatui-014"
+      ],
+      "analysis_refs": [
+        "2026-05-21--R005-chat-ui-sse"
+      ],
+      "contract_refs": [
+        "new:sse-event-protocol"
+      ],
+      "capability_refs": [
+        "CAP-chatui-001",
+        "CAP-chatui-003"
+      ],
+      "risk_tags": [
+        "network"
+      ],
+      "test_tasks": [
+        "单元测试：mock SSE 事件流，验证 onStatus→onSources→onToken→onDone 按序触发",
+        "单元测试：HTTP 非 200 → onError({code:'00000'})",
+        "单元测试：首事件后网络异常 → onError({code:'00001'})",
+        "单元测试：首事件前网络异常 → onError({code:'00000'})",
+        "单元测试：stop() → AbortError 不触发 onError"
+      ]
     },
     {
       "id": "FB001",
@@ -246,7 +447,10 @@
       "name": "Chat UI 核心交互 — 发送 + 流式显示 + 停止 + 基础渲染",
       "description": "ChatUI 主组件 + ChatInput + 基础 MessageBubble",
       "verification": "L2 — Vitest 组件测试",
-      "depends_on": ["FF001", "FF002"],
+      "depends_on": [
+        "FF001",
+        "FF002"
+      ],
       "status": "completed",
       "started_at": "2026-05-22",
       "completed_at": "2026-05-22",
@@ -254,16 +458,42 @@
       "evidence_file": ".dev-flow/R005/evidence/R005_FB001.md",
       "commit": "pending",
       "summary": "Chat UI 核心交互完成：ChatUI(状态管理+回调+持久化)+ChatInput(发送/停止)+MessageBubble(用户/AI气泡)，集成到 chat/page.tsx，12 个单元测试全部通过",
-      "execution_state": {"current_step": "completed", "retry_count": 0},
+      "execution_state": {
+        "current_step": "completed",
+        "retry_count": 0
+      },
       "priority": 3,
-      "user_stories": ["作为用户，我希望输入数学问题后点击发送，看到 AI 回答逐字流出，可以随时停止，发送失败时消息回到输入框"],
+      "user_stories": [
+        "作为用户，我希望输入数学问题后点击发送，看到 AI 回答逐字流出，可以随时停止，发送失败时消息回到输入框"
+      ],
       "success_picture": "输入问题→点击发送→显示用户消息气泡+AI loading→状态提示「正在检索...→正在生成...」→token 逐字追加→完成后显示操作按钮；停止后保留已有内容标记已停止；发送失败消息撤回输入框",
-      "decision_refs": ["DEC-chatui-003", "DEC-chatui-008", "DEC-chatui-013", "DEC-chatui-022", "DEC-chatui-033", "DEC-chatui-037"],
-      "analysis_refs": ["2026-05-21--R005-chat-ui-sse"],
+      "decision_refs": [
+        "DEC-chatui-003",
+        "DEC-chatui-008",
+        "DEC-chatui-013",
+        "DEC-chatui-022",
+        "DEC-chatui-033",
+        "DEC-chatui-037"
+      ],
+      "analysis_refs": [
+        "2026-05-21--R005-chat-ui-sse"
+      ],
       "contract_refs": [],
-      "capability_refs": ["CAP-chatui-001", "CAP-chatui-003"],
-      "risk_tags": ["network"],
-      "test_tasks": ["组件测试：ChatUI 渲染消息列表", "组件测试：handleSend 创建 user+ai 消息", "组件测试：onError code='00000' 撤回消息", "组件测试：onError 其他 code 标记 error", "组件测试：handleStop 覆盖 retrieving/generating", "组件测试：useEffect 客户端加载历史"]
+      "capability_refs": [
+        "CAP-chatui-001",
+        "CAP-chatui-003"
+      ],
+      "risk_tags": [
+        "network"
+      ],
+      "test_tasks": [
+        "组件测试：ChatUI 渲染消息列表",
+        "组件测试：handleSend 创建 user+ai 消息",
+        "组件测试：onError code='00000' 撤回消息",
+        "组件测试：onError 其他 code 标记 error",
+        "组件测试：handleStop 覆盖 retrieving/generating",
+        "组件测试：useEffect 客户端加载历史"
+      ]
     },
     {
       "id": "FB002",
@@ -272,23 +502,50 @@
       "name": "Chat UI 增强 — 来源卡片 + KaTeX + 操作按钮 + 消息持久化 + 编辑/重新生成",
       "description": "Chat UI 功能增强：(1) SourceCard 来源引用卡片（默认收起可展开，书名+章节+页码）；(2) MessageBubble 集成 react-markdown + remark-math + rehype-katex 数学公式渲染（throwOnError:false），KaTeX CSS 在 chat-ui.tsx 统一 import；(3) AI 消息操作按钮：复制 + 重新生成（hover 显示）；(4) 用户消息操作按钮：编辑（hover 显示）；(5) handleRegenerate 删除旧 AI 消息→重新发起 SSE；(6) handleEdit 删除后续消息→原文放回输入框；(7) saveMessages 在 done/stopped/error 时持久化。",
       "verification": "L2 — Vitest：SourceCard 展开/收起、MessageBubble Markdown 渲染、复制按钮功能、handleRegenerate/handleEdit 逻辑；手动验证：KaTeX 公式渲染效果",
-      "depends_on": ["FB001"],
+      "depends_on": [
+        "FB001"
+      ],
       "status": "completed",
       "started_at": "2026-05-22",
       "completed_at": "2026-05-22",
       "evidence_file": ".dev-flow/R005/evidence/R005_FB002.md",
       "commit": "pending",
       "summary": "Chat UI 增强完成：SourceCard 来源卡片（收起/展开）+ MessageBubble Markdown+KaTeX 渲染 + 操作按钮（复制/重新生成/编辑）+ handleRegenerate/handleEdit + 4 个新依赖，54/54 前端测试全部通过",
-      "execution_state": {"current_step": "completed", "retry_count": 0},
+      "execution_state": {
+        "current_step": "completed",
+        "retry_count": 0
+      },
       "priority": 4,
-      "user_stories": ["作为用户，我希望查看 AI 回答的引用来源和数学公式，刷新页面后对话恢复，可以重新生成或编辑问题"],
+      "user_stories": [
+        "作为用户，我希望查看 AI 回答的引用来源和数学公式，刷新页面后对话恢复，可以重新生成或编辑问题"
+      ],
       "success_picture": "AI 回答下方显示收起的来源卡片「▶ 引用来源 (N条)」，点击展开详情；数学公式正确渲染；刷新后从 localStorage 恢复对话；重新生成替换旧回答；编辑将原文放回输入框",
-      "decision_refs": ["DEC-chatui-006", "DEC-chatui-012", "DEC-chatui-016", "DEC-chatui-017", "DEC-chatui-018", "DEC-chatui-019", "DEC-chatui-020", "DEC-chatui-021", "DEC-chatui-032"],
-      "analysis_refs": ["2026-05-21--R005-chat-ui-sse"],
+      "decision_refs": [
+        "DEC-chatui-006",
+        "DEC-chatui-012",
+        "DEC-chatui-016",
+        "DEC-chatui-017",
+        "DEC-chatui-018",
+        "DEC-chatui-019",
+        "DEC-chatui-020",
+        "DEC-chatui-021",
+        "DEC-chatui-032"
+      ],
+      "analysis_refs": [
+        "2026-05-21--R005-chat-ui-sse"
+      ],
       "contract_refs": [],
-      "capability_refs": ["CAP-chatui-001"],
+      "capability_refs": [
+        "CAP-chatui-001"
+      ],
       "risk_tags": [],
-      "test_tasks": ["组件测试：SourceCard 默认收起点击展开", "组件测试：MessageBubble Markdown 渲染", "组件测试：复制按钮功能", "组件测试：handleRegenerate 删除旧消息重新发起 SSE", "组件测试：handleEdit 删除后续消息原文放回输入框"]
+      "test_tasks": [
+        "组件测试：SourceCard 默认收起点击展开",
+        "组件测试：MessageBubble Markdown 渲染",
+        "组件测试：复制按钮功能",
+        "组件测试：handleRegenerate 删除旧消息重新发起 SSE",
+        "组件测试：handleEdit 删除后续消息原文放回输入框"
+      ]
     },
     {
       "id": "FB003",
@@ -297,31 +554,78 @@
       "name": "Chat 页面集成 + 依赖安装 + 端到端验证",
       "description": "Chat 页面集成和验证：(1) chat/page.tsx 从占位页改为渲染 ChatUI 组件；(2) 安装 shadcn button 组件；(3) 安装前端依赖（react-markdown, remark-math, rehype-katex, katex）；(4) 端到端验证：发送问题→流式回答→来源卡片→停止→重新生成→编辑→刷新恢复→错误重试；(5) 回归验证 POST /api/chat 非流式端点仍正常；(6) 验证 Traefik SSE 透传。",
       "verification": "L3 — curl POST /api/chat/stream 验证 SSE 事件流；L4 — Playwright E2E：发送消息→流式文本→来源卡片→停止→重新生成",
-      "depends_on": ["FB002", "BB003"],
+      "depends_on": [
+        "FB002",
+        "BB003"
+      ],
       "status": "completed",
       "started_at": "2026-05-22",
       "completed_at": "2026-05-22",
       "evidence_file": ".dev-flow/R005/evidence/R005_FB003.md",
       "commit": "pending",
       "summary": "Chat 页面集成验证完成：chat/page.tsx 集成 RouteGuard+ChatUI、4 个依赖已安装、6 个组件完整、54/54 测试通过、Chat 零 TS 错误。E2E 因 Docker 镜像旧版降级为 smoke_required",
-      "execution_state": {"current_step": "completed", "retry_count": 0},
+      "execution_state": {
+        "current_step": "completed",
+        "retry_count": 0
+      },
       "priority": 5,
-      "user_stories": ["作为用户，我希望在浏览器中访问 /chat 页面，完成完整的对话体验：输入问题、看到流式回答、查看来源、数学公式渲染、刷新恢复对话"],
+      "user_stories": [
+        "作为用户，我希望在浏览器中访问 /chat 页面，完成完整的对话体验：输入问题、看到流式回答、查看来源、数学公式渲染、刷新恢复对话"
+      ],
       "success_picture": "浏览器访问 /chat → RouteGuard 检查登录 → 渲染 Chat UI → 输入问题 → 状态提示→逐字流出→来源卡片→数学公式渲染→刷新恢复→停止/重新生成/编辑均正常→非流式接口仍正常",
-      "decision_refs": ["DEC-chatui-009", "DEC-chatui-032", "DEC-chatui-038"],
-      "analysis_refs": ["2026-05-21--R005-chat-ui-sse"],
-      "contract_refs": ["new:sse-event-protocol"],
-      "capability_refs": ["CAP-chatui-001", "CAP-chatui-002", "CAP-chatui-003"],
-      "risk_tags": ["network", "third_party"],
+      "decision_refs": [
+        "DEC-chatui-009",
+        "DEC-chatui-032",
+        "DEC-chatui-038"
+      ],
+      "analysis_refs": [
+        "2026-05-21--R005-chat-ui-sse"
+      ],
+      "contract_refs": [
+        "new:sse-event-protocol"
+      ],
+      "capability_refs": [
+        "CAP-chatui-001",
+        "CAP-chatui-002",
+        "CAP-chatui-003"
+      ],
+      "risk_tags": [
+        "network",
+        "third_party"
+      ],
       "dependencies": [
-        {"name": "react-markdown", "reason": "Markdown 渲染（AI 回答中的标题、列表、代码块）"},
-        {"name": "remark-math", "reason": "识别 $...$ 和 $$...$$ 数学公式语法"},
-        {"name": "rehype-katex", "reason": "调用 KaTeX 渲染数学公式"},
-        {"name": "katex", "reason": "数学公式渲染引擎 + CSS（约 200KB）"},
-        {"name": "shadcn/ui button", "reason": "发送/停止按钮（npx shadcn@latest add button）"}
+        {
+          "name": "react-markdown",
+          "reason": "Markdown 渲染（AI 回答中的标题、列表、代码块）"
+        },
+        {
+          "name": "remark-math",
+          "reason": "识别 $...$ 和 $$...$$ 数学公式语法"
+        },
+        {
+          "name": "rehype-katex",
+          "reason": "调用 KaTeX 渲染数学公式"
+        },
+        {
+          "name": "katex",
+          "reason": "数学公式渲染引擎 + CSS（约 200KB）"
+        },
+        {
+          "name": "shadcn/ui button",
+          "reason": "发送/停止按钮（npx shadcn@latest add button）"
+        }
       ],
       "journey_acceptance": "entry_action: 浏览器访问 /chat 页面, actual_endpoint: POST /api/chat/stream, streaming_token_received: token 逐字流出, sources_displayed: 来源卡片默认收起可展开, user_visible_success: 完整流式回答 + 数学公式渲染 + 来源卡片, failure_path_result: 发送失败撤回输入框 + 错误提示 + 重试按钮, no_result_fallback: 无 sources event → LLM 兜底回答 + 显示'未找到教材引用', error_recovery: 首事件前失败撤回/首事件后失败保留+重试按钮",
-      "test_tasks": ["集成测试：curl POST /api/chat/stream 验证 SSE 事件流格式", "集成测试：检索无结果 → LLM 兜底回答（无 sources）+ 前端显示'未找到教材引用'", "集成测试：检索服务异常 → error event + 前端显示重试按钮", "集成测试：POST /api/chat 非流式接口回归验证", "E2E：Playwright 发送消息→流式文本→来源卡片", "E2E：Playwright 停止→重新生成→编辑", "E2E：Playwright 刷新恢复对话", "E2E：Playwright 发送失败→撤回输入框→重试"]
+      "test_tasks": [
+        "集成测试：curl POST /api/chat/stream 验证 SSE 事件流格式",
+        "集成测试：检索无结果 → LLM 兜底回答（无 sources）+ 前端显示'未找到教材引用'",
+        "集成测试：检索服务异常 → error event + 前端显示重试按钮",
+        "集成测试：POST /api/chat 非流式接口回归验证",
+        "E2E：Playwright 发送消息→流式文本→来源卡片",
+        "E2E：Playwright 停止→重新生成→编辑",
+        "E2E：Playwright 刷新恢复对话",
+        "E2E：Playwright 发送失败→撤回输入框→重试"
+      ]
     },
     {
       "id": "BT001",
@@ -335,14 +639,33 @@
       "started_at": "2026-05-22",
       "completed_at": "2026-05-22",
       "actual_minutes": 12,
-      "execution_state": {"current_step": "completed", "retry_count": 0},
+      "execution_state": {
+        "current_step": "completed",
+        "retry_count": 0
+      },
       "summary": "后端 L1 异常路径测试补充完成：5 个 stream_chat 测试(LLM ConnectionError/Timeout/Exception + 意图分类 direct + direct 空响应) + 1 个空 choices chunk 测试 + 2 个 stream_router 测试(error 格式透传 + 422 验证)，全部 53 个测试通过",
       "priority": 6,
-      "developer_stories": ["作为后端开发者，我希望所有异常路径都有对应单元测试，以便后续重构时不会意外破坏错误恢复逻辑"],
+      "developer_stories": [
+        "作为后端开发者，我希望所有异常路径都有对应单元测试，以便后续重构时不会意外破坏错误恢复逻辑"
+      ],
       "technical_success_picture": "pytest tests/test_chat_service_stream.py tests/test_llm_generator_stream.py tests/test_stream_router.py -v 全部通过；新增测试覆盖 LLM ConnectionError/Timeout/Exception、意图分类 direct、空 choices chunk、error event SSE 格式、422 验证",
-      "decision_refs": ["DEC-test-001", "DEC-test-004"],
-      "analysis_refs": ["2026-05-22--R005-error-scenario-test-strategy"],
-      "test_tasks": ["单元测试：S-ERR-04 LLM ConnectionError → error code 02201", "单元测试：S-ERR-05 LLM TimeoutError → error code 02204", "单元测试：S-ERR-06 LLM Exception → error code 02202", "单元测试：S-ERR-08 意图分类 direct → 无 retrieving/sources，直接 generating", "单元测试：S-ERR-09 意图分类 direct + LLM 空响应 → error", "单元测试：L-ERR-01 空 choices chunk 不触发 IndexError", "单元测试：R-ERR-01 error event SSE 格式透传验证", "单元测试：R-ERR-03 缺 question 字段 → 422 Validation Error"]
+      "decision_refs": [
+        "DEC-test-001",
+        "DEC-test-004"
+      ],
+      "analysis_refs": [
+        "2026-05-22--R005-error-scenario-test-strategy"
+      ],
+      "test_tasks": [
+        "单元测试：S-ERR-04 LLM ConnectionError → error code 02201",
+        "单元测试：S-ERR-05 LLM TimeoutError → error code 02204",
+        "单元测试：S-ERR-06 LLM Exception → error code 02202",
+        "单元测试：S-ERR-08 意图分类 direct → 无 retrieving/sources，直接 generating",
+        "单元测试：S-ERR-09 意图分类 direct + LLM 空响应 → error",
+        "单元测试：L-ERR-01 空 choices chunk 不触发 IndexError",
+        "单元测试：R-ERR-01 error event SSE 格式透传验证",
+        "单元测试：R-ERR-03 缺 question 字段 → 422 Validation Error"
+      ]
     },
     {
       "id": "FT001",
@@ -356,14 +679,34 @@
       "started_at": "2026-05-22",
       "completed_at": "2026-05-22",
       "actual_minutes": 10,
-      "execution_state": {"current_step": "completed", "retry_count": 0},
+      "execution_state": {
+        "current_step": "completed",
+        "retry_count": 0
+      },
       "summary": "前端 L1 异常路径测试补充完成：5 个 use-chat-stream 测试(error event 回调 + token 后 error + SSE 格式异常 + 多事件合并 + 跨 chunk 不完整) + 4 个 chat-ui 测试(error 状态标记 + 快速发送阻止 + stop retrieving + stop generating)，63/63 前端测试通过",
       "priority": 7,
-      "developer_stories": ["作为前端开发者，我希望 SSE 解析和网络异常场景都有测试覆盖，以便重构 hook 逻辑时不会破坏错误恢复"],
+      "developer_stories": [
+        "作为前端开发者，我希望 SSE 解析和网络异常场景都有测试覆盖，以便重构 hook 逻辑时不会破坏错误恢复"
+      ],
       "technical_success_picture": "vitest 54(已有) + 9(新增) = 63 个测试全部通过；新增测试覆盖 error event 回调、SSE 格式异常、跨 chunk 解析、stop 状态区分",
-      "decision_refs": ["DEC-test-002", "DEC-test-004"],
-      "analysis_refs": ["2026-05-22--R005-error-scenario-test-strategy"],
-      "test_tasks": ["单元测试：F-ERR-01 后端 error event → onError 被调用", "单元测试：F-ERR-02 error event 前有 token → onToken + onError", "单元测试：F-ERR-03 SSE 缺 event 行 → 静默跳过", "单元测试：F-ERR-04 多事件合并 chunk → 两个回调触发", "单元测试：F-ERR-05 不完整事件跨 chunk → 合并解析", "单元测试：U-ERR-01 后端 error → AI 消息 status=error", "单元测试：U-ERR-02 连续快速发送 → 第二次被阻止", "单元测试：U-ERR-03 stop 在 retrieving → content='' status=stopped", "单元测试：U-ERR-04 stop 在 generating → content=已有 token status=stopped"]
+      "decision_refs": [
+        "DEC-test-002",
+        "DEC-test-004"
+      ],
+      "analysis_refs": [
+        "2026-05-22--R005-error-scenario-test-strategy"
+      ],
+      "test_tasks": [
+        "单元测试：F-ERR-01 后端 error event → onError 被调用",
+        "单元测试：F-ERR-02 error event 前有 token → onToken + onError",
+        "单元测试：F-ERR-03 SSE 缺 event 行 → 静默跳过",
+        "单元测试：F-ERR-04 多事件合并 chunk → 两个回调触发",
+        "单元测试：F-ERR-05 不完整事件跨 chunk → 合并解析",
+        "单元测试：U-ERR-01 后端 error → AI 消息 status=error",
+        "单元测试：U-ERR-02 连续快速发送 → 第二次被阻止",
+        "单元测试：U-ERR-03 stop 在 retrieving → content='' status=stopped",
+        "单元测试：U-ERR-04 stop 在 generating → content=已有 token status=stopped"
+      ]
     },
     {
       "id": "IT001",
@@ -372,21 +715,40 @@
       "name": "L2 SSE 集成测试 — Docker 异常场景验证",
       "description": "在 Docker 环境中执行 4 个集成测试用例，通过 docker-compose override 模拟异常：(1) LLM 不可达（NEWAPI_BASE_URL 指向 localhost:1）→ 验证 SSE error event code=02201；(2) Embedding 认证失败（DASHSCOPE_API_KEY=invalid）→ 验证 SSE error event code=02102；(3) 正常数学问题 → 验证完整 status→sources→status→token×N→done；(4) 闲聊意图分类 → 验证无 retrieving/sources，直接 generating→token→done。创建 compose override 文件 + 测试脚本，测试后用 deploy.sh --backend-only 恢复正常环境。",
       "verification": "L3 — Docker 环境集成测试脚本执行通过，4 个 curl 断言验证成功",
-      "depends_on": ["BT001"],
+      "depends_on": [
+        "BT001"
+      ],
       "status": "completed",
       "started_at": "2026-05-22",
       "completed_at": "2026-05-22",
       "actual_minutes": 25,
-      "execution_state": {"current_step": "completed", "retry_count": 0},
+      "execution_state": {
+        "current_step": "completed",
+        "retry_count": 0
+      },
       "summary": "L2 SSE 集成测试完成：创建 2 个 compose override 文件(LLM 不可达+Embedding 失败)+ Python/bash 测试脚本，4 个场景全部通过(I-ERR-01 LLM不可达→error event、I-ERR-02 Embedding失败→02102、I-ERR-03 正常完整流程、I-ERR-04 闲聊跳过检索)",
       "commit": "pending",
       "priority": 8,
-      "developer_stories": ["作为后端开发者，我希望在真实 Docker 环境中验证异常场景的 SSE 输出，以便确认 Traefik 透传 + 错误恢复链路在生产环境也正常"],
+      "developer_stories": [
+        "作为后端开发者，我希望在真实 Docker 环境中验证异常场景的 SSE 输出，以便确认 Traefik 透传 + 错误恢复链路在生产环境也正常"
+      ],
       "technical_success_picture": "docker compose -f ... -f override.yml up → curl 验证 4 个场景 → 全部通过 → deploy.sh --backend-only 恢复正常环境",
-      "decision_refs": ["DEC-test-003"],
-      "analysis_refs": ["2026-05-22--R005-error-scenario-test-strategy"],
-      "risk_tags": ["network", "third_party"],
-      "test_tasks": ["集成测试：I-ERR-01 LLM 不可达 → curl 验证 error code=02201", "集成测试：I-ERR-02 Embedding 认证失败 → curl 验证 error code=02102", "集成测试：I-ERR-03 正常数学问题 → curl 验证完整事件序列", "集成测试：I-ERR-04 闲聊不检索 → curl 验证无 sources 直接 generating"]
+      "decision_refs": [
+        "DEC-test-003"
+      ],
+      "analysis_refs": [
+        "2026-05-22--R005-error-scenario-test-strategy"
+      ],
+      "risk_tags": [
+        "network",
+        "third_party"
+      ],
+      "test_tasks": [
+        "集成测试：I-ERR-01 LLM 不可达 → curl 验证 error code=02201",
+        "集成测试：I-ERR-02 Embedding 认证失败 → curl 验证 error code=02102",
+        "集成测试：I-ERR-03 正常数学问题 → curl 验证完整事件序列",
+        "集成测试：I-ERR-04 闲聊不检索 → curl 验证无 sources 直接 generating"
+      ]
     },
     {
       "id": "FB004",
@@ -395,19 +757,35 @@
       "name": "用户消息原地编辑交互重设计",
       "description": "将编辑用户消息的交互从'删除+跳回输入框'改为原地编辑模式：(1) ChatUI 新增 editingId 状态，handleEdit 改为 setEditingId(msgId)，新增 handleEditConfirm（截断+创建新消息+发SSE）和 handleEditCancel（恢复）；(2) MessageBubble 新增 isEditing/onEditConfirm/onEditCancel props，isEditing 时渲染 textarea（预填原文+自动聚焦+Enter确认/Escape取消）代替气泡，下方显示[确认][取消]按钮；(3) ChatInput editingId!==null 时禁用发送按钮（防止编辑中发新消息）；(4) 同一时刻只有一条消息可编辑，点击另一条编辑时切换目标。DEC-edit-001: editingId 不入 Message 类型。DEC-edit-002: 确认=截断+重发。DEC-edit-003: 编辑中禁用发送。DEC-edit-004: 空文本确认视为取消。",
       "verification": "L2 — Vitest 组件测试 8 个用例：编辑态渲染、确认触发SSE、取消恢复、空文本取消、编辑中禁用发送、切换编辑目标、Escape取消、localStorage更新",
-      "depends_on": ["FB002"],
+      "depends_on": [
+        "FB002"
+      ],
       "status": "completed",
       "started_at": "2026-05-22",
       "completed_at": "2026-05-22",
       "actual_minutes": 15,
-      "execution_state": {"current_step": "completed", "retry_count": 0},
+      "execution_state": {
+        "current_step": "completed",
+        "retry_count": 0
+      },
       "summary": "用户消息原地编辑交互重设计完成：ChatUI新增editingId状态+handleEditConfirm/Cancel，MessageBubble新增EditArea子组件(textarea+确认/取消+Enter/Escape)，ChatInput编辑中禁用发送，8个E-EDIT测试全部通过(38/38)",
       "priority": 9,
-      "user_stories": ["作为用户，我希望点击编辑后消息原地变为可编辑，修改后确认重新发送，或取消恢复原状，而不是直接删除回复跳到输入框"],
+      "user_stories": [
+        "作为用户，我希望点击编辑后消息原地变为可编辑，修改后确认重新发送，或取消恢复原状，而不是直接删除回复跳到输入框"
+      ],
       "success_picture": "点击编辑→用户消息气泡变为textarea预填原文+[确认][取消]→修改文本点确认→旧回复消失+新SSE请求发起→或点取消/Escape→恢复原始消息显示",
-      "decision_refs": ["DEC-edit-001", "DEC-edit-002", "DEC-edit-003", "DEC-edit-004"],
-      "analysis_refs": ["2026-05-22--R005-inline-edit-design"],
-      "capability_refs": ["CAP-chatui-001"],
+      "decision_refs": [
+        "DEC-edit-001",
+        "DEC-edit-002",
+        "DEC-edit-003",
+        "DEC-edit-004"
+      ],
+      "analysis_refs": [
+        "2026-05-22--R005-inline-edit-design"
+      ],
+      "capability_refs": [
+        "CAP-chatui-001"
+      ],
       "risk_tags": [],
       "test_tasks": [
         "E-EDIT-01: 点击编辑 → textarea 出现，预填原文",
@@ -423,18 +801,47 @@
   ],
   "decision_coverage": {
     "implemented": [
-      "DEC-chatui-001", "DEC-chatui-003", "DEC-chatui-004", "DEC-chatui-005",
-      "DEC-chatui-006", "DEC-chatui-007", "DEC-chatui-008", "DEC-chatui-011",
-      "DEC-chatui-012", "DEC-chatui-013", "DEC-chatui-014", "DEC-chatui-015",
-      "DEC-chatui-016", "DEC-chatui-017", "DEC-chatui-018", "DEC-chatui-019",
-      "DEC-chatui-020", "DEC-chatui-021", "DEC-chatui-022", "DEC-chatui-023",
-      "DEC-chatui-024", "DEC-chatui-025", "DEC-chatui-026", "DEC-chatui-027",
-      "DEC-chatui-028", "DEC-chatui-029", "DEC-chatui-031", "DEC-chatui-032",
-      "DEC-chatui-033", "DEC-chatui-034", "DEC-chatui-035", "DEC-chatui-036",
-      "DEC-chatui-037", "DEC-chatui-038", "DEC-chatui-039"
+      "DEC-chatui-001",
+      "DEC-chatui-003",
+      "DEC-chatui-004",
+      "DEC-chatui-005",
+      "DEC-chatui-006",
+      "DEC-chatui-007",
+      "DEC-chatui-008",
+      "DEC-chatui-011",
+      "DEC-chatui-012",
+      "DEC-chatui-013",
+      "DEC-chatui-014",
+      "DEC-chatui-015",
+      "DEC-chatui-016",
+      "DEC-chatui-017",
+      "DEC-chatui-018",
+      "DEC-chatui-019",
+      "DEC-chatui-020",
+      "DEC-chatui-021",
+      "DEC-chatui-022",
+      "DEC-chatui-023",
+      "DEC-chatui-024",
+      "DEC-chatui-025",
+      "DEC-chatui-026",
+      "DEC-chatui-027",
+      "DEC-chatui-028",
+      "DEC-chatui-029",
+      "DEC-chatui-031",
+      "DEC-chatui-032",
+      "DEC-chatui-033",
+      "DEC-chatui-034",
+      "DEC-chatui-035",
+      "DEC-chatui-036",
+      "DEC-chatui-037",
+      "DEC-chatui-038",
+      "DEC-chatui-039"
     ],
     "test_supplement": [
-      "DEC-test-001", "DEC-test-002", "DEC-test-003", "DEC-test-004"
+      "DEC-test-001",
+      "DEC-test-002",
+      "DEC-test-003",
+      "DEC-test-004"
     ],
     "no_action_needed": [
       "DEC-chatui-002",
@@ -444,11 +851,17 @@
     ],
     "open_issues": [],
     "inline_edit": [
-      "DEC-edit-001", "DEC-edit-002", "DEC-edit-003", "DEC-edit-004"
+      "DEC-edit-001",
+      "DEC-edit-002",
+      "DEC-edit-003",
+      "DEC-edit-004"
     ],
     "out_of_scope_notes": [
       "DEC-chatui-016: 教材页面图片查看预留引用位置，图片弹出功能留给后续迭代"
     ]
   },
-  "analysis_refs": ["2026-05-21--R005-chat-ui-sse", "2026-05-22--R005-inline-edit-design"]
+  "analysis_refs": [
+    "2026-05-21--R005-chat-ui-sse",
+    "2026-05-22--R005-inline-edit-design"
+  ]
 }
