@@ -57,16 +57,20 @@ class LLMGenerator:
             - sources: 所有 context chunks 的引用来源列表
         """
         # 1. 构建 context（带编号标记）
-        context_text = self._build_numbered_context(context_chunks)
-
-        # 2. 调用 LLM
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": f"参考教材内容：\n{context_text}\n\n学生问题：{query}",
-            },
-        ]
+        if context_chunks:
+            context_text = self._build_numbered_context(context_chunks)
+            messages = [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": f"参考教材内容：\n{context_text}\n\n学生问题：{query}",
+                },
+            ]
+        else:
+            messages = [
+                {"role": "system", "content": MATH_JUDGE_PROMPT},
+                {"role": "user", "content": query},
+            ]
         response = self._client.chat.completions.create(
             model=self._model, messages=messages
         )
@@ -117,6 +121,8 @@ class LLMGenerator:
         )
         async with stream:
             async for chunk in stream:
+                if not chunk.choices:
+                    continue
                 token = chunk.choices[0].delta.content or ""
                 if token:
                     yield token
