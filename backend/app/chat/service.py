@@ -1,7 +1,17 @@
+from dataclasses import dataclass
+
 from app.rag.models import QueryResult
 from app.domain.protocols import Reranker, Generator
 from app.chat.schemas import ChatResponse
 from app.domain.models import SourceReference
+
+
+@dataclass
+class RetrieveResult:
+    """_retrieve() 返回类型：携带检索结果 + 降级状态"""
+    chunks: list[QueryResult]
+    degraded: bool = False
+    degradation_reason: str | None = None
 
 
 class ChatService:
