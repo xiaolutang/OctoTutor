@@ -222,7 +222,7 @@
       "description": "新增 src/lib/api-client.ts，封装统一网络层：(1) registerGetToken(fn) 注册 token 获取回调；(2) fetchWithAuth(url, init) 自动附加 Bearer header + 401 刷新重试；(3) refreshAndGetToken() 刷新锁（refreshPromise 去重 + 30s 超时）；(4) X-Retry header 防止无限重试；(5) auth:session-expired CustomEvent 通知 AuthContext；(6) 返回原生 Response（兼容 SSE ReadableStream）。不导入任何 SDK 类。",
       "verification": "L2 — registerGetToken 注册后 fetchWithAuth 自动附加 Authorization header；401 + 刷新成功 → 自动重试；401 + X-Retry → 不重试 → 触发 session-expired；并发调用 → refreshPromise 只刷新一次；未注册 getTokenFn → 不附加 header（降级）",
       "depends_on": [],
-      "status": "pending",
+      "status": "completed",
       "priority": 4,
       "developer_stories": [
         "作为前端开发者，我希望统一网络层在应用初始化后自动处理 token 注入和刷新，以便业务组件无需关心认证细节"
@@ -263,7 +263,12 @@
         "单元测试：ensureValidToken 返回 null（无 refresh_token）→ 请求无 Authorization header → 后端 401",
         "单元测试：SSE 请求 401 → 刷新 → 重试 → 返回 ReadableStream（SSE 兼容）",
         "单元测试：fetchWithAuth 正常请求（非 401）直接返回 Response，不触发刷新"
-      ]
+      ],
+      "started_at": "2026-05-22",
+      "completed_at": "2026-05-22",
+      "evidence_file": "R006/evidence/R006_FF001.md",
+      "execution_state": "evaluated",
+      "commit": "d20423f"
     },
     {
       "id": "FF002",
