@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 
 # 确保测试环境有必要的配置（避免 Settings 校验失败）
 os.environ.setdefault("DASHSCOPE_API_KEY", "test-api-key-for-testing")
+os.environ.setdefault("JWT_SECRET_KEY", "test-jwt-secret-key")
 
 from app.rag.models import ChunkMetadata, QueryResult
 

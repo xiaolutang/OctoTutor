@@ -18,6 +18,13 @@ class Settings(BaseSettings):
     dashscope_embedding_model: str = "text-embedding-v4"
     dashscope_embedding_dimension: int = 1024
 
+    # JWT 鉴权 — 与 auth-center 共享密钥（HS256）
+    auth_jwt_secret: str = Field(
+        ...,
+        alias="JWT_SECRET_KEY",
+        description="JWT 签名密钥，与 auth-center 共享（HS256）",
+    )
+
     # NewAPI (本地 Docker, OpenAI 兼容协议) — 用于 LLM 调用
     newapi_api_key: str = Field(
         default="",
