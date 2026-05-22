@@ -2,7 +2,7 @@
   "version": "3.0",
   "rc_id": "R004",
   "name": "rag-dialogue",
-  "status": "active",
+  "status": "archived",
   "branch": "feat/R004-rag-dialogue",
   "workflow": {
     "mode": "A",
