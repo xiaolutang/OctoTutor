@@ -101,28 +101,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return res.json()
       })
       .then((config: RuntimeConfig) => {
-        // ★ 初始化独立 TokenManager 实例
-        const tm = getTokenManager()
-        tm.setConfig({
+        // 共享的 SDK 配置（TokenManager 和 AuthService 使用相同参数）
+        const sdkConfig = {
           clientId: config.clientId,
           authCenterBaseURL: config.authCenterBaseURL,
           redirectUri: window.location.origin + "/callback",
           onSessionExpired: () => {
             setAuthState({ isAuthenticated: false, user: null })
           },
-        })
+        }
 
-        // ★ 注册 getAccessToken 到 apiClient
+        // 初始化独立 TokenManager 实例
+        const tm = getTokenManager()
+        tm.setConfig(sdkConfig)
+
+        // 注册 getAccessToken 到 apiClient
         registerGetToken(() => tm.ensureValidToken())
 
-        return service.init({
-          clientId: config.clientId,
-          authCenterBaseURL: config.authCenterBaseURL,
-          redirectUri: window.location.origin + "/callback",
-          onSessionExpired: () => {
-            setAuthState({ isAuthenticated: false, user: null })
-          },
-        })
+        return service.init(sdkConfig)
       })
       .then(() => {
         const state = service.getAuthState()
