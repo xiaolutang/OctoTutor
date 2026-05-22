@@ -16,6 +16,7 @@ from app.chat.dependencies import get_chat_service
 from app.chat.errors import ChatErrorCode, make_error
 from app.chat.schemas import ChatRequest, StreamEvent
 from app.chat.service import ChatService
+from app.middleware.auth import UserContext, get_current_user
 
 router = APIRouter(prefix="/api", tags=["chat"])
 
@@ -25,6 +26,7 @@ async def stream_chat(
     body: ChatRequest,
     http_request: Request,
     service: ChatService = Depends(get_chat_service),
+    user: UserContext = Depends(get_current_user),
 ):
     """SSE 流式对话端点
 

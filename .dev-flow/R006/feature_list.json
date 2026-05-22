@@ -133,7 +133,7 @@
       "depends_on": [
         "BF001"
       ],
-      "status": "pending",
+      "status": "completed",
       "priority": 2,
       "user_stories": [
         "作为用户，我希望未登录时无法调用受保护的 API，以便系统资源受到保护",
@@ -164,7 +164,12 @@
         "集成测试：有效 token → POST /api/chat → 200",
         "集成测试：有效 token → POST /api/chat/stream → SSE 流",
         "集成测试：有效 token → POST /api/retrieve → 200"
-      ]
+      ],
+      "started_at": "2026-05-22",
+      "completed_at": "2026-05-22",
+      "evidence_file": "R006/evidence/R006_BB001.md",
+      "execution_state": "evaluated",
+      "commit": "7143b7e"
     },
     {
       "id": "BB002",
