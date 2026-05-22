@@ -1,0 +1,6 @@
+# Embedding 认证失败 — 模拟 DashScope API Key 无效
+# 使用: docker compose -f docker-compose.local.yml -f docker-compose.test-embedding-fail.yml up -d octotutor-backend
+services:
+  octotutor-backend:
+    environment:
+      - DASHSCOPE_API_KEY=invalid-key-for-testing

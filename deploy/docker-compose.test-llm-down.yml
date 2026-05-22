@@ -1,0 +1,6 @@
+# LLM 不可达 — 模拟 LLM 连接失败
+# 使用: docker compose -f docker-compose.local.yml -f docker-compose.test-llm-down.yml up -d octotutor-backend
+services:
+  octotutor-backend:
+    environment:
+      - NEWAPI_BASE_URL=http://localhost:1/v1

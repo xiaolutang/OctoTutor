@@ -4,15 +4,22 @@
 
 ```mermaid
 graph LR
+    User[用户] --> ChatUI[Chat UI]
+    ChatUI --> SSEHook[useChatStream]
+    SSEHook --> SSEEndpoint[SSE /api/chat/stream]
+
     Dev[开发者] --> ChatAPI[POST /api/chat]
     Dev --> EvalCLI[Eval CLI]
 
-    ChatAPI --> Retrieve[混合检索+Rerank]
+    SSEEndpoint --> Retrieve[混合检索+Rerank]
+    ChatAPI --> Retrieve
     Retrieve --> Embedding[DashScopeEmbedding]
     Retrieve --> VectorStore[ChromaDBStore]
     Retrieve --> BM25[BM25Retriever]
     Retrieve --> Reranker[Reranker]
-    ChatAPI --> Generator[Generator]
+
+    SSEEndpoint --> Generator[Generator]
+    ChatAPI --> Generator
     Generator --> LLM[OpenAI 兼容 LLM]
 
     EvalCLI --> CPEval[Context Precision Eval]

@@ -1,3 +1,6 @@
+from dataclasses import dataclass
+from typing import Any, Literal
+
 from pydantic import BaseModel, Field, field_validator
 
 from app.domain.models import SourceReference
@@ -21,3 +24,17 @@ class ChatResponse(BaseModel):
     context_used: int
     degraded: bool = False
     degradation_reason: str | None = None
+
+
+@dataclass
+class StreamEvent:
+    """SSE 结构化事件"""
+    type: Literal["status", "sources", "token", "done", "error"]
+    data: Any
+
+
+@dataclass
+class StatusPayload:
+    """status 事件数据"""
+    stage: Literal["retrieving", "generating"]
+    message: str
