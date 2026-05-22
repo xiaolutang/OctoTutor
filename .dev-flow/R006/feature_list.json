@@ -181,7 +181,7 @@
       "depends_on": [
         "BB001"
       ],
-      "status": "pending",
+      "status": "completed",
       "priority": 3,
       "user_stories": [
         "作为用户，我希望用 auth-center 登录后直接使用 OctoTutor 的对话功能"
@@ -212,7 +212,12 @@
         "Docker 集成：GET /api/health → 200（不受鉴权影响）",
         "验证：JWT_SECRET_KEY 不一致 → 所有请求 401",
         "curl 冒烟脚本（backend/tests/e2e_auth_smoke.sh）：未登录 → 3 个受保护端点均 401；GET /api/health → 200；登录获取 token → POST /api/chat → 200；SSE 无 token → 401；SSE 有效 token → 收到事件流；损坏 token → 401。覆盖 CAP-auth-001 + CAP-auth-004"
-      ]
+      ],
+      "started_at": "2026-05-22",
+      "completed_at": "2026-05-22",
+      "evidence_file": "R006/evidence/R006_BB002.md",
+      "execution_state": "evaluated",
+      "commit": "6254df7"
     },
     {
       "id": "FF001",
