@@ -15,7 +15,7 @@ COPY frontend/package.json frontend/package-lock.json* ./
 
 # 修改 @xlfoundry/auth-sdk-web 引用指向本地 SDK（已有 dist/ 构建产物）
 RUN sed -i 's|"@xlfoundry/auth-sdk-web": "file:.*"|"@xlfoundry/auth-sdk-web": "file:./auth-sdk-web"|' package.json \
-    && npm install
+    && npm install --legacy-peer-deps
 
 # 3. 复制项目源码
 COPY frontend/next.config.ts frontend/tsconfig.json frontend/postcss.config.mjs frontend/eslint.config.mjs frontend/components.json ./
