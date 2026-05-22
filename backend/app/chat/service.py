@@ -1,8 +1,11 @@
+import asyncio
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
 from app.rag.models import QueryResult
 from app.domain.protocols import Reranker, Generator
-from app.chat.schemas import ChatResponse
+from app.chat.schemas import ChatResponse, StreamEvent, StatusPayload
+from app.chat.errors import ChatErrorCode, make_error
 from app.domain.models import SourceReference
 
 
@@ -23,8 +26,94 @@ class ChatService:
         self._generator = generator
         self._settings = settings
 
-    def handle_chat(self, question: str, top_k: int) -> ChatResponse:
-        # 1. 混合检索
+    # ------------------------------------------------------------------
+    # 同步对话入口（已有）
+    # ------------------------------------------------------------------
+
+    def handle_chat(self, question: str, top_k: int) -> ChatResponse | None:
+        result = self._retrieve(question, top_k)
+        if not result.chunks:
+            return None
+        answer, sources = self._generator.generate(question, result.chunks)
+        return ChatResponse(
+            answer=answer,
+            sources=sources,
+            context_used=len(result.chunks),
+            degraded=result.degraded,
+            degradation_reason=result.degradation_reason,
+        )
+
+    # ------------------------------------------------------------------
+    # 异步流式对话入口
+    # ------------------------------------------------------------------
+
+    async def stream_chat(
+        self, question: str, top_k: int
+    ) -> AsyncIterator[StreamEvent]:
+        """异步流式对话：检索 → 生成，逐事件 yield StreamEvent"""
+        # -- 阶段 1：检索 --
+        yield StreamEvent(
+            type="status",
+            data=StatusPayload(stage="retrieving", message="正在检索教材..."),
+        )
+
+        try:
+            result = await asyncio.to_thread(self._retrieve, question, top_k)
+        except Exception as e:
+            err_str = str(e).lower()
+            if "embedding" in err_str or "dashscope" in err_str:
+                yield StreamEvent(type="error", data=make_error(ChatErrorCode.EMBEDDING_FAILED))
+            else:
+                yield StreamEvent(type="error", data=make_error(ChatErrorCode.VECTOR_STORE_ERROR))
+            return
+
+        context_chunks = result.chunks
+
+        # -- 检索结果处理 --
+        if context_chunks:
+            sources = [
+                SourceReference(
+                    chunk_id=chunk.chunk_id,
+                    book=chunk.metadata.book,
+                    section=chunk.metadata.section,
+                    page_start=chunk.metadata.page_start,
+                    page_end=chunk.metadata.page_end,
+                )
+                for chunk in context_chunks
+            ]
+            yield StreamEvent(type="sources", data=sources)
+
+        # -- 阶段 2：生成 --
+        yield StreamEvent(
+            type="status",
+            data=StatusPayload(stage="generating", message="正在生成回答..."),
+        )
+
+        try:
+            has_token = False
+            async for token in self._generator.generate_stream(question, context_chunks):
+                has_token = True
+                yield StreamEvent(type="token", data=token)
+
+            if not has_token:
+                yield StreamEvent(type="error", data=make_error(ChatErrorCode.LLM_EMPTY_RESPONSE))
+                return
+
+            yield StreamEvent(type="done", data=None)
+
+        except ConnectionError:
+            yield StreamEvent(type="error", data=make_error(ChatErrorCode.LLM_CONNECT_FAILED))
+        except TimeoutError:
+            yield StreamEvent(type="error", data=make_error(ChatErrorCode.LLM_TIMEOUT))
+        except Exception:
+            yield StreamEvent(type="error", data=make_error(ChatErrorCode.LLM_STREAM_ERROR))
+
+    # ------------------------------------------------------------------
+    # 私有方法
+    # ------------------------------------------------------------------
+
+    def _retrieve(self, question: str, top_k: int) -> RetrieveResult:
+        """检索管线：Embed -> Vector -> Threshold -> BM25 -> RRF -> Rerank -> Truncate"""
         embedding = self._embedding.embed_query(question)
         vector_results = self._vector_store.query(embedding, self._settings.retrieval_top_k)
 
@@ -41,37 +130,28 @@ class ChatService:
             fused = vector_results
 
         if not fused:
-            return None
+            return RetrieveResult(chunks=[])
 
-        # 2. Rerank 精炼（失败降级）
-        degraded = False
-        degradation_reason = None
+        # Rerank 精炼（失败降级）
         try:
             reranked = self._reranker.rerank(question, fused, self._settings.rerank_top_n)
             if not reranked:
                 reranked = fused[: self._settings.rerank_top_n]
-                degraded = True
-                degradation_reason = "rerank_empty"
+                return RetrieveResult(
+                    chunks=self._truncate_by_chars(reranked, self._settings.chat_max_context_tokens),
+                    degraded=True,
+                    degradation_reason="rerank_empty",
+                )
         except Exception:
             reranked = fused[: self._settings.rerank_top_n]
-            degraded = True
-            degradation_reason = "rerank_failed"
+            return RetrieveResult(
+                chunks=self._truncate_by_chars(reranked, self._settings.chat_max_context_tokens),
+                degraded=True,
+                degradation_reason="rerank_failed",
+            )
 
-        # 3. 字符数截断保护
-        context_chunks = self._truncate_by_chars(
-            reranked, self._settings.chat_max_context_tokens
-        )
-
-        # 4. 生成
-        answer, sources = self._generator.generate(question, context_chunks)
-
-        return ChatResponse(
-            answer=answer,
-            sources=sources,
-            context_used=len(context_chunks),
-            degraded=degraded,
-            degradation_reason=degradation_reason,
-        )
+        context_chunks = self._truncate_by_chars(reranked, self._settings.chat_max_context_tokens)
+        return RetrieveResult(chunks=context_chunks)
 
     @staticmethod
     def _rrf_fuse(vector_results, bm25_results, k=60):
