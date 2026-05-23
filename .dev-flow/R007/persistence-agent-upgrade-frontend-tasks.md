@@ -372,7 +372,7 @@ UI 结构：
 
 ---
 
-## R007-FB002：use-conversation.ts + chat-ui.tsx — 对话加载 + 重构 `⬜ 待处理`
+## R007-FB002：use-conversation.ts + chat-ui.tsx — 对话加载 + 重构 `✅ 已完成`
 
 - 文件：`frontend/src/chat/use-conversation.ts`(新建)、`frontend/src/components/chat-ui.tsx`(修改)
 - 改动类型：新建 + 修改

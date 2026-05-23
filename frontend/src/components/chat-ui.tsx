@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useChatStream } from '@/chat/use-chat-stream';
-import { loadMessages, saveMessages } from '@/chat/use-chat-storage';
-import type { Message, MessageStatus } from '@/chat/types';
+import { saveMessages } from '@/chat/use-chat-storage';
+import { useConversation } from '@/chat/use-conversation';
+import type { Message, MessageStatus, ThinkingStep } from '@/chat/types';
 import { ChatInput } from './chat-input';
 import { MessageBubble } from './message-bubble';
 import 'katex/dist/katex.min.css';
@@ -16,23 +17,31 @@ export function ChatUI() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [mounted, setMounted] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const { sendMessage, stop, isStreaming } = useChatStream();
+  const { conversationId, loadConversation } = useConversation();
   const aiMsgIdRef = useRef<string>('');
 
-  // 客户端加载历史
+  // 加载对话历史（优先 API，降级 localStorage）
   useEffect(() => {
-    setMessages(loadMessages());
-    setMounted(true);
-  }, []);
+    let cancelled = false;
+    loadConversation().then(({ messages: loadedMessages }) => {
+      if (!cancelled) {
+        setMessages(loadedMessages);
+        setMounted(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [loadConversation]);
 
   // 使用 setMessages(prev => ...) 避免闭包旧值
+  // terminalStatus 存在时才调用 saveMessages（部分回答兜底）
   const updateMsgAndSave = useCallback(
     (id: string, patch: Partial<Message>, terminalStatus?: MessageStatus) => {
       setMessages((prev) => {
         const next = prev.map((m) => (m.id === id ? { ...m, ...patch } : m));
         if (terminalStatus) {
-          // 终态时持久化
           saveMessages(next);
         }
         return next;
@@ -43,48 +52,55 @@ export function ChatUI() {
 
   const startSSE = useCallback(
     (question: string, aiMsgId: string) => {
-      sendMessage(question, {
-        onStatus: (stage: string, _message: string) => {
-          if (stage === 'retrieving' || stage === 'generating') {
-            updateMsgAndSave(aiMsgId, { status: stage as MessageStatus });
-          }
-        },
-        onSources: (sources) => {
-          updateMsgAndSave(aiMsgId, { sources });
-        },
-        onToken: (token: string) => {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === aiMsgId ? { ...m, content: m.content + token } : m,
-            ),
-          );
-        },
-        onThinking: () => {
-          // thinking events handled at use-chat-stream level; UI hook reserved for future use
-        },
-        onDone: () => {
-          updateMsgAndSave(aiMsgId, { status: 'done' }, 'done');
-        },
-        onError: (error) => {
-          if (error.code === '00000') {
-            // 撤回最后 user+ai 消息，内容回填输入框
-            setMessages((prev) => {
-              const next = prev.slice(0, -2);
-              saveMessages(next);
-              return next;
-            });
-            setInput(question);
-          } else {
-            updateMsgAndSave(
-              aiMsgId,
-              { status: 'error', error },
-              'error',
+      sendMessage(
+        question,
+        {
+          onStatus: (stage: string, _message: string) => {
+            if (stage === 'retrieving' || stage === 'generating') {
+              updateMsgAndSave(aiMsgId, { status: stage as MessageStatus });
+            }
+          },
+          onSources: (sources) => {
+            updateMsgAndSave(aiMsgId, { sources });
+          },
+          onToken: (token: string) => {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === aiMsgId ? { ...m, content: m.content + token } : m,
+              ),
             );
-          }
+          },
+          onThinking: (step: ThinkingStep) => {
+            setMessages((prev) =>
+              prev.map((m) => {
+                if (m.id !== aiMsgId) return m;
+                const existing = m.thinkingSteps ?? [];
+                return { ...m, thinkingSteps: [...existing, step] };
+              }),
+            );
+          },
+          onDone: () => {
+            // onDone 不调用 saveMessages
+            updateMsgAndSave(aiMsgId, { status: 'done' });
+          },
+          onError: (error) => {
+            if (error.code === '00000') {
+              // 撤回最后 user+ai 消息，内容回填输入框，保留 saveMessages
+              setMessages((prev) => {
+                const next = prev.slice(0, -2);
+                saveMessages(next);
+                return next;
+              });
+              setInput(question);
+            } else {
+              updateMsgAndSave(aiMsgId, { status: 'error', error }, 'error');
+            }
+          },
         },
-      });
+        conversationId ?? undefined,
+      );
     },
-    [sendMessage, updateMsgAndSave],
+    [sendMessage, updateMsgAndSave, conversationId],
   );
 
   const appendAndSend = useCallback(
@@ -110,7 +126,7 @@ export function ChatUI() {
 
       const newMessages = [...baseMessages, userMsg, aiMsg];
       setMessages(newMessages);
-      saveMessages(newMessages);
+      // 发送时不调用 saveMessages
 
       startSSE(questionText, aiMsgId);
     },
@@ -119,16 +135,17 @@ export function ChatUI() {
 
   const handleSend = useCallback(() => {
     const text = input.trim();
-    if (!text || isStreaming || editingId !== null) return;
+    if (!text || isStreaming) return;
 
     appendAndSend(messages, text);
     setInput('');
-  }, [input, isStreaming, editingId, messages, appendAndSend]);
+  }, [input, isStreaming, messages, appendAndSend]);
 
   const handleStop = useCallback(() => {
     stop();
     const aiMsgId = aiMsgIdRef.current;
     if (aiMsgId) {
+      // handleStop 保留 saveMessages（部分回答兜底）
       updateMsgAndSave(aiMsgId, { status: 'stopped' }, 'stopped');
     }
   }, [stop, updateMsgAndSave]);
@@ -172,64 +189,12 @@ export function ChatUI() {
       const newMessages = [...messages];
       newMessages[msgIndex] = newAiMsg;
       setMessages(newMessages);
-      saveMessages(newMessages);
+      // handleRegenerate 不调用 saveMessages
 
       startSSE(userText, newAiMsgId);
     },
     [isStreaming, messages, startSSE],
   );
-
-  /**
-   * 编辑用户消息：进入原地编辑模式
-   */
-  const handleEdit = useCallback(
-    (messageId: string) => {
-      if (isStreaming) return;
-
-      const msgIndex = messages.findIndex((m) => m.id === messageId);
-      if (msgIndex < 0) return;
-
-      const userMsg = messages[msgIndex];
-      if (userMsg.role !== 'user') return;
-
-      setEditingId(messageId);
-    },
-    [isStreaming, messages],
-  );
-
-  /**
-   * 确认编辑：截断消息 + 重新发送
-   */
-  const handleEditConfirm = useCallback(
-    (messageId: string, newContent: string) => {
-      const trimmed = newContent.trim();
-      if (!trimmed) {
-        // 空文本视为取消
-        setEditingId(null);
-        return;
-      }
-
-      const msgIndex = messages.findIndex((m) => m.id === messageId);
-      if (msgIndex < 0) {
-        setEditingId(null);
-        return;
-      }
-
-      // 截断到该消息之前，然后用新文本发送
-      const truncatedMessages = messages.slice(0, msgIndex);
-      setEditingId(null);
-
-      appendAndSend(truncatedMessages, trimmed);
-    },
-    [messages, startSSE],
-  );
-
-  /**
-   * 取消编辑
-   */
-  const handleEditCancel = useCallback(() => {
-    setEditingId(null);
-  }, []);
 
   if (!mounted) {
     return (
@@ -253,10 +218,6 @@ export function ChatUI() {
               key={msg.id}
               message={msg}
               isStreaming={isStreaming}
-              isEditing={editingId === msg.id}
-              onEdit={handleEdit}
-              onEditConfirm={handleEditConfirm}
-              onEditCancel={handleEditCancel}
               onRegenerate={handleRegenerate}
             />
           ))
@@ -270,7 +231,7 @@ export function ChatUI() {
         onSend={handleSend}
         onStop={handleStop}
         isStreaming={isStreaming}
-        disabled={isStreaming || editingId !== null}
+        disabled={isStreaming}
       />
     </div>
   );
