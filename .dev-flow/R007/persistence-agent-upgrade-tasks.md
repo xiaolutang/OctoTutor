@@ -93,7 +93,7 @@ psycopg[binary]>=3.1.0
 
 ---
 
-## R007-BF001：agent/ 模块 + main.py + dependencies.py — 骨架初始化 `⬜ 待处理`
+## R007-BF001：agent/ 模块 + main.py + dependencies.py — 骨架初始化 `✅ 已完成`
 
 - 文件：`backend/app/agent/__init__.py`(新建)、`backend/app/agent/graph.py`(新建)、`backend/app/agent/nodes.py`(新建)、`backend/app/agent/prompts.py`(新建)、`backend/app/chat/dependencies.py`(修改)、`backend/app/main.py`(修改)
 - 改动类型：新建 + 修改

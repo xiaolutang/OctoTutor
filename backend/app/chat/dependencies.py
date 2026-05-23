@@ -38,3 +38,17 @@ def get_chat_service(
     settings=Depends(get_settings),
 ) -> ChatService:
     return ChatService(embedding, vector_store, bm25, reranker, generator, settings)
+
+
+def get_graph(request: Request):
+    """获取编译后的 Agent StateGraph"""
+    from langgraph.graph.state import CompiledStateGraph
+
+    graph = request.app.state.graph
+    assert isinstance(graph, CompiledStateGraph)
+    return graph
+
+
+def get_checkpointer(request: Request):
+    """获取 LangGraph checkpointer 实例"""
+    return request.app.state.checkpointer

@@ -8,10 +8,12 @@ from app.rag.vector_store import ChromaDBStore
 from app.infra.bm25 import BM25Retriever
 from app.infra.reranker import DashScopeReranker
 from app.infra.llm import LLMGenerator
+from app.agent.graph import create_graph
 from app.api.routes.health import router as health_router
 from app.api.routes.retrieve import router as retrieve_router
 from app.chat.router import router as chat_router
 from app.chat.stream_router import router as stream_router
+# from app.chat.conversation_router import router as conversation_router  # BB005 完成后取消注释
 
 
 @asynccontextmanager
@@ -56,6 +58,29 @@ async def lifespan(application: FastAPI):
     application.state.generator = generator
     print(f"[startup] LLM Generator initialized (model={settings.llm_model})")
 
+    # 初始化 LangGraph PostgresSaver（失败时回退 MemorySaver）
+    checkpointer = None
+    try:
+        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+
+        checkpointer = AsyncPostgresSaver.from_conn_string(settings.database_url)
+        await checkpointer.setup()
+        print("[startup] PostgresSaver initialized")
+    except Exception as e:
+        from langgraph.checkpoint.memory import MemorySaver
+
+        checkpointer = MemorySaver()
+        print(
+            f"[startup] WARNING: PostgresSaver failed ({e}), "
+            "using MemorySaver fallback"
+        )
+    application.state.checkpointer = checkpointer
+
+    # 编译 Agent StateGraph
+    graph = create_graph(checkpointer=checkpointer)
+    application.state.graph = graph
+    print("[startup] Agent graph compiled")
+
     print(f"[startup] {settings.app_name} v{settings.app_version} started")
     yield
     print(f"[shutdown] {settings.app_name} stopped")
@@ -71,3 +96,4 @@ app.include_router(health_router)
 app.include_router(retrieve_router)
 app.include_router(chat_router)
 app.include_router(stream_router)
+# app.include_router(conversation_router)  # BB005 完成后取消注释
