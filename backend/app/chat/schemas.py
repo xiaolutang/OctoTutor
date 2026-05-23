@@ -9,6 +9,7 @@ from app.domain.models import SourceReference
 class ChatRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=2000, description="学生问题")
     top_k: int = Field(default=10, ge=3, le=20, description="检索数量")
+    conversation_id: str | None = Field(default=None, description="对话 ID，为空时自动创建")
 
     @field_validator("question")
     @classmethod
@@ -29,7 +30,7 @@ class ChatResponse(BaseModel):
 @dataclass
 class StreamEvent:
     """SSE 结构化事件"""
-    type: Literal["status", "sources", "token", "done", "error"]
+    type: Literal["status", "sources", "token", "thinking", "done", "error"]
     data: Any
 
 
@@ -38,3 +39,21 @@ class StatusPayload:
     """status 事件数据"""
     stage: Literal["retrieving", "generating"]
     message: str
+
+
+@dataclass
+class ThinkingPayload:
+    """thinking 事件数据 — 思考步骤"""
+    text: str
+    index: int = 0
+
+
+class ApiMessage(BaseModel):
+    """对话消息 — GET /api/conversations/current 响应中的消息格式"""
+    id: str
+    role: str
+    content: str
+    status: str = "completed"
+    sources: list[SourceReference] = Field(default_factory=list)
+    thinking_steps: list[ThinkingPayload] = Field(default_factory=list)
+    created_at: str = ""

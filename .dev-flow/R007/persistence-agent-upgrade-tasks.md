@@ -502,7 +502,7 @@ graph = create_graph(
 
 ---
 
-## R007-BB005+BB006：schemas + stream_router + conversation_router — SSE 集成 `⬜ 待处理`
+## R007-BB005+BB006：schemas + stream_router + conversation_router — SSE 集成 `✅ 已完成`
 
 - 文件：`backend/app/chat/schemas.py`(修改)、`backend/app/chat/stream_router.py`(修改)、`backend/app/chat/conversation_router.py`(新建)
 - 改动类型：修改 + 新建
