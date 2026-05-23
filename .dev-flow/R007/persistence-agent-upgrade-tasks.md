@@ -266,7 +266,7 @@ from app.chat.conversation_router import router as conversation_router
 
 ---
 
-## R007-BB002：question_classifier.py — classify 节点改造 `⬜ 待处理`
+## R007-BB002：question_classifier.py — classify 节点改造 `✅ 已完成`
 
 - 文件：`backend/app/chat/question_classifier.py`
 - 改动类型：修改
@@ -316,7 +316,7 @@ async def classify_node(state: dict) -> dict:
 
 ---
 
-## R007-BB003+BB004：agent/nodes.py + agent/prompts.py — respond + refuse 实现 `⬜ 待处理`
+## R007-BB003+BB004：agent/nodes.py + agent/prompts.py — respond + refuse 实现 `✅ 已完成`
 
 - 文件：`backend/app/agent/nodes.py`、`backend/app/agent/prompts.py`
 - 改动类型：修改
