@@ -433,7 +433,7 @@ def refuse_node(state: dict) -> dict:
 
 ---
 
-## R007-BB001：agent/graph.py — StateGraph 条件路由编排 `⬜ 待处理`
+## R007-BB001：agent/graph.py — StateGraph 条件路由编排 `✅ 已完成`
 
 - 文件：`backend/app/agent/graph.py`
 - 改动类型：修改

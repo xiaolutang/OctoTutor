@@ -8,6 +8,7 @@ from app.rag.vector_store import ChromaDBStore
 from app.infra.bm25 import BM25Retriever
 from app.infra.reranker import DashScopeReranker
 from app.infra.llm import LLMGenerator
+from app.chat.service import ChatService
 from app.agent.graph import create_graph
 from app.api.routes.health import router as health_router
 from app.api.routes.retrieve import router as retrieve_router
@@ -58,6 +59,18 @@ async def lifespan(application: FastAPI):
     application.state.generator = generator
     print(f"[startup] LLM Generator initialized (model={settings.llm_model})")
 
+    # 初始化 ChatService（Agent graph retrieve 节点使用其检索管线）
+    chat_service = ChatService(
+        embedding=embedding_service,
+        vector_store=store,
+        bm25=bm25,
+        reranker=reranker,
+        generator=generator,
+        settings=settings,
+    )
+    application.state.chat_service = chat_service
+    print("[startup] ChatService initialized")
+
     # 初始化 LangGraph PostgresSaver（失败时回退 MemorySaver）
     checkpointer = None
     try:
@@ -77,7 +90,11 @@ async def lifespan(application: FastAPI):
     application.state.checkpointer = checkpointer
 
     # 编译 Agent StateGraph
-    graph = create_graph(checkpointer=checkpointer)
+    graph = create_graph(
+        checkpointer=checkpointer,
+        chat_service=chat_service,
+        generator=generator,
+    )
     application.state.graph = graph
     print("[startup] Agent graph compiled")
 
