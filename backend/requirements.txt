@@ -22,3 +22,9 @@ rank-bm25>=0.2.2
 
 # JWT 鉴权
 python-jose[cryptography]>=3.3.0
+
+# LangGraph Agent 编排 + 消息持久化 (R007)
+langgraph>=0.6.0
+langchain-core>=0.3.0
+langgraph-checkpoint-postgres>=0.2.0
+psycopg[binary]>=3.1.0

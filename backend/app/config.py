@@ -33,6 +33,12 @@ class Settings(BaseSettings):
     newapi_base_url: str = "http://localhost:13000/v1"
     llm_model: str = "glm-5.1"
 
+    # PostgreSQL — LangGraph PostgresSaver 持久化
+    database_url: str = Field(
+        default="postgresql://localhost:5432/octotutor_checkpoints",
+        description="PostgreSQL 连接串，用于 LangGraph PostgresSaver",
+    )
+
     # ChromaDB
     chroma_persist_dir: str = "data/chroma_db"
 
