@@ -1,6 +1,6 @@
 # OctoTutor 架构宪法
 
-> version: 4.0 | updated: 2026-05-22 | R005 chat-ui-sse
+> version: 5.0 | updated: 2026-05-23 | R006 auth-integration
 
 ## 系统拓扑
 
@@ -13,6 +13,11 @@ User → Traefik → Frontend (Next.js) → Browser
                                    → SQLite (metadata)
 
 SSE 流式连接：Browser → Traefik → Backend SSE Endpoint (/api/chat/stream)
+
+认证链路：
+  Browser → auth-center (OAuth 2.0 + PKCE) → TokenManager (localStorage)
+  apiClient (Bearer token) → Backend JWT 验证 (HS256 共享密钥)
+  auth-center ← 共享 JWT_SECRET_KEY → Backend
 ```
 
 ## 关键决策与理由
@@ -31,6 +36,8 @@ SSE 流式连接：Browser → Traefik → Backend SSE Endpoint (/api/chat/strea
 - **SSE over WebSocket**: SSE 基于标准 HTTP，无需额外协议升级，天然支持断线检测，适合单向流式推送（DEC-rag-006-rev1）
 - **AsyncOpenAI 双客户端**: 非流式用 OpenAI()，流式用 AsyncOpenAI()，按场景选择同步/异步调用方式
 - **MMPPN 错误码体系**: 五位数字编码 MM=模块 PP=阶段 N=序号，结构化错误码替代字符串匹配
+- **JWT 共享密钥鉴权**: auth-center 签发 HS256 JWT，后端本地解码验证，不查 Redis 黑名单（DEC-auth-001）
+- **apiClient 统一网络层**: 前端所有 API 请求经 apiClient，自动附加 Bearer token + 刷新锁 + 401 重试（DEC-auth-003）
 
 ## 权威边界
 
@@ -52,12 +59,13 @@ SSE 流式连接：Browser → Traefik → Backend SSE Endpoint (/api/chat/strea
 - API 兼容：/api/retrieve 接口不变（R003 契约），/api/chat 非流式不变，新功能走 /api/chat/stream
 - SSE 事件格式固定：每帧为 `event: {type}\ndata: {json}\n\n`，type 为 status/sources/token/done/error
 - 检索不流式（一次返回全部 chunks），LLM 生成逐 token 流式
+- API 鉴权：/api/retrieve、/api/chat、/api/chat/stream 需要 Bearer token，/api/health 不需要鉴权
 
 ## 禁止模式
 
 - Frontend 不直接调 DashScope API
 - 不在主分支直接开发功能（使用 feat/ 分支）
-- R005 不做用户认证打通（留给 R006+）
+- R006 不做消息持久化（留给 R007）
 - R004 不做多轮对话状态管理（DEC-rag-007，留给 R005+ 跟 UI 一起做）
 - R004 不做前端 Chat UI（留给 R005）
 - 不做 WebSocket：SSE 已满足单向流式推送需求，WebSocket 的双向能力不需要

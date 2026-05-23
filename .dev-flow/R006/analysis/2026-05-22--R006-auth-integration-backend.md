@@ -1,16 +1,90 @@
 ---
-date: 2026-05-22
-type: analysis-backend
-mode: new_requirement
-topic: R006-auth-integration
-parent_analysis: 2026-05-22--R006-auth-integration.md
+module: auth-integration
+version: "1.0"
+date: "2026-05-22"
+tags: [auth, jwt, backend, middleware]
+type: design_backend
+status: designed
+requirement_cycle: R006
+source_analysis: 2026-05-22--R006-auth-integration.md
+architecture_md_updates: true
 ---
 
-# R006 用户认证打通 后端设计
+# 用户认证打通 — 后端 设计报告
 
-> 本文档由 subagent-backend 产出，基于需求分析文档 `2026-05-22--R006-auth-integration.md`。
+> 关联设计：[用户认证打通 v1.0 前端](2026-05-22--R006-auth-integration-frontend.md)
 
-## 5. 系统逻辑树（后端分支）
+## 1. 目标
+
+- 对所有受保护 API 端点（`/api/chat`、`/api/chat/stream`、`/api/retrieve`）实施 JWT 鉴权
+- 与 auth-center 共享 HS256 密钥，本地解码验证 JWT，不直接调用 auth-center
+- 使用 FastAPI `Depends` 注入模式，按需声明鉴权，不引入全局中间件
+- 提取 `user_id` / `username` 封装为 `UserContext`，为 R007 持久化预留
+
+## 2. 现状分析
+
+**当前已有：**
+
+- FastAPI 路由层：`chat/router.py`、`chat/stream_router.py`、`api/routes/retrieve.py`、`api/routes/health.py`
+- 依赖注入模式：`chat/dependencies.py` 中 `get_chat_service` 通过 `Depends` 链组装
+- 配置管理：`app/config.py` 使用 pydantic-settings `Settings(BaseSettings)` 自动绑定环境变量
+- Docker 部署：`deploy/docker-compose.local.yml`
+
+**存在问题：**
+
+- 所有 API 端点无鉴权，任何人可直接调用
+- 无用户身份概念，无法为后续 R007 持久化关联用户
+
+## 3. 数据模型与接口
+
+### UserContext
+
+```python
+@dataclass(frozen=True)
+class UserContext:
+    """从 JWT 解码后的用户上下文"""
+    user_id: str
+    username: str
+```
+
+### JWT Payload 结构（auth-center 签发，后端只读验证）
+
+```json
+{
+  "sub": "user_id_string",
+  "client_id": "username_or_client_name",
+  "exp": 1719360000,
+  "type": "access"
+}
+```
+
+### API 鉴权矩阵
+
+| 端点 | 方法 | 鉴权 | 理由 |
+|------|------|------|------|
+| `/api/health` | GET | 否 | Docker 健康检查，不声明 `Depends(get_current_user)` |
+| `/api/retrieve` | POST | 是 | 保护检索资源 |
+| `/api/chat` | POST | 是 | 消费 LLM 资源 + 需关联用户 |
+| `/api/chat/stream` | POST | 是 | 同上 |
+
+### 请求格式变更
+
+| Header | 值 | 必需 | 说明 |
+|--------|-----|------|------|
+| `Authorization` | `Bearer {jwt_token}` | 是 | auth-center 签发的 access_token |
+
+### 响应格式（鉴权失败）
+
+| 状态码 | 场景 | 响应体 |
+|--------|------|--------|
+| 401 | 缺少 Authorization header | `{"detail": "Missing authentication token"}` |
+| 401 | token 格式错误 / 签名无效 / 已过期 | `{"detail": "Invalid token: {具体原因}"}` |
+| 401 | token type 不是 access | `{"detail": "Invalid token type, expected 'access'"}` |
+| 401 | token 中缺少 sub 字段 | `{"detail": "Token missing subject (sub)"}` |
+
+所有 401 响应均携带 `WWW-Authenticate: Bearer` header。
+
+## 4. 核心流程
 
 ```text
 后端系统（R006 鉴权范围）
@@ -56,8 +130,6 @@ flowchart TD
     N --> O[返回响应]
 ```
 
-## 6. 功能网络（后端依赖）
-
 ```mermaid
 graph LR
     Router[路由层] --> Auth[get_current_user Depends]
@@ -66,30 +138,6 @@ graph LR
     Router --> Service[ChatService / RetrieveService]
     Service --> RAG[RAG 管线]
 ```
-
-### 依赖的已有模块
-
-| Module | Dependency Type | Reason | Evidence |
-|--------|-----------------|--------|----------|
-| `app/config.py` Settings | 配置 | 新增 `auth_jwt_secret` 字段，从 `JWT_SECRET_KEY` 环境变量读取 | `Settings(BaseSettings)` 使用 pydantic-settings 自动绑定环境变量 |
-| `app/chat/dependencies.py` | 模式参考 | `get_current_user` 遵循相同的 `Depends()` 注入模式 | `get_chat_service` 通过 `Depends` 链组装依赖 |
-| `app/chat/router.py` | 修改目标 | 注入 `Depends(get_current_user)` | `router.post("/chat")` 当前无鉴权 |
-| `app/chat/stream_router.py` | 修改目标 | 注入 `Depends(get_current_user)` | `router.post("/chat/stream")` 当前无鉴权 |
-| `app/api/routes/retrieve.py` | 修改目标 | 注入 `Depends(get_current_user)` | `router.post("/retrieve")` 当前无鉴权 |
-| `requirements.txt` | 依赖 | 新增 `python-jose[cryptography]` | 当前无 JWT 相关依赖 |
-
-### 影响的已有模块
-
-| Module | Impact | Required Change | Risk |
-|--------|--------|-----------------|------|
-| `app/config.py` | 新增配置字段 | 新增 `auth_jwt_secret: str` | Low — 向后兼容，仅新增字段 |
-| `app/chat/router.py` | 注入鉴权 | 函数签名新增 `user: UserContext = Depends(get_current_user)` | Low — 不影响业务逻辑 |
-| `app/chat/stream_router.py` | 注入鉴权 | 函数签名新增 `user: UserContext = Depends(get_current_user)` | Low — 不影响业务逻辑 |
-| `app/api/routes/retrieve.py` | 注入鉴权 | 函数签名新增 `user: UserContext = Depends(get_current_user)` | Low — 不影响业务逻辑 |
-| `app/chat/service.py` | 不修改 | R006 不传递 user_id 到 service | None |
-| `app/api/routes/health.py` | 不修改 | Docker 健康检查，不声明 Depends 即不鉴权 | None |
-| `app/main.py` | 不修改 | 使用 Depends 注入，无需注册全局中间件 | None |
-| `deploy/docker-compose.local.yml` | 新增环境变量 | 后端服务新增 `JWT_SECRET_KEY`，值与 auth-center 一致 | Low — 仅新增一个环境变量 |
 
 ### 模块依赖关系图
 
@@ -115,7 +163,35 @@ graph TD
     style Jose fill:#fff3e0
 ```
 
-## 8. 方案设计（后端）
+### 状态与错误处理
+
+```mermaid
+stateDiagram-v2
+    [*] --> TokenExtracted: 请求到达
+    TokenExtracted --> Decoding: 提取 Bearer token
+    Decoding --> SignatureValid: jwt.decode 成功
+    Decoding --> InvalidToken: JWTError
+    InvalidToken --> [*]: 401 Invalid token: {reason}
+    SignatureValid --> TypeCheck: type == access?
+    TypeCheck --> SubExtracted: type 校验通过
+    TypeCheck --> [*]: 401 Invalid token type
+    SubExtracted --> Authenticated: sub 存在
+    SubExtracted --> [*]: 401 Token missing subject
+    Authenticated --> [*]: UserContext 注入，继续业务处理
+```
+
+| Scenario | State Change | Error Handling | User Feedback |
+|----------|--------------|----------------|---------------|
+| 无 Authorization header | TokenExtracted -> 401 | `HTTPException(401, "Missing authentication token")` | 前端 apiClient 检测 401 -> 刷新 token -> 重试 |
+| token 格式损坏 | Decoding -> 401 | `HTTPException(401, "Invalid token: {JWTError}")` | 同上 |
+| token 签名被篡改 | Decoding -> 401 | `HTTPException(401, "Invalid token: Signature verification failed")` | 同上 |
+| token 已过期 | Decoding -> 401 | `HTTPException(401, "Invalid token: Signature has expired")` | 同上 |
+| token type 不是 access | TypeCheck -> 401 | `HTTPException(401, "Invalid token type, expected 'access'")` | 前端提示认证异常 |
+| token 缺少 sub 字段 | SubExtracted -> 401 | `HTTPException(401, "Token missing subject (sub)")` | 前端提示认证异常 |
+| JWT_SECRET_KEY 未配置 | 应用启动失败 | `pydantic ValidationError` | 启动报错，需配置环境变量 |
+| JWT_SECRET_KEY 与 auth-center 不一致 | 所有请求 -> 401 | 签名验证失败 | 部署配置检查 |
+
+## 5. 项目结构与技术决策
 
 ### 目录结构
 
@@ -190,6 +266,59 @@ classDiagram
 | `app/config.py` | 提供 `auth_jwt_secret` 配置 | 仅新增一个字段，不修改已有字段 |
 | 路由层（router/stream_router/retrieve） | 声明鉴权依赖 | 仅在函数签名加 `user: UserContext = Depends(get_current_user)`，不修改业务逻辑 |
 | `app/chat/service.py` | 不修改 | R007 持久化时才引入 user_id |
+
+### 技术决策表
+
+| 决策 | 选型 | 理由 |
+|------|------|------|
+| JWT 解码库 | python-jose[cryptography] | FastAPI 生态主流选择，支持 HS256 + 多种算法 |
+| 鉴权模式 | Depends 按需注入 | 不引入全局中间件，仅受保护端点声明即可 |
+| 密钥共享 | 环境变量 JWT_SECRET_KEY | 与 auth-center 部署在同一 docker-compose，共享同一密钥 |
+
+### 第三方依赖清单
+
+| 依赖 | 版本 | 用途 |
+|------|------|------|
+| `python-jose[cryptography]` | >=3.3.0 | JWT 解码验证（HS256），cryptography extras 提供底层加密支持 |
+
+### 依赖的已有模块
+
+| Module | Dependency Type | Reason | Evidence |
+|--------|-----------------|--------|----------|
+| `app/config.py` Settings | 配置 | 新增 `auth_jwt_secret` 字段，从 `JWT_SECRET_KEY` 环境变量读取 | `Settings(BaseSettings)` 使用 pydantic-settings 自动绑定环境变量 |
+| `app/chat/dependencies.py` | 模式参考 | `get_current_user` 遵循相同的 `Depends()` 注入模式 | `get_chat_service` 通过 `Depends` 链组装依赖 |
+| `app/chat/router.py` | 修改目标 | 注入 `Depends(get_current_user)` | `router.post("/chat")` 当前无鉴权 |
+| `app/chat/stream_router.py` | 修改目标 | 注入 `Depends(get_current_user)` | `router.post("/chat/stream")` 当前无鉴权 |
+| `app/api/routes/retrieve.py` | 修改目标 | 注入 `Depends(get_current_user)` | `router.post("/retrieve")` 当前无鉴权 |
+| `requirements.txt` | 依赖 | 新增 `python-jose[cryptography]` | 当前无 JWT 相关依赖 |
+
+### 影响的已有模块
+
+| Module | Impact | Required Change | Risk |
+|--------|--------|-----------------|------|
+| `app/config.py` | 新增配置字段 | 新增 `auth_jwt_secret: str` | Low — 向后兼容，仅新增字段 |
+| `app/chat/router.py` | 注入鉴权 | 函数签名新增 `user: UserContext = Depends(get_current_user)` | Low — 不影响业务逻辑 |
+| `app/chat/stream_router.py` | 注入鉴权 | 函数签名新增 `user: UserContext = Depends(get_current_user)` | Low — 不影响业务逻辑 |
+| `app/api/routes/retrieve.py` | 注入鉴权 | 函数签名新增 `user: UserContext = Depends(get_current_user)` | Low — 不影响业务逻辑 |
+| `app/chat/service.py` | 不修改 | R006 不传递 user_id 到 service | None |
+| `app/api/routes/health.py` | 不修改 | Docker 健康检查，不声明 Depends 即不鉴权 | None |
+| `app/main.py` | 不修改 | 使用 Depends 注入，无需注册全局中间件 | None |
+| `deploy/docker-compose.local.yml` | 新增环境变量 | 后端服务新增 `JWT_SECRET_KEY`，值与 auth-center 一致 | Low — 仅新增一个环境变量 |
+
+### 配置与第三方集成
+
+| 配置项 | 环境变量 | 类型 | 必填 | 说明 |
+|--------|----------|------|------|------|
+| `Settings.auth_jwt_secret` | `JWT_SECRET_KEY` | `str` | 是 | 与 auth-center 共享的 HS256 签名密钥 |
+
+#### 部署配置要求
+
+`docker-compose.local.yml` 或 `.env` 必须新增：
+
+```yaml
+environment:
+  - JWT_SECRET_KEY=${JWT_SECRET_KEY}  # 与 auth-center 使用相同的密钥
+```
 
 ### 代码架构设计
 
@@ -394,99 +523,34 @@ async def retrieve(
 python-jose[cryptography]>=3.3.0
 ```
 
-### 数据模型变更
+## 6. 验收标准
 
-R006 无数据模型变更。不涉及数据库操作。
+| 验收条件 | 验证方式 | 通过标准 |
+|----------|----------|----------|
+| 无 token 请求受保护端点返回 401 | httpx TestClient | `POST /api/chat` 无 Authorization -> 401 |
+| 健康检查不受鉴权影响 | httpx TestClient | `GET /api/health` 无 Authorization -> 200 |
+| 有效 token 请求受保护端点返回 200 | httpx TestClient | `POST /api/chat` + 有效 Bearer token -> 200 |
+| 流式端点鉴权通过 | httpx TestClient | `POST /api/chat/stream` + 有效 token -> SSE 流 |
+| 检索端点鉴权通过 | httpx TestClient | `POST /api/retrieve` + 有效 token -> 200 |
+| 过期 token 被拦截 | httpx TestClient | 过期 JWT -> 401 |
+| 有效 token -> UserContext 正确提取 | 单元测试 | 断言 user_id 和 username 匹配 |
+| 损坏 token -> 401 | 单元测试 | 断言 HTTPException + detail 含 "Invalid token" |
+| type 非 access -> 401 | 单元测试 | 构造 `type=refresh` 的 JWT -> 401 |
+| 不同 JWT_SECRET_KEY -> 401 | 单元测试 | 用错误 secret 签的 JWT -> 401 |
+| Docker 环境端到端验证 | docker compose | auth-center 登录 -> 获取 token -> OctoTutor API -> 200 |
+| JWT_SECRET_KEY 配置一致 | docker compose | 相同密钥时正常工作，不同密钥时全部 401 |
 
-### API 设计要点
+## 7. 暂不实现
 
-#### 请求格式变更
+| 功能 | 原因 | 预计周期 |
+|------|------|----------|
+| user_id 传递到 service 层 | R007 持久化阶段再引入 | R007 |
+| RBAC 角色权限控制 | 当前只有普通用户一种角色 | R008+ |
+| JWT 签发（后端自签） | 统一由 auth-center 签发 | 不计划 |
+| token 黑名单 / 撤销 | 当前无此需求，auth-center 侧管理 | R008+ |
+| 审计日志（user_id + 操作记录） | R007 持久化阶段再引入 | R007 |
 
-所有受保护端点新增要求：
-
-| Header | 值 | 必需 | 说明 |
-|--------|-----|------|------|
-| `Authorization` | `Bearer {jwt_token}` | 是 | auth-center 签发的 access_token |
-
-#### JWT Payload 结构（auth-center 签发，后端只读验证）
-
-```json
-{
-  "sub": "user_id_string",
-  "client_id": "username_or_client_name",
-  "exp": 1719360000,
-  "type": "access"
-}
-```
-
-#### 响应格式（鉴权失败）
-
-| 状态码 | 场景 | 响应体 |
-|--------|------|--------|
-| 401 | 缺少 Authorization header | `{"detail": "Missing authentication token"}` |
-| 401 | token 格式错误 / 签名无效 / 已过期 | `{"detail": "Invalid token: {具体原因}"}` |
-| 401 | token type 不是 access | `{"detail": "Invalid token type, expected 'access'"}` |
-| 401 | token 中缺少 sub 字段 | `{"detail": "Token missing subject (sub)"}` |
-
-所有 401 响应均携带 `WWW-Authenticate: Bearer` header。
-
-#### 端点鉴权矩阵
-
-| 端点 | 方法 | 鉴权 | 理由 |
-|------|------|------|------|
-| `/api/health` | GET | 否 | Docker 健康检查，不声明 `Depends(get_current_user)` |
-| `/api/retrieve` | POST | 是 | 保护检索资源 |
-| `/api/chat` | POST | 是 | 消费 LLM 资源 + 需关联用户 |
-| `/api/chat/stream` | POST | 是 | 同上 |
-
-### 配置与第三方集成
-
-| 配置项 | 环境变量 | 类型 | 必填 | 说明 |
-|--------|----------|------|------|------|
-| `Settings.auth_jwt_secret` | `JWT_SECRET_KEY` | `str` | 是 | 与 auth-center 共享的 HS256 签名密钥 |
-
-#### 部署配置要求
-
-`docker-compose.local.yml` 或 `.env` 必须新增：
-
-```yaml
-environment:
-  - JWT_SECRET_KEY=${JWT_SECRET_KEY}  # 与 auth-center 使用相同的密钥
-```
-
-#### 第三方依赖
-
-| 依赖 | 版本 | 用途 |
-|------|------|------|
-| `python-jose[cryptography]` | >=3.3.0 | JWT 解码验证（HS256），cryptography extras 提供底层加密支持 |
-
-### 状态与错误处理
-
-```mermaid
-stateDiagram-v2
-    [*] --> TokenExtracted: 请求到达
-    TokenExtracted --> Decoding: 提取 Bearer token
-    Decoding --> SignatureValid: jwt.decode 成功
-    Decoding --> InvalidToken: JWTError
-    InvalidToken --> [*]: 401 Invalid token: {reason}
-    SignatureValid --> TypeCheck: type == access?
-    TypeCheck --> SubExtracted: type 校验通过
-    TypeCheck --> [*]: 401 Invalid token type
-    SubExtracted --> Authenticated: sub 存在
-    SubExtracted --> [*]: 401 Token missing subject
-    Authenticated --> [*]: UserContext 注入，继续业务处理
-```
-
-| Scenario | State Change | Error Handling | User Feedback |
-|----------|--------------|----------------|---------------|
-| 无 Authorization header | TokenExtracted -> 401 | `HTTPException(401, "Missing authentication token")` | 前端 apiClient 检测 401 -> 刷新 token -> 重试 |
-| token 格式损坏 | Decoding -> 401 | `HTTPException(401, "Invalid token: {JWTError}")` | 同上 |
-| token 签名被篡改 | Decoding -> 401 | `HTTPException(401, "Invalid token: Signature verification failed")` | 同上 |
-| token 已过期 | Decoding -> 401 | `HTTPException(401, "Invalid token: Signature has expired")` | 同上 |
-| token type 不是 access | TypeCheck -> 401 | `HTTPException(401, "Invalid token type, expected 'access'")` | 前端提示认证异常 |
-| token 缺少 sub 字段 | SubExtracted -> 401 | `HTTPException(401, "Token missing subject (sub)")` | 前端提示认证异常 |
-| JWT_SECRET_KEY 未配置 | 应用启动失败 | `pydantic ValidationError` | 启动报错，需配置环境变量 |
-| JWT_SECRET_KEY 与 auth-center 不一致 | 所有请求 -> 401 | 签名验证失败 | 部署配置检查 |
+---
 
 ### 测试策略
 

@@ -2,7 +2,7 @@
   "version": "3.0",
   "rc_id": "R006",
   "name": "auth-integration",
-  "status": "active",
+  "status": "archived",
   "branch": "feat/R006-auth-integration",
   "workflow": {
     "mode": "A",
