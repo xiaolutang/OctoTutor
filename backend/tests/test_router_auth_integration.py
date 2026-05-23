@@ -60,9 +60,11 @@ def _auth_headers(token: str | None = None) -> dict:
 @pytest.fixture
 def client():
     """同步 TestClient，mock 所有 service 层依赖"""
+    from langgraph.checkpoint.memory import MemorySaver
+
     from app.main import app
     from app.chat.service import ChatService
-    from app.chat.dependencies import get_chat_service
+    from app.chat.dependencies import get_chat_service, get_graph, get_checkpointer
     from app.rag.embeddings import DashScopeEmbedding
     from app.rag.vector_store import ChromaDBStore
     from app.api.routes.retrieve import get_vector_store as get_vs_retrieve
@@ -94,14 +96,39 @@ def client():
     mock_embedding = MagicMock(spec=DashScopeEmbedding)
     mock_embedding.embed_query.return_value = [0.1] * 1024
 
-    # --- app.state 注入（health 端点需要）---
+    # --- Mock Graph + Checkpointer ---
+    from app.agent.graph import create_graph
+    from app.rag.models import QueryResult, ChunkMetadata
+
+    mock_graph_service = MagicMock()
+    mock_graph_service._retrieve.return_value = MagicMock(
+        chunks=[], degraded=False, degradation_reason=None
+    )
+
+    mock_gen = MagicMock()
+    async def _fake_stream(*args, **kwargs):
+        yield "mock answer"
+    mock_gen.generate_stream = _fake_stream
+    mock_gen._build_numbered_context = MagicMock(return_value="[1] mock")
+
+    checkpointer = MemorySaver()
+    graph = create_graph(
+        checkpointer=checkpointer,
+        chat_service=mock_graph_service,
+        generator=mock_gen,
+    )
+
+    # --- app.state 注入（health/stream_router 需要访问）---
     app.state.vector_store = mock_store
     app.state.embedding_service = mock_embedding
+    app.state.generator = mock_gen
 
     # --- dependency_overrides ---
     app.dependency_overrides[get_chat_service] = lambda: mock_chat_service
     app.dependency_overrides[get_vs_retrieve] = lambda: mock_store
     app.dependency_overrides[get_emb_retrieve] = lambda: mock_embedding
+    app.dependency_overrides[get_graph] = lambda: graph
+    app.dependency_overrides[get_checkpointer] = lambda: checkpointer
 
     with patch("app.middleware.auth.settings") as mock_settings:
         mock_settings.auth_jwt_secret = TEST_SECRET

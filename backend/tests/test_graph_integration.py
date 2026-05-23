@@ -159,13 +159,11 @@ class TestTextbookPath:
         # 验证经过 retrieve 节点 — _retrieve 被调用
         chat_svc._retrieve.assert_called_once_with("什么是集合？", 10)
 
-        # 验证经过 respond 节点 — 最终消息包含 AI 回答
+        # 验证经过 respond 节点 — 返回 question + chunks 给 stream_router
         last_event = events[-1]
         respond_output = last_event.get("respond", {})
-        messages = respond_output.get("messages", [])
-        assert len(messages) == 1
-        assert isinstance(messages[0], AIMessage)
-        assert messages[0].content == "这是回答"
+        assert respond_output.get("_question") == "什么是集合？"
+        assert "_chunks" in respond_output
 
         # 验证 context_chunks 在 state 中
         retrieve_event = None

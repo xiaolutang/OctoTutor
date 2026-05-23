@@ -6,6 +6,11 @@
 #   - OctoTutor 通过 Traefik 路由，域名 octotutor.localhost
 #   - 前端 catch-all + 后端 /api/* 路由
 #   - 需要先启动 xlfoundryTest 的 auth-center 服务
+#
+# 路由规则（Traefik priority）:
+#   /api/*  → octotutor-backend (priority=10)
+#   /*      → octotutor-frontend (priority=1)
+#   ⚠️ 因此所有 /api/* 接口必须由后端提供，前端的 Next.js route handler 不会被调用
 
 services:
   octotutor-frontend:
@@ -18,8 +23,8 @@ services:
       - PORT=3000
       - HOSTNAME=0.0.0.0
       - ENABLE_DEV_SANDBOX=true
-      - AUTH_CLIENT_ID=MlP4hO8DKk-BOByD
-      - AUTH_BASE_URL=http://auth.localhost
+      - AUTH_CLIENT_ID=${AUTH_CLIENT_ID:-MlP4hO8DKk-BOByD}
+      - AUTH_BASE_URL=${AUTH_BASE_URL:-http://auth.localhost}
     networks:
       - auth-network
     labels:
@@ -44,6 +49,8 @@ services:
       - CHROMA_PERSIST_DIR=/app/data/chroma_db
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - DATABASE_URL=postgresql://host.docker.internal:5432/octotutor_checkpoints
+      - AUTH_CLIENT_ID=${AUTH_CLIENT_ID:-MlP4hO8DKk-BOByD}
+      - AUTH_BASE_URL=${AUTH_BASE_URL:-http://auth.localhost}
     volumes:
       - octotutor-data:/app/data
     networks:

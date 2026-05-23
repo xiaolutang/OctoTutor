@@ -293,7 +293,8 @@ frontend/src/
 │   ├── api-client.ts                  ★ 修改 — 职责收敛：去掉刷新锁/跳转逻辑，registerGetToken → registerAuthHandlers
 │   └── utils.ts                       ── 不修改
 ├── contexts/
-│   └── auth-context.tsx               ★ 修改 — 去掉独立 TokenManager，统一用 AuthService；注册 registerAuthHandlers 含 getToken+onUnauthorized
+│   ├── auth-context.tsx               ★ 修改 — onUnauthorized 不含跳转；新增 useEffect 自动跳转 + 路径白名单；使用 SharedTokenManager
+│   └── shared-token-manager.ts        ★ 新增 — TokenManager 包装类，refreshTokens 并发安全
 ├── chat/
 │   ├── use-conversation.ts            ★ 新增 — 后端 conversation API hook
 │   │   └── 职责: API 加载对话 + conversationId 管理 + role/status 映射 + 降级
@@ -306,7 +307,7 @@ frontend/src/
     ├── chat-ui.tsx                     ★ 修改 — 加载历史 + conversationId + onThinking + 移除 saveMessages
     ├── message-bubble.tsx              ★ 修改 — 集成 ThinkingProcess 组件
     ├── thinking-process.tsx            ★ 新增 — 可折叠思考过程组件
-    ├── route-guard.tsx                 ★ 修改 — 只判断 isAuthenticated 状态，不触发 login 跳转
+    ├── route-guard.tsx                 ✕ 删除 — AuthContext 统一处理跳转，RouteGuard 不再需要
     ├── chat-input.tsx                  ── 不修改
     └── source-card.tsx                 ── 不修改
 ```
@@ -320,7 +321,8 @@ frontend/src/
 | `use-chat-stream.ts` | conversationId 需传给后端；thinking 事件需回调；fetchWithAuth 发 SSE 请求 | conversationId 从哪来；消息保存逻辑；thinking 步骤如何展示 |
 | `thinking-process.tsx` | steps 数据；isStreaming 状态；折叠/展开交互 | 消息完整结构；其他 UI 逻辑；thinking 数据来源 |
 | `message-bubble.tsx` | 消息有 thinkingSteps 时渲染 ThinkingProcess | thinking 步骤的具体交互逻辑（由 ThinkingProcess 内部管理） |
-| `api-client.ts` | 如何附加 Authorization header；401 时调用 onUnauthorized 回调重试一次 | token 怎么来、怎么刷新；刷新失败跳哪；业务 URL 含义 |
+| `api-client.ts` | 如何附加 Authorization header；401 时调用 onUnauthorized 回调重试一次 | token 怎么来、怎么刷新；业务 URL 含义；页面跳转 |
+| `auth-context.tsx` | 认证状态权威源；未登录自动跳转（白名单外的路径）；onSessionExpired 状态清除 | 各页面的具体 UI 渲染 |
 
 ### 技术决策
 
@@ -334,7 +336,11 @@ frontend/src/
 | api-client 职责边界 | 去掉 refreshAndGetToken/redirectToLogin，改用 registerAuthHandlers 注入 getToken + onUnauthorized | HTTP 层不应包含 auth 刷新/跳转逻辑；刷新锁由 AuthService 内部管理 |
 | TokenManager 实例 | 去掉独立 TokenManager，统一用 AuthService 一个实例 | 两个实例通过 localStorage 隐式同步是脆弱设计；AuthService 内部已有 TokenManager |
 | 401→跳转通信 | registerAuthHandlers.onUnauthorized 回调替代 DOM CustomEvent | 同一应用内部不应走 DOM 事件；回调更直接、可追踪 |
-| route-guard 跳转 | 只判断 isAuthenticated 状态，不触发 login | 跳转逻辑统一归 auth-context，避免 route-guard 和 api-client 双重跳转 |
+| 未登录自动跳转 | AuthContext 统一处理：useEffect 监听 isInitialized + isAuthenticated + pathname（路由变化），未登录且不在白名单时自动调用 login() | 系统性解决：任何页面未登录都自动跳转，不依赖每个页面手动包裹 RouteGuard；pathname 依赖确保客户端路由切换时也触发检查 |
+| route-guard | 删除组件 | AuthContext 统一处理跳转后 RouteGuard 只剩 loading 功能，不值得独立组件；loading 状态可在各页面自行处理 |
+| onUnauthorized 回调 | 只返回 null，不调用 service.login()；刷新失败时调用 setAuthState(isAuthenticated=false) | API 层不触发页面跳转；刷新失败时主动将状态设为 false，触发 AuthContext 的自动跳转 useEffect |
+| 白名单路径 | `/`（首页）、`/callback`（OAuth 回调） | 这两个页面不需要登录；其他路径未登录一律跳转 |
+| Token 并发刷新 | SharedTokenManager 包装类，内部 Promise 复用 | SDK 的 refreshTokens() 不保证并发安全；包装后所有调用方共享同一个刷新 Promise，避免重复刷新导致 token 失效 |
 | chat/api.ts | 删除 | API_BASE 与 api-client.ts BASE_URL 重复 |
 
 **saveMessages 调用点变化**：
@@ -367,7 +373,10 @@ frontend/src/
 | api-client 通过 registerAuthHandlers 接收 getToken + onUnauthorized | 单元测试：mock onUnauthorized 返回新 token → 验证 401 重试成功 |
 | auth-context 只有一个 AuthService 实例，无独立 TokenManager | 代码审查：auth-context.tsx 无 new TokenManager |
 | auth-context 通过 registerAuthHandlers 注册，不再使用 DOM 事件 | 代码审查：无 window.addEventListener auth:session-expired |
-| route-guard 不调用 login，只判断状态显示 loading | 组件测试：未登录时验证不触发 login 调用 |
+| auth-context onUnauthorized 不含 service.login() 调用 | 代码审查：onUnauthorized catch 块中无 login 调用 |
+| auth-context 初始化完成 + 未认证 + 不在白名单 → 自动跳转登录 | 单元测试：mock isInitialized=true, isAuthenticated=false, pathname='/chat' → 验证 login 被调用 |
+| auth-context 白名单路径 / 和 /callback 不触发跳转 | 单元测试：pathname='/' 或 '/callback' → 验证 login 未被调用 |
+| route-guard.tsx 已删除，无其他文件引用 | Grep 验证：无 import from route-guard |
 | chat/api.ts 已删除，无其他文件引用 API_BASE | Grep 验证：无 import from chat/api |
 | 401 → api-client 自动刷新 token → 重试成功 → 用户无感知 | 集成测试：mock 401 → 验证 token 刷新 + 重试 |
 | 后端不发 thinking 事件 → ThinkingProcess 不渲染 → 回答正常 | 集成测试：SSE 流无 thinking 事件 → 验证不渲染 |

@@ -34,10 +34,10 @@ status: planned
 
 ---
 
-## R007-FF002：api-client + auth-context + route-guard + 删除 api.ts — 鉴权架构优化 `✅ 已完成`
+## R007-FF002：api-client + auth-context + SharedTokenManager + 删除 route-guard + 删除 api.ts — 鉴权架构优化 `🔧 进行中`
 
-- 文件：`frontend/src/lib/api-client.ts`(修改)、`frontend/src/contexts/auth-context.tsx`(修改)、`frontend/src/components/route-guard.tsx`(修改)、`frontend/src/chat/api.ts`(删除)
-- 改动类型：修改 + 删除
+- 文件：`frontend/src/lib/api-client.ts`(修改)、`frontend/src/contexts/auth-context.tsx`(修改)、`frontend/src/contexts/shared-token-manager.ts`(新建)、`frontend/src/components/route-guard.tsx`(删除)、`frontend/src/chat/api.ts`(删除)、`frontend/src/app/chat/page.tsx`(修改)
+- 改动类型：新建 + 修改 + 删除
 - domain: ui
 - task_layer: foundation
 - depends_on: []
@@ -51,9 +51,14 @@ status: planned
   - api-client.ts 导出 `registerAuthHandlers({getToken, onUnauthorized})`
   - api-client.ts 401 时调用 `onUnauthorized` 获取新 token 并重试一次
   - auth-context.tsx 不含独立 `new TokenManager()`
+  - shared-token-manager.ts 并发调用 refreshTokens() 只触发一次网络请求
   - auth-context.tsx 通过 `registerAuthHandlers` 注册 getToken + onUnauthorized
   - auth-context.tsx 不使用 `window.addEventListener('auth:session-expired')`
-  - route-guard.tsx 不调用 `login()`，只判断状态
+  - auth-context.tsx onUnauthorized catch 块中不含 `service.login()` 调用
+  - auth-context.tsx 初始化完成 + 未认证 + 不在白名单(`/`, `/callback`) → 自动调用 login() 跳转
+  - auth-context.tsx 白名单路径 `/` 和 `/callback` 不触发跳转
+  - `route-guard.tsx` 已删除，无其他文件引用
+  - `chat/page.tsx` 不再使用 RouteGuard 包裹
   - `chat/api.ts` 已删除，无其他文件引用 `API_BASE`
   - 应用登录/登出/401 重试流程正常
 - test_tasks:
@@ -61,13 +66,19 @@ status: planned
     description: api-client registerAuthHandlers 机制
     scenarios: [注册后 401 → onUnauthorized 被调用 → 返回新 token → 重试成功]
   - type: unit
-    description: auth-context 单一 AuthService 实例
-    scenarios: [验证无 new TokenManager 调用]
+    description: SharedTokenManager 并发安全
+    scenarios: [3 次并发 refreshTokens() → 底层 TokenManager.refreshTokens() 只被调用 1 次]
   - type: unit
-    description: route-guard 不触发 login
-    scenarios: [未登录时验证 login 未被调用]
+    description: auth-context onUnauthorized 不触发 login
+    scenarios: [onUnauthorized 刷新失败 → 返回 null → 不调用 login → setAuthState(false)]
+  - type: unit
+    description: auth-context 未登录自动跳转
+    scenarios: [isInitialized=true + isAuthenticated=false + pathname='/chat' → login 被调用]
+  - type: unit
+    description: auth-context 白名单路径不跳转
+    scenarios: [pathname='/' → login 未被调用, pathname='/callback' → login 未被调用]
 - contract_refs: [.dev-flow/R007/analysis/2026-05-22--R007-persistence-agent-upgrade-frontend.md]
-- decision_refs: []
+- decision_refs: [DEC-auth-redirect-centralized]
 - blocked_files: [frontend/src/chat/parse-sse.ts]
 
 ### FF002.1 api-client.ts — 职责收敛 `⬜`
@@ -109,69 +120,127 @@ if (response.status === 401 && !headers.has('X-Retry') && authHandlers) {
 4. 删除第 75-77 行的 `redirectToLogin()` 调用（401 重试失败后直接返回 response）
 5. 更新文件头注释
 
-### FF002.2 auth-context.tsx — 统一 AuthService `⬜`
+### FF002.2 shared-token-manager.ts — 并发安全 Token 刷新包装 `⬜`
 
-1. 删除独立的 `new TokenManager(...)` 实例
-2. 统一使用 `AuthService` 实例管理 token
-3. 将 `registerGetToken(() => tm.ensureValidToken())` 改为 `registerAuthHandlers`：
+新建 `frontend/src/contexts/shared-token-manager.ts`：
+
+```typescript
+import { TokenManager } from '@xlfoundry/auth-sdk-web';
+
+/**
+ * SharedTokenManager — 包装 TokenManager，保证 refreshTokens 并发安全
+ *
+ * 多个 API 同时 401 时，只触发一次 refreshTokens 网络请求，
+ * 其余调用复用同一个 Promise 结果。
+ */
+export class SharedTokenManager {
+  private tm: TokenManager;
+  private refreshPromise: Promise<{ access_token: string } | null> | null = null;
+
+  constructor(tm: TokenManager) {
+    this.tm = tm;
+  }
+
+  setConfig(config: Parameters<TokenManager['setConfig']>[0]): void {
+    this.tm.setConfig(config);
+  }
+
+  getAccessToken(): string | null {
+    return this.tm.getAccessToken();
+  }
+
+  async refreshTokens(): Promise<{ access_token: string } | null> {
+    if (!this.refreshPromise) {
+      this.refreshPromise = this._doRefresh();
+    }
+    return this.refreshPromise;
+  }
+
+  private async _doRefresh(): Promise<{ access_token: string } | null> {
+    try {
+      return await this.tm.refreshTokens();
+    } finally {
+      this.refreshPromise = null;
+    }
+  }
+
+  clear(): void {
+    this.tm.clear();
+  }
+}
+```
+
+### FF002.3 auth-context.tsx — 自动跳转 + SharedTokenManager `⬜`
+
+1. 将 `new TokenManager()` 替换为 `new SharedTokenManager(new TokenManager())`
+2. `registerAuthHandlers` 中使用 `sharedTM.refreshTokens()`（并发安全）
+3. onUnauthorized 刷新失败时 `setAuthState({ isAuthenticated: false })`，不调用 `service.login()`
+4. 新增自动跳转 useEffect（依赖 pathname 确保路由切换时也触发）：
+
+```typescript
+const AUTH_WHITELIST = ['/', '/callback'];
+const pathname = usePathname();
+
+useEffect(() => {
+  if (!isInitialized) return;
+  if (isAuthenticated) return;
+  if (AUTH_WHITELIST.includes(pathname)) return;
+  login();
+}, [isInitialized, isAuthenticated, pathname]);
+```
+
+registerAuthHandlers 注册：
 
 ```typescript
 registerAuthHandlers({
   getToken: async () => {
     try {
-      return await authService.getAccessToken();
+      return sharedTM.getAccessToken();
     } catch {
       return null;
     }
   },
   onUnauthorized: async () => {
     try {
-      await authService.refreshToken();
-      return await authService.getAccessToken();
+      const result = await sharedTM.refreshTokens();
+      return result?.access_token ?? null;
     } catch {
-      // 刷新失败 → 跳转登录
-      authService.login();
+      setAuthState({ isAuthenticated: false, user: null });
       return null;
     }
   },
 });
 ```
 
-4. 删除 `window.addEventListener('auth:session-expired', ...)` 事件监听
-5. 401 刷新失败跳转统一由 `onUnauthorized` 回调处理
+### FF002.4 删除 route-guard.tsx `⬜`
 
-### FF002.3 route-guard.tsx — 只判断状态不触发跳转 `⬜`
-
-修改为：
+1. 删除 `frontend/src/components/route-guard.tsx`
+2. 全局搜索确认无其他文件 `import from './route-guard'` 或 `import from '@/components/route-guard'`
+3. 修改 `frontend/src/app/chat/page.tsx`：移除 RouteGuard 包裹，直接渲染内容
 
 ```typescript
-'use client'
+// 修改前
+import { RouteGuard } from '@/components/route-guard'
+export default function ChatPage() {
+  return (
+    <RouteGuard>
+      <div ...><ChatUI /></div>
+    </RouteGuard>
+  )
+}
 
-import { type ReactNode } from 'react'
-import { useAuth } from '@/contexts/auth-context'
-
-export function RouteGuard({ children }: { children: ReactNode }) {
-  const { isInitialized, isAuthenticated } = useAuth()
-
-  if (!isInitialized) {
-    return (
-      <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center">
-        <span className="text-sm text-muted-foreground">加载中...</span>
-      </div>
-    )
-  }
-
-  if (!isAuthenticated) {
-    return null  // auth-context 统一管理跳转
-  }
-
-  return <>{children}</>
+// 修改后
+import { ChatUI } from '@/components/chat-ui'
+export default function ChatPage() {
+  return (
+    <div className="container mx-auto flex h-[calc(100vh-3.5rem)] flex-col px-4">
+      <ChatUI />
+    </div>
+  )
 }
 ```
 
-关键改动：删除 `useEffect` + `login()` 调用，删除 `login` 从 `useAuth()` 的解构。
-
-### FF002.4 删除 chat/api.ts `⬜`
+### FF002.5 删除 chat/api.ts `⬜`
 
 1. 删除 `frontend/src/chat/api.ts`
 2. 全局搜索确认无其他文件 `import from './api'` 或 `import from '@/chat/api'`

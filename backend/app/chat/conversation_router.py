@@ -51,27 +51,39 @@ async def get_current_conversation(
 async def _load_latest_conversation(checkpointer, user_id: str):
     """从 checkpointer 加载用户最近的对话
 
-    LangGraph checkpointer 的 list 掏不出来直接按 user_id 过滤，
-    这里使用 thread_id = user_id 作为约定（与 stream_router 一致），
-    直接通过 get_tuple 加载最新 checkpoint。
+    stream_router 使用 thread_id=conversation_id 写入 checkpoint，
+    config 中同时存入 user_id。
+    conversation_router 通过 alist 遍历最近的 thread，
+    过滤 configurable.user_id 匹配的 thread，取最新的一条。
     """
     try:
-        # 用 user_id 作为 thread_id 查找最近对话
-        config = {"configurable": {"thread_id": user_id}}
-        checkpoint_tuple = await checkpointer.aget_tuple(config)
+        # 列出最近的 thread，寻找属于该 user_id 的对话
+        # limit=10 足够覆盖最近活跃的对话
+        async for tuple_item in checkpointer.alist(
+            {"configurable": {"user_id": user_id}},
+            limit=10,
+        ):
+            # 验证 configurable 中的 user_id 匹配
+            cfg = tuple_item.config
+            configurable = cfg.get("configurable", {})
+            thread_user_id = configurable.get("user_id")
 
-        if checkpoint_tuple is None:
-            return None, []
+            if thread_user_id != user_id:
+                continue
 
-        # 提取 checkpoint 中的 messages
-        checkpoint = checkpoint_tuple.checkpoint
-        if not checkpoint:
-            return None, []
+            # 找到匹配的 thread
+            conversation_id = configurable.get("thread_id")
+            checkpoint = tuple_item.checkpoint
+            if not checkpoint:
+                continue
 
-        channel_values = checkpoint.get("channel_values", {})
-        messages = channel_values.get("messages", [])
+            channel_values = checkpoint.get("channel_values", {})
+            messages = channel_values.get("messages", [])
 
-        return user_id, messages
+            if messages:
+                return conversation_id, messages
+
+        return None, []
 
     except Exception:
         return None, []
@@ -87,10 +99,10 @@ def _to_api_message(msg, index: int) -> ApiMessage:
     content = getattr(msg, "content", "") or ""
     msg_type = getattr(msg, "type", "unknown")
 
-    # 映射 role
+    # 映射 role — 输出 human/ai 与前端 ApiMessage.role 类型对齐
     role_map = {
-        "human": "user",
-        "ai": "assistant",
+        "human": "human",
+        "ai": "ai",
         "system": "system",
     }
     role = role_map.get(msg_type, msg_type)

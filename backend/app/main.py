@@ -12,6 +12,7 @@ from app.chat.service import ChatService
 from app.agent.graph import create_graph
 from app.api.routes.health import router as health_router
 from app.api.routes.retrieve import router as retrieve_router
+from app.api.routes.config import router as config_router
 from app.chat.router import router as chat_router
 from app.chat.stream_router import router as stream_router
 from app.chat.conversation_router import router as conversation_router
@@ -110,6 +111,7 @@ app = FastAPI(
 )
 
 app.include_router(health_router)
+app.include_router(config_router)
 app.include_router(retrieve_router)
 app.include_router(chat_router)
 app.include_router(stream_router)

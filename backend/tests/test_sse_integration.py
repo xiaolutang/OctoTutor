@@ -112,9 +112,9 @@ def _create_test_app(mock_service=None, mock_graph=None, mock_checkpointer=None)
     app.dependency_overrides[get_current_user] = _override_user
 
     # 覆盖 graph
+    gen = _make_mock_generator(tokens=["这是", "回答"])
     if mock_graph is None:
         chat_svc = _make_mock_chat_service(chunks=[_make_query_result()])
-        gen = _make_mock_generator(tokens=["这是", "回答"])
         mock_graph = create_graph(
             checkpointer=MemorySaver(),
             chat_service=chat_svc,
@@ -128,6 +128,9 @@ def _create_test_app(mock_service=None, mock_graph=None, mock_checkpointer=None)
         mock_checkpointer = MemorySaver()
 
     app.dependency_overrides[get_checkpointer] = lambda: mock_checkpointer
+
+    # 注入 generator 到 app.state（stream_router 直接访问）
+    app.state.generator = gen
 
     # 覆盖 chat_service（部分测试仍需要）
     if mock_service:

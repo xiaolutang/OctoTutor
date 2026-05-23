@@ -25,6 +25,18 @@ class Settings(BaseSettings):
         description="JWT 签名密钥，与 auth-center 共享（HS256）",
     )
 
+    # 前端鉴权 SDK 配置 — /api/config 接口返回给前端
+    auth_client_id: str = Field(
+        default="",
+        alias="AUTH_CLIENT_ID",
+        description="xlfoundry auth-center 的 OAuth Client ID",
+    )
+    auth_base_url: str = Field(
+        default="",
+        alias="AUTH_BASE_URL",
+        description="xlfoundry auth-center 的 Base URL",
+    )
+
     # NewAPI (本地 Docker, OpenAI 兼容协议) — 用于 LLM 调用
     newapi_api_key: str = Field(
         default="",

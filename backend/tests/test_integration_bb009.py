@@ -34,6 +34,10 @@ from app.evaluation.eval_runner import (
 )
 from app.evaluation.eval_types import EvalItem, EvalSource, RetrievalTruth
 from app.evaluation.eval_set_loader import EvalSetLoader
+from app.middleware.auth import UserContext, get_current_user
+
+# 测试用 mock 用户
+_test_user = UserContext(user_id="user-123", username="testuser")
 
 
 # ---------------------------------------------------------------------------
@@ -202,11 +206,13 @@ class TestChatEndpointNormal:
         app.state.generator = mock_generator
 
         with patch("app.chat.dependencies.settings", mock_settings):
+            app.dependency_overrides[get_current_user] = lambda: _test_user
             client = TestClient(app)
             response = client.post(
                 "/api/chat",
                 json={"question": "什么是函数？", "top_k": 5},
             )
+            app.dependency_overrides.clear()
 
         assert response.status_code == 200
         data = response.json()
@@ -257,11 +263,13 @@ class TestChatEndpointRerankDegraded:
         app.state.generator = mock_generator
 
         with patch("app.chat.dependencies.settings", mock_settings):
+            app.dependency_overrides[get_current_user] = lambda: _test_user
             client = TestClient(app)
             response = client.post(
                 "/api/chat",
                 json={"question": "什么是函数？", "top_k": 5},
             )
+            app.dependency_overrides.clear()
 
         assert response.status_code == 200
         data = response.json()

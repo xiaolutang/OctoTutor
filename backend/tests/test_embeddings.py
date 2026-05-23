@@ -83,7 +83,7 @@ class TestDashScopeEmbeddingInit:
     def test_init_with_valid_params(self):
         emb = DashScopeEmbedding(api_key="test-key")
         assert emb._api_key == "test-key"
-        assert emb._model == "text-embedding-v3"
+        assert emb._model == "text-embedding-v4"
         assert emb._dimension == 768
         assert emb._batch_size == 6
         assert emb._max_retries == 3

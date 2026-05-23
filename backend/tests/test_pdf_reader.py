@@ -127,7 +127,8 @@ class TestCacheHit:
         assert results[0].from_cache is True
         assert results[0].content == cached_content
         assert results[0].page_number == 1
-        assert results[0].image_path is None
+        # image_path 不再为 None — 代码现在始终渲染 PNG
+        assert results[0].image_path is not None
         # OCR 不应被调用
         mock_ocr.assert_not_called()
 

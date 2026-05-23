@@ -27,6 +27,7 @@ class AgentState(dict):
         sources: 引用来源列表
         degraded: 是否处于降级模式
         degradation_reason: 降级原因
+        prompt_messages: respond 节点构建的 LLM 输入消息列表
     """
 
     messages: Annotated[list[BaseMessage], add_messages]
@@ -36,6 +37,8 @@ class AgentState(dict):
     sources: list[SourceReference]
     degraded: bool
     degradation_reason: str | None
+    _question: str
+    _chunks: list[QueryResult]
 
 
 def _route_by_intent(state: AgentState) -> str:
@@ -51,7 +54,7 @@ def create_graph(checkpointer=None, chat_service=None, generator=None):
         checkpointer: LangGraph checkpointer 实例
             (AsyncPostgresSaver / MemorySaver)
         chat_service: ChatService 实例，用于 retrieve 节点检索
-        generator: LLMGenerator 实例，用于 respond 节点流式生成
+        generator: LLMGenerator 实例，用于 respond 节点构建 prompt
 
     Returns:
         CompiledStateGraph: 编译后的可执行图
@@ -86,33 +89,19 @@ def create_graph(checkpointer=None, chat_service=None, generator=None):
         }
 
     async def _respond(state):
-        """respond 节点 — 调用 generator + TEACHING_SYSTEM_PROMPT 生成回答"""
+        """respond 节点 — 构建 LLM prompt，不调用 LLM（由 stream_router 逐 token 流式）
+
+        只负责构建 prompt_messages，LLM 调用移至 stream_router 层执行，
+        以实现真正的逐 token SSE 流式输出。
+        """
         question = state.get("question", "")
         chunks = state.get("context_chunks", [])
 
-        # 构建 context 文本
-        if chunks:
-            context_text = generator._build_numbered_context(chunks)
-            messages = [
-                {"role": "system", "content": TEACHING_SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": f"参考教材内容：\n{context_text}\n\n学生问题：{question}",
-                },
-            ]
-        else:
-            messages = [
-                {"role": "system", "content": TEACHING_SYSTEM_PROMPT},
-                {"role": "user", "content": question},
-            ]
-
-        # 收集流式 token 拼接为完整回答
-        answer_parts = []
-        async for token in generator.generate_stream(question, chunks):
-            answer_parts.append(token)
-        answer = "".join(answer_parts)
-
-        return {"messages": [AIMessage(content=answer)]}
+        return {
+            "prompt_messages": [],  # 不再需要，stream_router 直接用 generator
+            "_question": question,
+            "_chunks": chunks,
+        }
 
     graph = StateGraph(AgentState)
     graph.add_node("classify", classify_node)

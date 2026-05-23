@@ -33,7 +33,7 @@ class ChatService:
 
     def handle_chat(self, question: str, top_k: int) -> ChatResponse | None:
         # 意图分类：问候/闲聊等走 direct，不检索教材
-        if classify_question(question) == "direct":
+        if classify_question(question) == "unrelated":
             answer, _ = self._generator.generate(question, [])
             return ChatResponse(
                 answer=answer,
@@ -69,7 +69,7 @@ class ChatService:
         # -- 阶段 1：检索（仅 retrieval 意图） --
         context_chunks: list[QueryResult] = []
 
-        if intent == "retrieval":
+        if intent == "textbook":
             yield StreamEvent(
                 type="status",
                 data=StatusPayload(stage="retrieving", message="正在检索教材..."),

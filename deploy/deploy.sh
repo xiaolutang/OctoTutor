@@ -169,6 +169,34 @@ do_local() {
         fi
     fi
 
+    # 冒烟验证：关键端点可达
+    if [[ "$DEPLOY_TARGET" == "all" || "$DEPLOY_TARGET" == "backend" ]]; then
+        echo "==> 冒烟验证..."
+        local SMOKE_OK=true
+
+        # /api/config — 前端鉴权初始化依赖此接口
+        local CONFIG_HTTP=$(curl -s -o /dev/null -w '%{http_code}' http://octotutor.localhost/api/config 2>/dev/null)
+        if [[ "$CONFIG_HTTP" != "200" ]]; then
+            echo "  ✗ /api/config 返回 $CONFIG_HTTP（应为 200）"
+            SMOKE_OK=false
+        else
+            echo "  ✓ /api/config → 200"
+        fi
+
+        # /api/health
+        if [[ "$BACKEND_STATUS" != "healthy" ]]; then
+            echo "  ✗ /api/health status=$BACKEND_STATUS（应为 healthy）"
+            SMOKE_OK=false
+        else
+            echo "  ✓ /api/health → healthy"
+        fi
+
+        if [[ "$SMOKE_OK" != true ]]; then
+            echo ""
+            echo "⚠ 冒烟验证未通过，请检查服务状态"
+        fi
+    fi
+
     echo ""
     echo "==> 部署完成! (target: $DEPLOY_TARGET)"
     echo ""

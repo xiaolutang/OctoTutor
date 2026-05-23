@@ -1,4 +1,15 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
+
+// Mock @xlfoundry/auth-sdk-web（本地 symlink 测试环境不可用）
+vi.mock("@xlfoundry/auth-sdk-web", () => ({
+  AuthService: class {},
+  TokenManager: class {
+    getAccessToken() { return null }
+    setConfig() {}
+    refreshTokens() { return Promise.resolve(null) }
+  },
+}))
+
 import { consumeReturnUrl } from "../contexts/auth-context"
 
 /**
