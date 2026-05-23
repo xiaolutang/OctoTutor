@@ -178,7 +178,7 @@ export function RouteGuard({ children }: { children: ReactNode }) {
 
 ---
 
-## R007-FF001：types.ts + use-chat-stream.ts — thinking 事件 + conversationId `⬜ 待处理`
+## R007-FF001：types.ts + use-chat-stream.ts — thinking 事件 + conversationId `✅ 已完成`
 
 - 文件：`frontend/src/chat/types.ts`(修改)、`frontend/src/chat/use-chat-stream.ts`(修改)
 - 改动类型：修改

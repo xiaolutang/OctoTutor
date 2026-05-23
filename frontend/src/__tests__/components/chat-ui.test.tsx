@@ -29,7 +29,7 @@ const mockStop = vi.fn();
 
 vi.mock('@/chat/use-chat-stream', () => ({
   useChatStream: () => ({
-    sendMessage: (_question: string, callbacks: SSECallbacks) => {
+    sendMessage: (_question: string, callbacks: SSECallbacks, _conversationId?: string) => {
       capturedCallbacks = callbacks;
     },
     stop: mockStop,
@@ -79,6 +79,7 @@ function simulateHandleSend(
     onStatus: vi.fn(),
     onSources: vi.fn(),
     onToken: vi.fn(),
+    onThinking: vi.fn(),
     onDone: vi.fn(),
     onError: vi.fn(),
   });
@@ -205,6 +206,7 @@ function simulateHandleEditConfirm(
     onStatus: vi.fn(),
     onSources: vi.fn(),
     onToken: vi.fn(),
+    onThinking: vi.fn(),
     onDone: vi.fn(),
     onError: vi.fn(),
   });
@@ -341,7 +343,7 @@ describe('useChatStream callback binding', () => {
     capturedCallbacks = null;
   });
 
-  it('should bind all 5 callbacks to sendMessage', () => {
+  it('should bind all 6 callbacks to sendMessage', () => {
     const sendFn = vi.fn((_q, cbs) => {
       capturedCallbacks = cbs;
     });
@@ -351,6 +353,7 @@ describe('useChatStream callback binding', () => {
     expect(capturedCallbacks).toHaveProperty('onStatus');
     expect(capturedCallbacks).toHaveProperty('onSources');
     expect(capturedCallbacks).toHaveProperty('onToken');
+    expect(capturedCallbacks).toHaveProperty('onThinking');
     expect(capturedCallbacks).toHaveProperty('onDone');
     expect(capturedCallbacks).toHaveProperty('onError');
 
@@ -358,6 +361,7 @@ describe('useChatStream callback binding', () => {
     expect(typeof capturedCallbacks!.onStatus).toBe('function');
     expect(typeof capturedCallbacks!.onSources).toBe('function');
     expect(typeof capturedCallbacks!.onToken).toBe('function');
+    expect(typeof capturedCallbacks!.onThinking).toBe('function');
     expect(typeof capturedCallbacks!.onDone).toBe('function');
     expect(typeof capturedCallbacks!.onError).toBe('function');
   });

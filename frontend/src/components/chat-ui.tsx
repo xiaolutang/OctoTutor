@@ -59,6 +59,9 @@ export function ChatUI() {
             ),
           );
         },
+        onThinking: () => {
+          // thinking events handled at use-chat-stream level; UI hook reserved for future use
+        },
         onDone: () => {
           updateMsgAndSave(aiMsgId, { status: 'done' }, 'done');
         },
