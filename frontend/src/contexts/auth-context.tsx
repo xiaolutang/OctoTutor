@@ -9,8 +9,8 @@ import {
   useRef,
   type ReactNode,
 } from "react"
-import { AuthService, TokenManager, type UserInfo, type AuthState } from "@xlfoundry/auth-sdk-web"
-import { registerGetToken } from "../lib/api-client"
+import { AuthService, type UserInfo, type AuthState } from "@xlfoundry/auth-sdk-web"
+import { registerAuthHandlers } from "../lib/api-client"
 
 /** 运行时配置，从 /api/config 加载 */
 export interface RuntimeConfig {
@@ -62,16 +62,6 @@ function getAuthService(): AuthService {
   return authService
 }
 
-/** 独立 TokenManager 实例（与 AuthService 内部的 TokenManager 共享 localStorage） */
-let tokenManager: TokenManager | null = null
-
-function getTokenManager(): TokenManager {
-  if (!tokenManager) {
-    tokenManager = new TokenManager()
-  }
-  return tokenManager
-}
-
 /**
  * AuthProvider：在客户端 useEffect 中加载配置并初始化 SDK
  *
@@ -101,7 +91,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return res.json()
       })
       .then((config: RuntimeConfig) => {
-        // 共享的 SDK 配置（TokenManager 和 AuthService 使用相同参数）
         const sdkConfig = {
           clientId: config.clientId,
           authCenterBaseURL: config.authCenterBaseURL,
@@ -111,12 +100,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           },
         }
 
-        // 初始化独立 TokenManager 实例
-        const tm = getTokenManager()
-        tm.setConfig(sdkConfig)
-
-        // 注册 getAccessToken 到 apiClient
-        registerGetToken(() => tm.ensureValidToken())
+        // 注册鉴权处理器到 api-client
+        registerAuthHandlers({
+          getToken: async () => {
+            try {
+              return await service.getAccessToken()
+            } catch {
+              return null
+            }
+          },
+          onUnauthorized: async () => {
+            try {
+              await service.refreshToken()
+              return await service.getAccessToken()
+            } catch {
+              service.login()
+              return null
+            }
+          },
+        })
 
         return service.init(sdkConfig)
       })
@@ -129,16 +131,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.error("[AuthContext] SDK 初始化失败:", err)
         setInitError(err.message || "认证初始化失败")
       })
-  }, [])
-
-  // 监听 api-client 触发的 session-expired 事件，跳转登录
-  useEffect(() => {
-    const handleSessionExpired = () => {
-      const service = getAuthService()
-      service.login()
-    }
-    window.addEventListener("auth:session-expired", handleSessionExpired)
-    return () => window.removeEventListener("auth:session-expired", handleSessionExpired)
   }, [])
 
   const login = useCallback(async () => {
@@ -162,7 +154,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const getAccessToken = useCallback(async () => {
-    return getTokenManager().ensureValidToken()
+    return getAuthService().getAccessToken()
   }, [])
 
   const value: AuthContextValue = {

@@ -34,7 +34,7 @@ status: planned
 
 ---
 
-## R007-FF002：api-client + auth-context + route-guard + 删除 api.ts — 鉴权架构优化 `⬜ 待处理`
+## R007-FF002：api-client + auth-context + route-guard + 删除 api.ts — 鉴权架构优化 `✅ 已完成`
 
 - 文件：`frontend/src/lib/api-client.ts`(修改)、`frontend/src/contexts/auth-context.tsx`(修改)、`frontend/src/components/route-guard.tsx`(修改)、`frontend/src/chat/api.ts`(删除)
 - 改动类型：修改 + 删除

@@ -1,23 +1,17 @@
 'use client'
 
-import { useEffect, type ReactNode } from 'react'
+import { type ReactNode } from 'react'
 import { useAuth } from '@/contexts/auth-context'
 
 /**
  * RouteGuard：包裹需要登录的页面路由。
  *
  * - 未初始化时显示 loading
- * - 未登录时调用 login() 跳转认证中心
+ * - 未登录时返回 null（auth-context 统一管理跳转）
  * - 已登录时渲染 children
  */
 export function RouteGuard({ children }: { children: ReactNode }) {
-  const { isInitialized, isAuthenticated, login } = useAuth()
-
-  useEffect(() => {
-    if (isInitialized && !isAuthenticated) {
-      login()
-    }
-  }, [isInitialized, isAuthenticated, login])
+  const { isInitialized, isAuthenticated } = useAuth()
 
   if (!isInitialized) {
     return (
@@ -28,7 +22,7 @@ export function RouteGuard({ children }: { children: ReactNode }) {
   }
 
   if (!isAuthenticated) {
-    return null
+    return null  // auth-context 统一管理跳转
   }
 
   return <>{children}</>
