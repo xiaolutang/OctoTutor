@@ -6,6 +6,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import type { Message } from '@/chat/types';
 import { SourceCard } from './source-card';
+import { ThinkingProcess } from './thinking-process';
 
 interface MessageBubbleProps {
   message: Message;
@@ -147,6 +148,16 @@ export function MessageBubble({
             {!isUser && message.status !== 'done' && message.status !== 'error' && (
               <div className="text-xs text-muted-foreground mb-1">
                 {statusLabels[message.status] || message.status}
+              </div>
+            )}
+
+            {/* AI 思考过程 */}
+            {!isUser && message.thinkingSteps && message.thinkingSteps.length > 0 && (
+              <div className="mb-2">
+                <ThinkingProcess
+                  steps={message.thinkingSteps}
+                  isStreaming={message.status === 'generating'}
+                />
               </div>
             )}
 

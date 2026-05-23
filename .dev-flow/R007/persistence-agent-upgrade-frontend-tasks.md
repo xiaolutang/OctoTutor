@@ -316,7 +316,7 @@ const sendMessage = useCallback(
 
 ---
 
-## R007-FB001：thinking-process.tsx + message-bubble.tsx — 思考过程 UI `⬜ 待处理`
+## R007-FB001：thinking-process.tsx + message-bubble.tsx — 思考过程 UI `✅ 已完成`
 
 - 文件：`frontend/src/components/thinking-process.tsx`(新建)、`frontend/src/components/message-bubble.tsx`(修改)
 - 改动类型：新建 + 修改
