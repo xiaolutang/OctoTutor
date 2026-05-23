@@ -57,6 +57,9 @@ async def stream_chat(
 
     async def event_generator():
         try:
+            # 首个事件：回传 conversation_id 给前端
+            yield _sse_frame("init", {"conversation_id": conversation_id})
+
             async for node_name, node_output in _iter_graph_updates(
                 graph, input_state, config
             ):
@@ -71,7 +74,9 @@ async def stream_chat(
             if not await http_request.is_disconnected():
                 yield "event: done\ndata: null\n\n"
 
-        except Exception:
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"SSE stream error: {e}", exc_info=True)
             yield (
                 f"event: error\ndata: {json.dumps(make_error(ChatErrorCode.INTERNAL_ERROR), ensure_ascii=False)}\n\n"
             )

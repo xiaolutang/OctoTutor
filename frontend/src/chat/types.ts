@@ -30,6 +30,7 @@ export interface ConversationResponse {
 }
 
 export interface SSECallbacks {
+  onInit: (conversationId: string) => void;
   onStatus: (stage: string, message: string) => void;
   onSources: (sources: SourceReference[]) => void;
   onToken: (token: string) => void;

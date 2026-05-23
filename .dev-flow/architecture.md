@@ -1,6 +1,6 @@
 # OctoTutor 架构宪法
 
-> version: 5.0 | updated: 2026-05-23 | R006 auth-integration
+> version: 5.1 | updated: 2026-05-23 | R007 persistence-agent-upgrade
 
 ## 系统拓扑
 
@@ -57,7 +57,7 @@ SSE 流式连接：Browser → Traefik → Backend SSE Endpoint (/api/chat/strea
 - Reranker 失败降级：ChatService 返回 degraded=true + degradation_reason，不阻断回答生成
 - BM25 静态索引：启动时从 ChromaDB 全量加载构建，运行期间不更新
 - API 兼容：/api/retrieve 接口不变（R003 契约），/api/chat 非流式不变，新功能走 /api/chat/stream
-- SSE 事件格式固定：每帧为 `event: {type}\ndata: {json}\n\n`，type 为 status/sources/token/done/error
+- SSE 事件格式固定：每帧为 `event: {type}\ndata: {json}\n\n`，type 为 init/thinking/status/sources/token/done/error
 - 检索不流式（一次返回全部 chunks），LLM 生成逐 token 流式
 - API 鉴权：/api/retrieve、/api/chat、/api/chat/stream 需要 Bearer token，/api/health 不需要鉴权
 

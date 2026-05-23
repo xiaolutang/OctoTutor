@@ -62,6 +62,11 @@ export function chatStreamFetch(
           for (const event of events) {
             firstEventReceived = true;
             switch (event.type) {
+              case 'init': {
+                const d = event.data as { conversation_id: string };
+                callbacks.onInit(d.conversation_id);
+                break;
+              }
               case 'status': {
                 const d = event.data as { stage: string; message: string };
                 callbacks.onStatus(d.stage, d.message);

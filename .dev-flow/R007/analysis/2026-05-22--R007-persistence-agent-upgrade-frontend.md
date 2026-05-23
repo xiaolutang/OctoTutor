@@ -1,13 +1,13 @@
 ---
 module: chat
-version: v3
-date: 2026-05-22
-tags: [react, sse, conversation, thinking]
+version: v4
+date: 2026-05-23
+tags: [react, sse, conversation, thinking, controller]
 type: design_frontend
 status: designed
 requirement_cycle: R007
 source_analysis: 2026-05-22--R007-persistence-agent-upgrade.md
-architecture_md_updates: false
+architecture_md_updates: true
 ---
 
 # Chat — 前端 设计报告
@@ -18,30 +18,34 @@ architecture_md_updates: false
 
 - 收敛 api-client.ts 职责为纯 HTTP 请求发送，去掉刷新锁和跳转逻辑；auth-context.tsx 统一用单个 AuthService 管理认证，去掉独立 TokenManager；删除冗余 chat/api.ts
 - 从后端 API 加载对话历史，替代 localStorage 作为主存储；API 不可用时降级到 localStorage
-- 管理 conversation_id 状态，传递到 SSE 请求体实现后端会话关联
+- SSE 首个事件回传 `conversation_id`，前端保存复用，实现多轮消息关联同一 thread
 - 接收并展示 SSE thinking 事件，渲染可折叠的思考过程 UI
+- 抽取 `useChatController` 统一管理消息状态、对话加载、SSE 流和持久化，ChatUI 只负责渲染
+- 修复 `loadConversation` 未用 `useCallback` 导致引用不稳定、消息被清空的 bug
 - 移除终态 saveMessages 调用（后端 PostgresSaver 自动保存），仅保留降级分支
 
 ## 2. 现状分析
 
-**已有能力（R006 设计完成，代码待实施）**：
+**已有能力（R006 设计完成，代码已实施）**：
 - `api-client.ts` 提供 `fetchWithAuth`，支持 token 注入和 401 自动刷新重试
-- `auth-context.tsx` 提供 `TokenManager` + `getAccessToken`，通过 `registerGetToken` 注册到 apiClient
+- `auth-context.tsx` 提供 `SharedTokenManager` + `AuthService`，通过 `registerAuthHandlers` 注入 api-client
 - `use-chat-stream.ts` 处理 SSE 流式响应，支持 status/sources/token/done/error 五种事件
 - `parse-sse.ts` 为通用 SSE 解析器，解析 `event: xxx\ndata: xxx` 格式
 - `use-chat-storage.ts` 提供 localStorage 消息持久化（loadMessages / saveMessages）
+- `use-conversation.ts` 对话加载 hook，GET /conversations/current + 降级 localStorage
+- AuthContext 统一自动跳转（白名单 `/`, `/callback`），RouteGuard 已删除
 
-**存在问题**：
-- **鉴权架构职责越界**：api-client.ts 内含 token 刷新锁（30s 超时）和 session-expired 跳转逻辑，属于 auth 职责泄漏到 HTTP 层；auth-context.tsx 同时创建 AuthService 和独立 TokenManager 两个实例，通过 localStorage 隐式同步状态；两者通过 DOM CustomEvent 通信，同一应用内部不应走 DOM 事件
-- **冗余模块**：`chat/api.ts` 仅导出一个 `API_BASE` 常量，与 `api-client.ts` 的 `BASE_URL` 重复
-- 消息仅存 localStorage，换设备/清缓存丢失；后端已有 PostgresSaver 但前端未对接
-- 无 conversation_id 管理，后端无法关联同一会话的多轮消息
-- 后端智能体产生的思考过程（thinking 事件）未传递到前端
+**已发现的问题（R007 实施过程中暴露）**：
+- **conversation_id 未回传**：后端 `stream_router.py` 生成 UUID 作为 thread_id，但 SSE 流中从不返回 conversation_id。前端 conversationId 始终为 null，每条消息创建独立 thread，无法关联多轮对话。用户退出页面后组件卸载，再进来只能拿到最近一个 thread 的单条消息
+- **loadConversation 引用不稳定**：`use-conversation.ts` 的 `loadConversation` 未用 `useCallback` 包裹，每次渲染产生新引用。`chat-ui.tsx` 的 `useEffect([loadConversation])` 检测到依赖变化后重新调用 → `setMessages([])` 覆盖用户刚发的消息 → **消息一闪消失**
+- **onError 删除用户消息过于激进**：SSE 请求失败时前端构造 `code: '00000'`，触发 `prev.slice(0, -2)` 撤回 user+ai 两条消息。但用户已输入的内容不应被静默删除，应保留用户消息、标记 AI 消息为 error
+- **conversation_router 204 响应不规范**：`JSONResponse(status_code=204, content=None)` 会序列化 `"null"` 作为 body，违反 HTTP 204 不应有 body 的规范。导致 Starlette error middleware 抛出 `Response content longer than Content-Length`
 
-**基础设施就绪（R006/R007 后端完成后可用）**：
-- 后端 `GET /api/conversations/current` 待实现，将返回 conversation_id + messages
-- 后端 SSE 待新增 `thinking` 事件类型
-- 后端 `POST /api/chat/stream` 待新增 `conversation_id` 参数
+**基础设施就绪**：
+- 后端 `GET /api/conversations/current` 已实现，返回 conversation_id + messages
+- 后端 `POST /api/chat/stream` 已实现，接受 `conversation_id` 参数
+- 后端 SSE 已有 `thinking` 事件类型
+- 后端 PostgresSaver 自动保存 checkpoint
 
 ## 3. 数据模型与接口
 
@@ -50,8 +54,8 @@ architecture_md_updates: false
 ```typescript
 /** 思考步骤 — SSE thinking 事件携带 */
 export interface ThinkingStep {
-  text: string;    // 步骤描述，如 "识别问题类型：课程相关问题"
-  index: number;   // 步骤序号（从 1 开始）
+  text: string;
+  index: number;
 }
 
 /** 后端消息格式（role 为 human/ai） */
@@ -71,24 +75,25 @@ export interface ConversationResponse {
   messages: ApiMessage[];
 }
 
-/** SSECallbacks 新增 onThinking 回调 */
+/** SSECallbacks — 全部事件回调 */
 export interface SSECallbacks {
+  onInit: (conversationId: string) => void;              // R007-v4 新增
   onStatus: (stage: string, message: string) => void;
   onSources: (sources: SourceReference[]) => void;
   onToken: (token: string) => void;
-  onThinking: (step: ThinkingStep) => void;      // R007 新增
+  onThinking: (step: ThinkingStep) => void;
   onDone: () => void;
   onError: (error: { code: string; message: string; action: string }) => void;
 }
 
-/** Message 新增 thinkingSteps 字段 */
+/** Message */
 export interface Message {
   id: string;
   role: 'user' | 'ai';
   content: string;
   status: MessageStatus;
   sources?: SourceReference[];
-  thinkingSteps?: ThinkingStep[];  // R007 新增：仅 AI 消息有值
+  thinkingSteps?: ThinkingStep[];
   error?: { code: string; message: string; action: string };
   timestamp: number;
 }
@@ -96,192 +101,143 @@ export interface Message {
 
 | 设计选择 | 决策 | 理由 |
 |---------|------|------|
+| conversation_id 获取方式 | **SSE init 事件回传**（方案 B） | 实测方案 A（前端不获取，后端用 user_id 关联）失败：每条消息创建新 thread，无法关联多轮对话。init 事件在 SSE 流开头返回 conversation_id，前端保存后复用 |
 | ThinkingStep 字段 | 仅 text + index | 后端 SSE 格式 `event: thinking\ndata: {"text":"...","index":1}`，无需额外字段 |
-| Message.thinkingSteps 可选 | `thinkingSteps?: ThinkingStep[]` | 仅 AI 消息有值，user 消息为 undefined；后端不发 thinking 时不渲染 |
-| conversation_id 前端管理 | 首次 loadConversation 获取后存 React 状态 | 后端根据 user_id 查找最近对话，前端传 null 也能关联；不增加 SSE 协议复杂度 |
-| Role 映射 | 后端 `human` -> 前端 `user` | 后端使用 LangGraph 标准 role，前端保持现有命名 |
+| Message.thinkingSteps 可选 | `thinkingSteps?: ThinkingStep[]` | 仅 AI 消息有值，user 消息为 undefined |
+| Role 映射 | 后端 `human` → 前端 `user` | 后端使用 LangGraph 标准 role，前端保持现有命名 |
+| onError 处理策略 | 保留用户消息，仅标记 AI 为 error | 用户已输入的内容不应被静默删除。用户消息保留可见，AI 消息显示 error 状态 + 重试按钮 |
+| ChatController 层级 | useChatController (hook) | 不引入额外状态管理库，React Context + 自定义 hook 够用；ChatUI 300+ 行需拆分职责 |
+| loadConversation 稳定性 | useCallback 空依赖 | 函数内部不依赖响应式状态，空依赖确保引用稳定，useEffect 不重复触发 |
 
 ### 接口契约
 
 | API | 方法 | 请求 | 响应 |
 |-----|------|------|------|
-| `/api/conversations/current` | GET | — | `{ conversation_id: string, messages: ApiMessage[] }` |
-| `/api/chat/stream` | POST | `{ question, top_k: 10, conversation_id: string \| null }` | SSE text/event-stream |
+| `/api/conversations/current` | GET | — | 200: `{ conversation_id, messages: ApiMessage[] }` / 204: 无 body |
+| `/api/chat/stream` | POST | `{ question, top_k, conversation_id? }` | SSE text/event-stream |
 
-**SSE 事件格式**（新增 thinking）：
+**SSE 事件格式**：
 
-| 事件 | data 格式 | 说明 |
-|------|-----------|------|
-| `thinking` | `{"text": "...", "index": 1}` | R007 新增，智能体思考步骤 |
-| `status` | `{"stage": "...", "message": "..."}` | 现有，阶段状态 |
-| `sources` | `SourceReference[]` | 现有，来源引用 |
-| `token` | `string` | 现有，流式 token |
-| `done` | — | 现有，完成信号 |
-| `error` | `{"code": "...", "message": "...", "action": "..."}` | 现有，错误信号 |
+| 事件 | data 格式 | 位置 | 说明 |
+|------|-----------|------|------|
+| `init` | `{"conversation_id": "uuid"}` | **首个事件** | R007-v4 新增，返回当前对话 ID |
+| `thinking` | `{"text": "...", "index": 1}` | classify 后 | 智能体思考步骤 |
+| `status` | `{"stage": "...", "message": "..."}` | 各阶段 | 阶段状态 |
+| `sources` | `SourceReference[]` | retrieve 后 | 来源引用 |
+| `token` | `string` | respond 中 | 流式 token |
+| `done` | — | 末尾 | 完成信号 |
+| `error` | `{"code":"...","message":"...","action":"..."}` | 异常时 | 错误信号 |
 
-**错误码来源与处理**：
+**错误码处理策略（更新）**：
 
 | 错误码 | 来源 | 前端处理 |
 |--------|------|----------|
-| 00000 | 前端本地（网络失败/超时） | 撤回 user+ai 消息 + saveMessages 兜底 |
-| 02102 | 后端（Embedding 服务异常） | 显示错误提示，保留 user+ai 消息 |
-| 02103 | 后端（Vector Store 异常） | 同上 |
-| 02201-02205 | 后端（LLM 连接/中断/空响应/超时/限流） | 显示错误提示，保留 user+ai 消息 |
+| 00000 | 前端本地（网络失败/HTTP 非 200） | **保留用户消息**，AI 消息标记 error，文本回填输入框 |
+| 02102-02205 | 后端 | 保留 user+ai 消息，AI 显示 error 状态 |
 
 ## 4. 核心流程
 
-### 4.1 页面初始化加载
+### 4.1 页面初始化 + ChatController
 
 ```mermaid
 sequenceDiagram
   participant U as 学生
-  participant ChatUI as ChatUI
+  participant Page as chat/page.tsx
+  participant Ctrl as useChatController
   participant UseConv as useConversation
-  participant ApiClient as api-client.ts
   participant BE as 后端 API
 
-  U->>ChatUI: 打开 Chat 页面
-  ChatUI->>ChatUI: isLoadingHistory=true 显示加载占位
-  ChatUI->>UseConv: loadConversation()
-  UseConv->>ApiClient: fetchWithAuth GET /api/conversations/current
+  U->>Page: 打开 /chat
+  Page->>Ctrl: mount
+  Ctrl->>UseConv: loadConversation()
+  UseConv->>BE: GET /api/conversations/current
 
   alt 200 有对话
-    ApiClient-->>UseConv: conversation_id + messages
-    UseConv->>UseConv: role映射 human转user
-    UseConv->>UseConv: status映射 completed转done
-    UseConv->>UseConv: thinking_steps转thinkingSteps
-    UseConv-->>ChatUI: conversationId + messages + fromCache=false
-    ChatUI->>ChatUI: setMessages + setMounted
-    ChatUI-->>U: 显示历史消息含思考步骤
+    BE-->>UseConv: conversation_id + messages
+    UseConv-->>Ctrl: { messages, conversationId }
+    Ctrl->>Ctrl: setMessages + setConversationId + setMounted
+    Ctrl-->>Page: { messages, mounted }
+    Page-->>U: 显示历史消息
   else 204 无对话
-    UseConv-->>ChatUI: conversationId=null, messages空
-    ChatUI-->>U: 显示输入问题开始对话
-  else 网络错误或超时
-    ApiClient-->>UseConv: throw Error
-    UseConv->>UseConv: 降级 loadMessages from localStorage
-    UseConv-->>ChatUI: conversationId=null + cached messages
-    ChatUI-->>U: 显示缓存消息
-  else 401 未认证
-    ApiClient->>ApiClient: 刷新token并重试
-    alt 刷新成功重试请求
-    else 刷新失败跳转登录
-    end
+    BE-->>UseConv: 204 No Content
+    UseConv-->>Ctrl: { messages: [], conversationId: null }
+    Ctrl-->>Page: { messages: [], mounted }
+    Page-->>U: 显示"输入问题开始对话"
+  else 网络异常
+    UseConv->>UseConv: 降级 loadMessages() from localStorage
+    UseConv-->>Ctrl: { messages: cached, conversationId: null }
+    Ctrl-->>Page: { messages, mounted }
+    Page-->>U: 显示缓存消息
   end
 ```
 
-### 4.2 消息发送（含 thinking 事件）
+### 4.2 消息发送（含 conversation_id 回传）
 
 ```mermaid
 sequenceDiagram
   participant U as 学生
-  participant ChatUI as ChatUI
-  participant UseStream as useChatStream
+  participant Ctrl as useChatController
+  participant Stream as useChatStream
   participant BE as 后端 SSE
 
-  U->>ChatUI: 输入问题并点击发送
-  ChatUI->>ChatUI: appendAndSend创建userMsg+aiMsg
-  ChatUI->>UseStream: sendMessage(question, callbacks, conversationId)
-  UseStream->>BE: POST /api/chat/stream question+conversation_id
+  U->>Ctrl: handleSend(question)
+  Ctrl->>Ctrl: appendAndSend: 创建 userMsg + aiMsg
+  Ctrl->>Ctrl: setMessages([...prev, userMsg, aiMsg])
+  Ctrl->>Stream: sendMessage(question, callbacks, conversationId)
 
-  BE-->>UseStream: SSE stream
+  Stream->>BE: POST /api/chat/stream {question, conversation_id}
+
+  BE-->>Stream: event: init {"conversation_id":"uuid-xxx"}
+  Stream-->>Ctrl: onInit("uuid-xxx")
+  Ctrl->>Ctrl: setConversationId("uuid-xxx")
 
   loop SSE 事件流
-    BE-->>UseStream: event thinking - onThinking 步骤1 分析问题
-    UseStream-->>ChatUI: 追加到aiMsg.thinkingSteps
-    BE-->>UseStream: event status - onStatus retrieving
-    BE-->>UseStream: event sources - onSources列表
-    BE-->>UseStream: event thinking - onThinking 步骤2 基于教材引导
-    UseStream-->>ChatUI: 追加到aiMsg.thinkingSteps
-    loop 逐token
-      BE-->>UseStream: event token - onToken文本片段
-    end
-    BE-->>UseStream: event done - onDone
+    BE-->>Stream: event: thinking → onThinking
+    BE-->>Stream: event: status → onStatus
+    BE-->>Stream: event: sources → onSources
+    BE-->>Stream: event: token → onToken (逐条)
+    BE-->>Stream: event: done → onDone
   end
 
-  Note over ChatUI: onDone不调用saveMessages 后端PostgresSaver已保存
+  Note over Ctrl: onDone 后端 PostgresSaver 已保存，不调 saveMessages
+  Note over Ctrl: conversationId 已保存，下次发送复用同一 thread
 ```
 
-### 4.3 SSE 请求失败降级
+### 4.3 SSE 请求失败（保留用户消息）
 
 ```mermaid
 sequenceDiagram
-  participant ChatUI as ChatUI
-  participant UseStream as useChatStream
-  participant Storage as localStorage
+  participant U as 学生
+  participant Ctrl as useChatController
+  participant Stream as useChatStream
 
-  ChatUI->>UseStream: sendMessage
-  UseStream-->>ChatUI: onError code=00000
-  ChatUI->>ChatUI: 撤回user+ai消息 prev.slice前N-2条
-  ChatUI->>Storage: saveMessages 唯一保留的saveMessages调用
-  ChatUI->>ChatUI: setInput回填输入框
+  U->>Ctrl: handleSend(question)
+  Ctrl->>Ctrl: setMessages([..., userMsg, aiMsg])
+  Ctrl->>Stream: sendMessage
+  Stream-->>Ctrl: onError { code: '00000', message: '请求失败' }
+
+  Ctrl->>Ctrl: 保留 userMsg，标记 aiMsg.status = 'error'
+  Ctrl->>Ctrl: setInput(question) 回填输入框
+  Note over Ctrl: 不再删除用户消息
+  Note over Ctrl: 不再调用 saveMessages（后端未收到请求，无 checkpoint 可恢复）
+  Ctrl-->>U: 用户消息可见 + AI 气泡显示错误状态
 ```
 
 ### 4.4 用户主动暂停生成
 
-**用户故事**：作为学生，我想在 LLM 回答过程中随时点击暂停，以便在已经获得足够信息时中断生成，不用等待完整回复。
-
-用户在 LLM 流式生成过程中点击暂停按钮。前端通过 AbortController 关闭 SSE 连接，保留已生成的部分回答并标记为 stopped 状态。后端 graph.stream() 迭代器因连接断开而中断，respond 节点未完成，PostgresSaver 未保存 AIMessage。前端将部分回答保存到 localStorage 兜底，下次加载时优先显示后端 checkpoint 数据，若后端无此条消息则从 localStorage 补充。
-
 ```mermaid
 sequenceDiagram
   participant U as 学生
-  participant ChatUI as ChatUI
-  participant UseStream as useChatStream
-  participant BE as 后端 SSE
-  participant Storage as localStorage
+  participant Ctrl as useChatController
+  participant Stream as useChatStream
 
-  Note over BE: LLM 正在逐 token 流式生成
-  U->>ChatUI: 点击暂停按钮
-  ChatUI->>UseStream: abort controller 关闭 SSE 连接
-  BE-->>UseStream: 连接断开
-
-  ChatUI->>ChatUI: 保留已生成部分文本
-  ChatUI->>ChatUI: aiMsg.status = stopped
-  ChatUI->>Storage: saveMessages 部分回答兜底保存
-
-  Note over ChatUI,Storage: 下次页面加载时：后端无此 AIMessage checkpoint，前端从 localStorage 补充显示
+  Note over Stream: LLM 正在流式生成
+  U->>Ctrl: handleStop()
+  Ctrl->>Stream: abort()
+  Ctrl->>Ctrl: aiMsg.status = stopped
+  Ctrl->>Ctrl: saveMessages 部分回答兜底
+  Note over Ctrl: 下次加载：后端无 AIMessage checkpoint → localStorage 补充
 ```
-
-**关键处理**：
-
-| 步骤 | 处理 | 说明 |
-|------|------|------|
-| 1 | AbortController.abort() 关闭 SSE | 已有机制（R005 handleStop） |
-| 2 | 保留 aiMsg，status 设为 stopped | 已有机制，不撤回消息 |
-| 3 | saveMessages 保存到 localStorage | 需要保留，因为后端 checkpoint 中没有这条部分 AIMessage |
-| 4 | 下次页面加载 | 优先从后端 checkpoint 加载；若 checkpoint 中无此条回答，前端 localStorage 中有兜底 |
-
-**与 SSE 请求失败的区别**：
-
-| 维度 | 请求失败（4.3） | 主动暂停（4.4） |
-|------|----------------|----------------|
-| 触发方 | 网络/后端异常 | 用户主动操作 |
-| 后端状态 | 请求未到达，无任何记录 | classify+retrieve 已 checkpoint，仅 respond 未完成 |
-| 前端处理 | 撤回 user+ai 两条消息 | 保留 aiMsg（部分文本），不撤回 |
-| saveMessages | 保存撤回前的消息 | 保存含部分回答的消息 |
-
-### 4.5 非课程问题处理
-
-用户发送非课程问题（如"今天天气怎么样"），后端 classify 节点判定为 unrelated → refuse 节点直接返回静态拒绝消息，不调 LLM。前端侧无需特殊处理：SSE 流中只收到少量 token（拒绝文本）和 done 事件，与正常课程问题流程一致。
-
-```mermaid
-sequenceDiagram
-  participant U as 学生
-  participant ChatUI as ChatUI
-  participant UseStream as useChatStream
-  participant BE as 后端 SSE
-
-  U->>ChatUI: 输入非课程问题
-  ChatUI->>UseStream: sendMessage
-  UseStream->>BE: POST /api/chat/stream
-
-  BE-->>UseStream: SSE token 我是课程学习助手...
-  BE-->>UseStream: SSE done
-
-  Note over ChatUI: refuse分支无status/sources事件，仅收到thinking(classify)+短文本token+done
-```
-
-**关键区别**：refuse 分支仍经过 classify 节点（会有 thinking 事件），但不经过 retrieve/respond（无 status/sources 事件），直接从 refuse 节点收到 token 流和 done。前端无需区分课程/非课程，统一走 SSE 事件处理。
 
 ## 5. 项目结构与技术决策
 
@@ -290,106 +246,109 @@ sequenceDiagram
 ```
 frontend/src/
 ├── lib/
-│   ├── api-client.ts                  ★ 修改 — 职责收敛：去掉刷新锁/跳转逻辑，registerGetToken → registerAuthHandlers
+│   ├── api-client.ts                  ✓ 已完成 — registerAuthHandlers + fetchWithAuth
 │   └── utils.ts                       ── 不修改
 ├── contexts/
-│   ├── auth-context.tsx               ★ 修改 — onUnauthorized 不含跳转；新增 useEffect 自动跳转 + 路径白名单；使用 SharedTokenManager
-│   └── shared-token-manager.ts        ★ 新增 — TokenManager 包装类，refreshTokens 并发安全
+│   ├── auth-context.tsx               ✓ 已完成 — SharedTokenManager + 自动跳转 + 白名单
+│   └── shared-token-manager.ts        ✓ 已完成 — 并发安全 refreshTokens
 ├── chat/
-│   ├── use-conversation.ts            ★ 新增 — 后端 conversation API hook
-│   │   └── 职责: API 加载对话 + conversationId 管理 + role/status 映射 + 降级
-│   ├── use-chat-stream.ts             ★ 修改 — conversationId 参数 + thinking 事件分发
-│   ├── types.ts                       ★ 修改 — 新增 ThinkingStep/ConversationResponse/ApiMessage + 扩展 Message/SSECallbacks
+│   ├── controller.ts                  ★ 新增 — 统一聊天控制器（消息状态 + 对话加载 + SSE + 持久化）
+│   ├── use-conversation.ts            ★ 修改 — useCallback 包裹 + conversationId 管理
+│   ├── use-chat-stream.ts             ✓ 已完成 — thinking case + conversationId 参数
+│   ├── types.ts                       ★ 修改 — SSECallbacks 新增 onInit
 │   ├── use-chat-storage.ts            ── 不修改 — 降级保留
-│   ├── api.ts                         ✕ 删除 — API_BASE 与 api-client.ts BASE_URL 重复
-│   └── parse-sse.ts                   ── 不修改 — 通用解析器，不关心 event type
+│   └── parse-sse.ts                   ── 不修改 — 通用解析器
 └── components/
-    ├── chat-ui.tsx                     ★ 修改 — 加载历史 + conversationId + onThinking + 移除 saveMessages
-    ├── message-bubble.tsx              ★ 修改 — 集成 ThinkingProcess 组件
-    ├── thinking-process.tsx            ★ 新增 — 可折叠思考过程组件
-    ├── route-guard.tsx                 ✕ 删除 — AuthContext 统一处理跳转，RouteGuard 不再需要
+    ├── chat-ui.tsx                     ★ 修改 — 瘦身：只渲染，业务逻辑委托 controller
+    ├── message-bubble.tsx              ✓ 已完成 — ThinkingProcess 集成
+    ├── thinking-process.tsx            ✓ 已完成 — 可折叠思考过程
     ├── chat-input.tsx                  ── 不修改
     └── source-card.tsx                 ── 不修改
+```
+
+**后端配合修改**：
+
+```
+backend/app/chat/
+├── stream_router.py                   ★ 修改 — SSE 首个事件返回 init {conversation_id}
+└── conversation_router.py             ★ 修改 — 204 响应改用 Response(status_code=204)
 ```
 
 ### 职责划分
 
 | 组件/模块 | 知道什么 | 不知道什么 |
 |-----------|----------|------------|
-| `use-conversation.ts` | conversation API 路径；role/status/thinkingSteps 映射规则；API 失败降级 localStorage | SSE 流式逻辑；消息发送逻辑；UI 渲染 |
-| `chat-ui.tsx` | conversationId 状态；messages 列表；何时调用 loadConversation / startSSE | API 请求细节（token 注入、401 重试）；SSE 解析细节；后端保存时机 |
-| `use-chat-stream.ts` | conversationId 需传给后端；thinking 事件需回调；fetchWithAuth 发 SSE 请求 | conversationId 从哪来；消息保存逻辑；thinking 步骤如何展示 |
-| `thinking-process.tsx` | steps 数据；isStreaming 状态；折叠/展开交互 | 消息完整结构；其他 UI 逻辑；thinking 数据来源 |
-| `message-bubble.tsx` | 消息有 thinkingSteps 时渲染 ThinkingProcess | thinking 步骤的具体交互逻辑（由 ThinkingProcess 内部管理） |
-| `api-client.ts` | 如何附加 Authorization header；401 时调用 onUnauthorized 回调重试一次 | token 怎么来、怎么刷新；业务 URL 含义；页面跳转 |
-| `auth-context.tsx` | 认证状态权威源；未登录自动跳转（白名单外的路径）；onSessionExpired 状态清除 | 各页面的具体 UI 渲染 |
+| `controller.ts` | 消息列表状态；conversationId；何时加载对话/发送消息/停止/重试；SSE 回调逻辑；saveMessages 时机 | UI 渲染细节（组件结构、样式、DOM） |
+| `chat-ui.tsx` | controller 返回的 messages/input/isStreaming/mounted；如何渲染 MessageBubble/ChatInput | 消息从哪来、SSE 怎么调、saveMessages 何时触发 |
+| `use-conversation.ts` | conversation API 路径；role/status 映射；降级 localStorage | SSE 流式逻辑；UI 渲染 |
+| `use-chat-stream.ts` | conversationId 传给后端；init/thinking 等事件回调；fetchWithAuth 发 SSE 请求 | conversationId 从哪来；消息保存逻辑 |
+| `api-client.ts` | 如何附加 Authorization header；401 时重试 | token 怎么来、业务 URL 含义 |
+
+**调用方向**：
+
+```
+chat-ui.tsx (渲染层)
+    │
+    └─► controller.ts (业务层)
+          ├─► useConversation (对话加载)
+          ├─► useChatStream (SSE 流)
+          └─► useChatStorage (降级持久化)
+                │
+                └─► api-client.ts (HTTP 层)
+                      │
+                      └─► auth-context.tsx (鉴权层)
+```
 
 ### 技术决策
 
 | 决策 | 方案 | 理由 |
 |------|------|------|
-| conversation_id 获取方式 | 方案 A：前端 loadConversation() 后存 React 状态，首次传 null 后端自动创建 | 后端根据 user_id 关联对话，无需 SSE 返回 conversation_id，不增加协议复杂度 |
-| saveMessages 调用策略 | 终态全部移除，仅 onError(00000) 和 handleStop 保留 | 后端 PostgresSaver 自动保存终态；00000 表示请求未到达后端需兜底；handleStop 时 respond 未完成无 checkpoint 需兜底 |
-| thinking 事件处理位置 | use-chat-stream.ts switch 新增 case | 与 status/sources/token 处理模式一致；parse-sse.ts 保持通用不修改 |
-| conversationId 参数传递 | sendMessage 第三参数，可选 | 不破坏现有调用签名，向后兼容 |
+| conversation_id 获取方式 | **SSE init 事件回传** | 方案 A（前端不获取）实测失败：每条消息创建新 thread。init 事件在 SSE 流开头一次性返回，前端保存后复用，简单可靠 |
+| controller 实现形式 | 自定义 hook (useChatController) | 不引入 Redux/Zustand 等状态管理库；React hook 够用；ChatUI 组件 300+ 行需要拆分职责 |
+| onError 用户消息处理 | 保留用户消息 + AI 标记 error + 文本回填输入框 | 用户已输入内容不应被静默删除；回填输入框方便重试 |
+| loadConversation 稳定性 | useCallback 空依赖数组 | 函数内部不依赖响应式状态（fetchWithAuth 是模块级函数，setConversationId 是稳定引用） |
+| conversation_router 204 | `Response(status_code=204)` 替代 `JSONResponse(status_code=204, content=None)` | HTTP 204 不应有 body；JSONResponse 会序列化 "null" 导致 Content-Length 冲突 |
+| saveMessages 调用策略 | 终态全部移除，仅 handleStop 保留 | 后端 PostgresSaver 自动保存；handleStop 时 respond 未完成无 checkpoint 需兜底；onError 不再调 saveMessages（用户消息保留可见，无需兜底保存） |
 | ThinkingProcess 默认状态 | 折叠 | 不干扰主要回答内容阅读 |
-| api-client 职责边界 | 去掉 refreshAndGetToken/redirectToLogin，改用 registerAuthHandlers 注入 getToken + onUnauthorized | HTTP 层不应包含 auth 刷新/跳转逻辑；刷新锁由 AuthService 内部管理 |
-| TokenManager 实例 | 去掉独立 TokenManager，统一用 AuthService 一个实例 | 两个实例通过 localStorage 隐式同步是脆弱设计；AuthService 内部已有 TokenManager |
-| 401→跳转通信 | registerAuthHandlers.onUnauthorized 回调替代 DOM CustomEvent | 同一应用内部不应走 DOM 事件；回调更直接、可追踪 |
-| 未登录自动跳转 | AuthContext 统一处理：useEffect 监听 isInitialized + isAuthenticated + pathname（路由变化），未登录且不在白名单时自动调用 login() | 系统性解决：任何页面未登录都自动跳转，不依赖每个页面手动包裹 RouteGuard；pathname 依赖确保客户端路由切换时也触发检查 |
-| route-guard | 删除组件 | AuthContext 统一处理跳转后 RouteGuard 只剩 loading 功能，不值得独立组件；loading 状态可在各页面自行处理 |
-| onUnauthorized 回调 | 只返回 null，不调用 service.login()；刷新失败时调用 setAuthState(isAuthenticated=false) | API 层不触发页面跳转；刷新失败时主动将状态设为 false，触发 AuthContext 的自动跳转 useEffect |
-| 白名单路径 | `/`（首页）、`/callback`（OAuth 回调） | 这两个页面不需要登录；其他路径未登录一律跳转 |
-| Token 并发刷新 | SharedTokenManager 包装类，内部 Promise 复用 | SDK 的 refreshTokens() 不保证并发安全；包装后所有调用方共享同一个刷新 Promise，避免重复刷新导致 token 失效 |
-| chat/api.ts | 删除 | API_BASE 与 api-client.ts BASE_URL 重复 |
 
 **saveMessages 调用点变化**：
 
-| 调用点 | R005（现有） | R007 | 理由 |
-|--------|-------------|------|------|
-| appendAndSend（发送时） | `saveMessages(newMessages)` | 移除 | 后端 SSE 开始时保存 HumanMessage |
-| updateMsgAndSave（终态） | `saveMessages(next)` | 移除 | 后端 PostgresSaver 自动保存 |
-| handleStop（停止时） | `saveMessages(next)` | **保留** | respond 节点未完成，后端无 AIMessage checkpoint，需 localStorage 兜底 |
-| handleRegenerate（重新生成） | `saveMessages(newMessages)` | 移除 | 后端 PostgresSaver 自动保存新回答；旧回答保留在 checkpoint 历史中 |
-| onError(00000)（请求失败） | `saveMessages(next)` | **保留** | 后端没收到消息，需 localStorage 兜底 |
+| 调用点 | R005 | R007-v4 | 理由 |
+|--------|------|---------|------|
+| appendAndSend（发送时） | `saveMessages` | 移除 | 后端 SSE 开始时保存 |
+| updateMsgAndSave（终态） | `saveMessages` | 移除 | PostgresSaver 自动保存 |
+| handleStop（停止时） | `saveMessages` | **保留** | respond 未完成，无 checkpoint |
+| handleRegenerate | `saveMessages` | 移除 | PostgresSaver 自动保存 |
+| onError(00000)（请求失败） | `saveMessages` + 撤回 | **保留消息 + 不调 saveMessages** | 用户消息保留可见；后端没收到请求无需兜底 |
 
 ## 6. 验收标准
 
 | 验收条件 | 验收方式 |
 |---------|---------|
 | 打开页面 → API 返回历史消息 → 正确显示（含 thinkingSteps） | 集成测试：mock GET /conversations/current 返回含 thinking_steps 的消息 |
-| API 失败 → 降级 localStorage → 显示缓存消息 | 单元测试：mock fetchWithAuth 抛异常，验证 loadMessages() 被调用 |
-| 首次发送（conversationId=null）→ 后端自动创建对话 → SSE 正常 | 集成测试：conversationId=null → SSE 流正常返回 |
-| 后续发送 conversationId 正确传递到请求体 | 单元测试：验证 chatStreamFetch body 包含 conversation_id |
-| SSE thinking 事件到达 → aiMsg.thinkingSteps 追加 | 单元测试：mock thinking 事件 → 验证 onThinking 回调被调用 |
-| ThinkingProcess 默认折叠，点击展开/折叠 | 组件测试：验证 expanded 状态切换 |
-| 流式中标题显示"思考中..."，完成后显示"思考过程（N 步）" | 组件测试：验证 isStreaming true/false 下的标题文本 |
-| AI 消息有 thinkingSteps 渲染 ThinkingProcess，无则不渲染 | 组件测试：验证条件渲染 |
-| onDone/handleRegenerate 不调用 saveMessages | 组件测试：spyOn saveMessages → 验证不被调用 |
-| handleStop 调用 saveMessages（部分回答兜底） | 组件测试：触发 handleStop → 验证 saveMessages 被调用 |
-| handleStop 后 aiMsg.status 为 stopped，保留已生成文本 | 组件测试：触发 handleStop → 验证 status 和 content |
-| onError(00000) 仍调用 saveMessages（降级） | 组件测试：触发 00000 错误 → 验证 saveMessages 被调用 |
-| api-client 不含 refreshAndGetToken/redirectToLogin 逻辑 | 代码审查：api-client.ts 无刷新锁、无 DOM dispatchEvent |
-| api-client 通过 registerAuthHandlers 接收 getToken + onUnauthorized | 单元测试：mock onUnauthorized 返回新 token → 验证 401 重试成功 |
-| auth-context 只有一个 AuthService 实例，无独立 TokenManager | 代码审查：auth-context.tsx 无 new TokenManager |
-| auth-context 通过 registerAuthHandlers 注册，不再使用 DOM 事件 | 代码审查：无 window.addEventListener auth:session-expired |
-| auth-context onUnauthorized 不含 service.login() 调用 | 代码审查：onUnauthorized catch 块中无 login 调用 |
-| auth-context 初始化完成 + 未认证 + 不在白名单 → 自动跳转登录 | 单元测试：mock isInitialized=true, isAuthenticated=false, pathname='/chat' → 验证 login 被调用 |
-| auth-context 白名单路径 / 和 /callback 不触发跳转 | 单元测试：pathname='/' 或 '/callback' → 验证 login 未被调用 |
-| route-guard.tsx 已删除，无其他文件引用 | Grep 验证：无 import from route-guard |
-| chat/api.ts 已删除，无其他文件引用 API_BASE | Grep 验证：无 import from chat/api |
-| 401 → api-client 自动刷新 token → 重试成功 → 用户无感知 | 集成测试：mock 401 → 验证 token 刷新 + 重试 |
-| 后端不发 thinking 事件 → ThinkingProcess 不渲染 → 回答正常 | 集成测试：SSE 流无 thinking 事件 → 验证不渲染 |
+| API 返回 204 → 显示空态提示 | 手动操作：新用户首次进入 /chat |
+| API 失败 → 降级 localStorage → 显示缓存消息 | 单元测试：mock fetchWithAuth 抛异常 |
+| **SSE init 事件返回 conversation_id → 前端保存** | 单元测试：mock init 事件 → onInit 回调设置 conversationId |
+| **后续发送使用同一 conversation_id** | 单元测试：第二次 sendMessage body 包含 init 返回的 conversation_id |
+| **退出页面再进入 → 加载历史消息（含多轮对话）** | 手动操作：发 2 条消息 → 离开 /chat → 返回 /chat → 看到 2 轮对话 |
+| SSE thinking 事件 → thinkingSteps 追加 | 单元测试：mock thinking 事件 → onThinking 被调用 |
+| ThinkingProcess 默认折叠，点击展开/折叠 | 组件测试 |
+| **onError(00000) 保留用户消息，AI 标记 error** | 单元测试：触发 00000 → userMsg 仍在 → aiMsg.status = 'error' |
+| **onError(00000) 文本回填输入框** | 单元测试：触发 00000 → input 值为发送的文本 |
+| handleStop 调用 saveMessages（部分回答兜底） | 单元测试 |
+| onDone / handleRegenerate 不调用 saveMessages | 单元测试 |
+| api-client 通过 registerAuthHandlers 接收回调 | 单元测试 |
+| auth-context 自动跳转 + 白名单正常 | 单元测试 |
+| **ChatUI 不超过 80 行（纯渲染逻辑）** | 代码审查 |
+| **controller.ts 包含所有业务逻辑** | 代码审查：handleSend/handleStop/handleRegenerate 在 controller 中 |
 
 ## 7. 暂不实现
 
 | 功能 | 理由 |
 |------|------|
-| conversation_id 在 SSE done 事件中返回（方案 B） | 当前后端根据 user_id 关联即可；多 tab 场景出现时再升级 |
-| rewrite 追问改写 / assess 检索质量评估闭环 | 后端 R007 首期裁剪，后续迭代加入 |
-| 思考过程步骤搜索/过滤 | 步骤数量少（通常 3-5 步），无搜索必要 |
-| 思考步骤 Markdown 渲染 | 步骤文本为纯描述性语句，无需富文本 |
-| 对话列表管理（多对话切换） | 当前仅需最近一次对话，多对话管理为后续需求 |
+| 对话列表管理（多对话切换、新建对话） | 当前仅需最近一次对话，多对话管理为后续需求 |
 | 离线完整支持 | 当前降级策略仅保留历史查看，离线发送不在本次范围 |
-| 编辑已发送消息 | PostgresSaver checkpoint 是 append-only 不支持回改历史；用户可直接发新消息纠正，旧问答保留在历史中；后续可通过 checkpoint 分支实现 |
-| 检索降级提示 UI（degraded/degradation_reason） | 后端 AgentState 已有降级标记，但 SSE 事件和前端 UI 暂不实现，留后续迭代 |
+| 编辑已发送消息 | PostgresSaver checkpoint 是 append-only；后续可通过 checkpoint 分支实现 |
+| 检索降级提示 UI | 后端 AgentState 已有降级标记，但 SSE 事件和前端 UI 暂不实现 |
+| 思考步骤搜索/过滤 | 步骤数量少（通常 3-5 步），无搜索必要 |
+| 思考步骤 Markdown 渲染 | 步骤文本为纯描述性语句，无需富文本 |

@@ -7,7 +7,7 @@ GET /api/conversations/current — 获取当前用户最近对话的消息列表
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from app.chat.dependencies import get_checkpointer
 from app.chat.schemas import ApiMessage, ThinkingPayload
@@ -34,7 +34,7 @@ async def get_current_conversation(
     )
 
     if not messages:
-        return JSONResponse(status_code=204, content=None)
+        return Response(status_code=204)
 
     # 转换为 ApiMessage 格式
     api_messages = [_to_api_message(msg, idx) for idx, msg in enumerate(messages)]

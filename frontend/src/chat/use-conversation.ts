@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { fetchWithAuth } from '@/lib/api-client';
 import { loadMessages } from './use-chat-storage';
 import type { Message, MessageStatus, ConversationResponse, ApiMessage } from './types';
@@ -34,7 +34,7 @@ interface UseConversationReturn {
 export function useConversation(): UseConversationReturn {
   const [conversationId, setConversationId] = useState<string | null>(null);
 
-  const loadConversation = async (): Promise<{ messages: Message[]; fromCache: boolean }> => {
+  const loadConversation = useCallback(async (): Promise<{ messages: Message[]; fromCache: boolean }> => {
     try {
       const response = await fetchWithAuth('/conversations/current');
       if (response.status === 204) {
@@ -56,7 +56,7 @@ export function useConversation(): UseConversationReturn {
       const cached = loadMessages();
       return { messages: cached ?? [], fromCache: true };
     }
-  };
+  }, []);
 
   return { conversationId, loadConversation };
 }
