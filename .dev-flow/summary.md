@@ -1,6 +1,6 @@
 # OctoTutor Development Summary
 
-最后更新: 2026-05-23
+最后更新: 2026-05-24
 
 ## 需求包索引
 
@@ -12,6 +12,8 @@
 | R004 | rag-dialogue | 12 | archived | 2026-05-22 |
 | R005 | chat-ui-sse | 14 | archived | 2026-05-22 |
 | R006 | auth-integration | 7 | archived | 2026-05-23 |
+| R007 | persistence-agent-upgrade | 6 | archived | 2026-05-24 |
+| R007-PATCH01 | architecture-cleanup (补丁 R007) | 7 | archived | 2026-05-24 |
 
 ## 模块清单
 
@@ -33,7 +35,9 @@
 | classifiers | BlockType LLM 分类（NewAPI glm-5.1） |
 | chat-ui | Chat UI 组件（ChatUI + MessageBubble + ChatInput + useChatStream） |
 | sse | SSE 流式端点 + 事件序列化 + 断线检测 |
-| auth | JWT 鉴权中间件 + apiClient 统一网络层 + Token 刷新锁 |
+| agent | LangGraph StateGraph 编排（classify→retrieve→respond / refuse） |
+| persistence | PostgresSaver/MemorySaver 对话持久化 + conversation_id 多轮 |
+| conversation | GET /api/conversations/current 对话历史加载 + user_id 隔离 |
 
 ## 能力清单
 
@@ -62,8 +66,32 @@
 | CAP-auth-002 | Token 自动刷新（TokenManager + ensureValidToken） |
 | CAP-auth-003 | 刷新锁去重（refreshPromise + 30s 超时 + 并发安全） |
 | CAP-auth-004 | SSE 请求鉴权（fetchWithAuth + Bearer token + 401 重试） |
+| CAP-agent-001 | LangGraph StateGraph 条件路由（textbook→retrieve→respond, unrelated→refuse） |
+| CAP-agent-002 | 教学策略 prompt（类比驱动+启发式引导+步骤化叙事） |
+| CAP-agent-003 | conversation_id 多轮对话（PostgresSaver 持久化 + MemorySaver fallback） |
+| CAP-agent-004 | 对话历史加载（GET /api/conversations/current + user_id 隔离） |
 
 ## 变更记录
+
+### R007-PATCH01 architecture-cleanup（补丁 R007）(2026-05-24)
+
+- LLMGenerator 封装修复：`get_chat_model()` 公共方法替代私有属性访问（`_client.api_key`/`_base_url`/`_model`）
+- 共享工具函数提取：`chunks_to_sources()` → domain/models.py，`build_numbered_context()` → rag/context_builder.py
+- conversation_router user_id 隔离：PostgresSaver 改用 `alist` 从存储 config 验证归属，MemorySaver `_extract_latest_messages` 统一遍历
+- 后端死代码清理：删除 `stream_chat()`、`retrieve_node`/`respond_node` 空壳、`test_chat_service_stream.py`
+- 前端死代码清理：删除 `use-chat-storage.ts`、简化 `updateMsg`、`use-conversation` 移除冗余 state
+- architecture.md 路径修正（`services/frontend/` → `frontend/`）+ FORBID-5 补充
+- 570 后端 + 96 前端测试全通过
+
+### R007 persistence-agent-upgrade (2026-05-24)
+
+- LangGraph StateGraph 编排：classify→retrieve→respond / refuse 条件路由，AgentState TypedDict
+- 教学策略 prompt：类比驱动+启发式引导+步骤化叙事+纠正误解+知识关联+趣味记忆
+- PostgresSaver 持久化：AsyncPostgresSaver + 自动建库 + MemorySaver fallback
+- SSE 集成重构：stream_router 改用 `graph.stream()` + stream_mode=["updates","messages"]
+- conversation_id 多轮对话：UUID4 自动创建 + checkpoint 恢复 + conversation_router GET API
+- 前端对话加载：useConversation hook + conversationId localStorage 持久化
+- Thinking 事件 + conversationId 类型 + 流式 hook 重构
 
 ### R006 auth-integration (2026-05-23)
 

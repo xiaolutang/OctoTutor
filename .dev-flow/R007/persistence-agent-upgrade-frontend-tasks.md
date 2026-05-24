@@ -6,7 +6,7 @@ requirement_cycle: R007
 workflow:
   evaluate_provider: local
   mode: auto
-status: planned
+status: archived
 ---
 
 # Chat — 前端 任务清单

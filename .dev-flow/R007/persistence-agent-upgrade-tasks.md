@@ -6,7 +6,7 @@ requirement_cycle: R007
 workflow:
   evaluate_provider: local
   mode: auto
-status: planned
+status: archived
 ---
 
 # Agent — 后端 任务清单

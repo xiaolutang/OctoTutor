@@ -1,8 +1,7 @@
 {
   "version": "3.0",
   "project": "OctoTutor",
-  "active_rc": "R007-PATCH01",
-  "suspended_rc": "R007",
+  "active_rc": null,
   "default_workflow": {
     "name": "XLFoundry",
     "mode": "A",
@@ -16,9 +15,9 @@
     { "id": "R003", "name": "knowledge-base", "archive_dir": "R003", "total_tasks": 17, "completed_at": "2026-05-21" },
     { "id": "R004", "name": "rag-dialogue", "archive_dir": "R004", "total_tasks": 12, "completed_at": "2026-05-22" },
     { "id": "R005", "name": "chat-ui-sse", "archive_dir": "R005", "total_tasks": 14, "completed_at": "2026-05-22" },
-    { "id": "R006", "name": "auth-integration", "archive_dir": "R006", "total_tasks": 7, "completed_at": "2026-05-23" }
+    { "id": "R006", "name": "auth-integration", "archive_dir": "R006", "total_tasks": 7, "completed_at": "2026-05-23" },
+    { "id": "R007", "name": "persistence-agent-upgrade", "archive_dir": "R007", "total_tasks": 6, "completed_at": "2026-05-24" },
+    { "id": "R007-PATCH01", "name": "architecture-cleanup", "archive_dir": "R007-PATCH01", "patch_for": "R007", "total_tasks": 7, "completed_at": "2026-05-24" }
   ],
-  "rc_queue": [
-    { "id": "R007", "name": "persistence-agent-upgrade", "depends_on": "R006", "status": "planned", "analysis_topic": "消息持久化 + 智能体教学策略升级", "analysis_ref": "R007/analysis/2026-05-22--R007-persistence-agent-upgrade.md" }
-  ]
+  "rc_queue": []
 }

@@ -6,7 +6,7 @@ requirement_cycle: R007-PATCH01
 workflow:
   evaluate_provider: local
   mode: auto
-status: completed
+status: archived
 ---
 
 # 架构收敛 — 任务清单
