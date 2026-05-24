@@ -1,46 +1,86 @@
 """SSE 流式对话路由
 
 POST /api/chat/stream — Server-Sent Events 流式对话端点。
-与 POST /api/chat（非流式）独立并存。
+使用 graph.astream(stream_mode=["updates","messages"]) 驱动 Agent StateGraph：
+- updates 事件：节点完成时推送 thinking/status/sources
+- messages 事件：respond 节点内 LLM 逐 token 流式输出
+respond 节点在 graph 内部调用 ChatOpenAI，PostgresSaver 自动保存 AIMessage checkpoint。
 """
 
 from __future__ import annotations
 
 import json
+import logging
+import uuid
 from dataclasses import asdict
+from typing import Any
+
+from langchain_core.messages import HumanMessage
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
-from app.chat.dependencies import get_chat_service
+from app.chat.dependencies import get_graph, get_checkpointer
 from app.chat.errors import ChatErrorCode, make_error
-from app.chat.schemas import ChatRequest, StreamEvent
-from app.chat.service import ChatService
+from app.chat.schemas import ChatRequest
+from app.middleware.auth import UserContext, get_current_user
 
 router = APIRouter(prefix="/api", tags=["chat"])
+
+logger = logging.getLogger(__name__)
 
 
 @router.post("/chat/stream")
 async def stream_chat(
     body: ChatRequest,
     http_request: Request,
-    service: ChatService = Depends(get_chat_service),
+    graph=Depends(get_graph),
+    checkpointer=Depends(get_checkpointer),
+    user: UserContext = Depends(get_current_user),
 ):
     """SSE 流式对话端点
 
-    遍历 service.stream_chat() 产出的事件，序列化为 SSE 文本格式。
-    断线检测：每轮迭代检查 is_disconnected()，断线则 break（不 yield error）。
-    外层兜底：未预期异常 yield INTERNAL_ERROR error event。
+    使用 graph.astream(stream_mode=["updates","messages"]) 驱动 Agent StateGraph。
+    - updates：classify/retrieve/respond/refuse 节点完成时推送状态事件
+    - messages：respond 节点内 LLM 逐 token 流式推送
+    - respond 节点完成后 PostgresSaver 自动保存 AIMessage
     """
+    conversation_id = body.conversation_id or str(uuid.uuid4())
+
+    config = {
+        "configurable": {
+            "thread_id": conversation_id,
+            "user_id": user.user_id,
+        }
+    }
+
+    # 将用户问题作为 HumanMessage 传入 graph state，checkpointer 自动持久化
+    input_state = {
+        "messages": [HumanMessage(content=body.question)],
+        "question": body.question,
+    }
 
     async def event_generator():
         try:
-            async for event in service.stream_chat(body.question, body.top_k):
+            # 首个事件：回传 conversation_id 给前端
+            yield _sse_frame("init", {"conversation_id": conversation_id})
+
+            async for event in graph.astream(
+                input_state,
+                config=config,
+                stream_mode=["updates", "messages"],
+            ):
                 if await http_request.is_disconnected():
                     break
-                serialized = _serialize_event_data(event)
-                yield f"event: {event.type}\ndata: {json.dumps(serialized, ensure_ascii=False)}\n\n"
-        except Exception:
+
+                async for frame in _map_event_to_sse(event, http_request):
+                    yield frame
+
+            if not await http_request.is_disconnected():
+                yield "event: done\ndata: null\n\n"
+
+        except Exception as e:
+            logger.error(f"SSE stream error: {e}", exc_info=True)
             yield (
                 f"event: error\ndata: {json.dumps(make_error(ChatErrorCode.INTERNAL_ERROR), ensure_ascii=False)}\n\n"
             )
@@ -48,23 +88,83 @@ async def stream_chat(
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
-def _serialize_event_data(event: StreamEvent):
-    """序列化 StreamEvent.data 为 JSON 兼容对象
+async def _map_event_to_sse(event, http_request: Request):
+    """将 graph.astream 双流事件映射为 SSE 帧
 
-    处理顺序：Pydantic model_dump() > dataclass asdict() > list 递归 > 原始值
+    双流事件格式：
+    - updates: ("updates", {node_name: node_output})
+    - messages: ("messages", (AIMessageChunk, metadata))
     """
-    data = event.data
-    if data is None:
-        return None
-    if hasattr(data, "model_dump"):
-        return data.model_dump()
-    if hasattr(data, "__dataclass_fields__"):
-        return asdict(data)
-    if isinstance(data, list):
-        return [
-            item.model_dump() if hasattr(item, "model_dump")
-            else asdict(item) if hasattr(item, "__dataclass_fields__")
-            else item
-            for item in data
-        ]
-    return data
+    if not isinstance(event, tuple) or len(event) != 2:
+        return
+
+    stream_type, data = event
+
+    if stream_type == "updates":
+        # 节点完成事件 — data 是 {node_name: node_output}
+        if not isinstance(data, dict):
+            return
+        for node_name, node_output in data.items():
+            async for frame in _map_node_update_to_sse(node_name, node_output):
+                yield frame
+
+    elif stream_type == "messages":
+        # LLM token 事件 — data 是 (message_chunk, metadata)
+        if not isinstance(data, tuple) or len(data) != 2:
+            return
+        message_chunk, metadata = data
+        # 只推送 respond 节点的 token（其他节点的 messages 事件忽略）
+        node_name = metadata.get("langgraph_node", "")
+        if node_name == "respond":
+            token = getattr(message_chunk, "content", "")
+            if token:
+                yield _sse_frame("token", token)
+
+
+async def _map_node_update_to_sse(node_name: str, node_output: dict):
+    """将节点完成事件映射为 SSE 帧"""
+    if node_name == "classify":
+        intent = node_output.get("intent", "")
+        yield _sse_frame(
+            "thinking",
+            {"text": f"意图分类: {intent}", "index": 0},
+        )
+
+    elif node_name == "retrieve":
+        yield _sse_frame(
+            "status",
+            {"stage": "retrieving", "message": "正在检索教材..."},
+        )
+
+        sources = node_output.get("sources", [])
+        if sources:
+            serialized = [_serialize_source(s) for s in sources]
+            yield _sse_frame("sources", serialized)
+
+    elif node_name == "respond":
+        yield _sse_frame(
+            "status",
+            {"stage": "generating", "message": "正在生成回答..."},
+        )
+        # respond 节点完成后，AIMessage 已由 PostgresSaver 自动保存
+        # token 级别的事件已通过 messages 流推送，此处无需额外处理
+
+    elif node_name == "refuse":
+        messages = node_output.get("messages", [])
+        if messages:
+            content = messages[0].content if hasattr(messages[0], "content") else str(messages[0])
+            yield _sse_frame("token", content)
+
+
+def _sse_frame(event_type: str, data: Any) -> str:
+    """构造 SSE 文本帧"""
+    return f"event: {event_type}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+def _serialize_source(source) -> dict:
+    """序列化 SourceReference 为 dict"""
+    if hasattr(source, "model_dump"):
+        return source.model_dump()
+    if hasattr(source, "__dataclass_fields__"):
+        return asdict(source)
+    return source

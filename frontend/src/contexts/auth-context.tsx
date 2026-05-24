@@ -9,7 +9,10 @@ import {
   useRef,
   type ReactNode,
 } from "react"
-import { AuthService, type UserInfo, type AuthState } from "@xlfoundry/auth-sdk-web"
+import { usePathname } from "next/navigation"
+import { AuthService, TokenManager, type UserInfo, type AuthState } from "@xlfoundry/auth-sdk-web"
+import { SharedTokenManager } from "./shared-token-manager"
+import { registerAuthHandlers } from "../lib/api-client"
 
 /** 运行时配置，从 /api/config 加载 */
 export interface RuntimeConfig {
@@ -33,11 +36,16 @@ export interface AuthContextValue {
   isInitialized: boolean
   /** 初始化错误信息 */
   initError: string | null
+  /** 获取有效的 access_token */
+  getAccessToken: () => Promise<string | null>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 const RETURN_URL_KEY = "xlfoundry_auth_return_url"
+
+/** 路径白名单：不需要登录的页面 */
+const AUTH_WHITELIST = ["/", "/callback"]
 
 function saveReturnUrl() {
   sessionStorage.setItem(RETURN_URL_KEY, window.location.pathname + window.location.search)
@@ -52,9 +60,13 @@ export function consumeReturnUrl(): string {
 /** 单例 AuthService 实例 */
 let authService: AuthService | null = null
 
+/** 并发安全的 Token 管理器 */
+let sharedTM: SharedTokenManager | null = null
+
 function getAuthService(): AuthService {
   if (!authService) {
     authService = new AuthService()
+    sharedTM = new SharedTokenManager(new TokenManager())
   }
   return authService
 }
@@ -62,9 +74,10 @@ function getAuthService(): AuthService {
 /**
  * AuthProvider：在客户端 useEffect 中加载配置并初始化 SDK
  *
- * - 必须在 'use client' 组件中使用
- * - SDK 依赖 localStorage/window/sessionStorage，因此初始化放在 useEffect 中
- * - 配置通过 fetch('/api/config') 从服务端环境变量加载
+ * 职责：
+ * - 管理 SDK 初始化和认证状态
+ * - 未登录且不在白名单时自动跳转登录
+ * - 通过 registerAuthHandlers 将 token 读/刷新注入 api-client
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isInitialized, setIsInitialized] = useState(false)
@@ -74,7 +87,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user: null,
   })
   const initRef = useRef(false)
+  const pathname = usePathname()
 
+  // ── SDK 初始化 ──
   useEffect(() => {
     if (initRef.current) return
     initRef.current = true
@@ -88,14 +103,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return res.json()
       })
       .then((config: RuntimeConfig) => {
-        return service.init({
+        const sdkConfig = {
           clientId: config.clientId,
           authCenterBaseURL: config.authCenterBaseURL,
           redirectUri: window.location.origin + "/callback",
           onSessionExpired: () => {
             setAuthState({ isAuthenticated: false, user: null })
           },
+        }
+
+        // 注册鉴权处理器到 api-client
+        const tm = sharedTM!
+        tm.setConfig(sdkConfig)
+        registerAuthHandlers({
+          getToken: async () => {
+            try {
+              return tm.getAccessToken()
+            } catch {
+              return null
+            }
+          },
+          onUnauthorized: async () => {
+            try {
+              const result = await tm.refreshTokens()
+              return result?.access_token ?? null
+            } catch {
+              // 刷新失败：通知 AuthContext 用户已失效，触发自动跳转
+              setAuthState({ isAuthenticated: false, user: null })
+              return null
+            }
+          },
         })
+
+        return service.init(sdkConfig)
       })
       .then(() => {
         const state = service.getAuthState()
@@ -108,6 +148,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
   }, [])
 
+  // ── 自动跳转：未登录 + 不在白名单 → login() ──
+  useEffect(() => {
+    if (!isInitialized) return
+    if (authState.isAuthenticated) return
+    if (AUTH_WHITELIST.includes(pathname)) return
+    login()
+  }, [isInitialized, authState.isAuthenticated, pathname])
+
   const login = useCallback(async () => {
     saveReturnUrl()
     const service = getAuthService()
@@ -118,6 +166,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const service = getAuthService()
     await service.logout()
     setAuthState({ isAuthenticated: false, user: null })
+    // 主动登出 → 跳转首页，不触发自动登录跳转
+    window.location.href = "/"
   }, [])
 
   const handleCallback = useCallback(async () => {
@@ -128,6 +178,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return user
   }, [])
 
+  const getAccessToken = useCallback(async () => {
+    return sharedTM?.getAccessToken() ?? null
+  }, [])
+
   const value: AuthContextValue = {
     isAuthenticated: authState.isAuthenticated,
     user: authState.user,
@@ -136,6 +190,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     handleCallback,
     isInitialized,
     initError,
+    getAccessToken,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

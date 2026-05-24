@@ -1,6 +1,6 @@
 # OctoTutor Development Summary
 
-最后更新: 2026-05-22
+最后更新: 2026-05-24
 
 ## 需求包索引
 
@@ -11,6 +11,9 @@
 | R003 | knowledge-base | 17 | archived | 2026-05-21 |
 | R004 | rag-dialogue | 12 | archived | 2026-05-22 |
 | R005 | chat-ui-sse | 14 | archived | 2026-05-22 |
+| R006 | auth-integration | 7 | archived | 2026-05-23 |
+| R007 | persistence-agent-upgrade | 6 | archived | 2026-05-24 |
+| R007-PATCH01 | architecture-cleanup (补丁 R007) | 7 | archived | 2026-05-24 |
 
 ## 模块清单
 
@@ -32,6 +35,9 @@
 | classifiers | BlockType LLM 分类（NewAPI glm-5.1） |
 | chat-ui | Chat UI 组件（ChatUI + MessageBubble + ChatInput + useChatStream） |
 | sse | SSE 流式端点 + 事件序列化 + 断线检测 |
+| agent | LangGraph StateGraph 编排（classify→retrieve→respond / refuse） |
+| persistence | PostgresSaver/MemorySaver 对话持久化 + conversation_id 多轮 |
+| conversation | GET /api/conversations/current 对话历史加载 + user_id 隔离 |
 
 ## 能力清单
 
@@ -56,8 +62,45 @@
 | CAP-chatui-002 | 检索无结果兜底回答 |
 | CAP-chatui-003 | 流式错误恢复（撤回 + 重试） |
 | CAP-chatui-004 | 非流式 API 兼容 |
+| CAP-auth-001 | JWT 鉴权验证（HS256 共享密钥 + Depends 注入） |
+| CAP-auth-002 | Token 自动刷新（TokenManager + ensureValidToken） |
+| CAP-auth-003 | 刷新锁去重（refreshPromise + 30s 超时 + 并发安全） |
+| CAP-auth-004 | SSE 请求鉴权（fetchWithAuth + Bearer token + 401 重试） |
+| CAP-agent-001 | LangGraph StateGraph 条件路由（textbook→retrieve→respond, unrelated→refuse） |
+| CAP-agent-002 | 教学策略 prompt（类比驱动+启发式引导+步骤化叙事） |
+| CAP-agent-003 | conversation_id 多轮对话（PostgresSaver 持久化 + MemorySaver fallback） |
+| CAP-agent-004 | 对话历史加载（GET /api/conversations/current + user_id 隔离） |
 
 ## 变更记录
+
+### R007-PATCH01 architecture-cleanup（补丁 R007）(2026-05-24)
+
+- LLMGenerator 封装修复：`get_chat_model()` 公共方法替代私有属性访问（`_client.api_key`/`_base_url`/`_model`）
+- 共享工具函数提取：`chunks_to_sources()` → domain/models.py，`build_numbered_context()` → rag/context_builder.py
+- conversation_router user_id 隔离：PostgresSaver 改用 `alist` 从存储 config 验证归属，MemorySaver `_extract_latest_messages` 统一遍历
+- 后端死代码清理：删除 `stream_chat()`、`retrieve_node`/`respond_node` 空壳、`test_chat_service_stream.py`
+- 前端死代码清理：删除 `use-chat-storage.ts`、简化 `updateMsg`、`use-conversation` 移除冗余 state
+- architecture.md 路径修正（`services/frontend/` → `frontend/`）+ FORBID-5 补充
+- 570 后端 + 96 前端测试全通过
+
+### R007 persistence-agent-upgrade (2026-05-24)
+
+- LangGraph StateGraph 编排：classify→retrieve→respond / refuse 条件路由，AgentState TypedDict
+- 教学策略 prompt：类比驱动+启发式引导+步骤化叙事+纠正误解+知识关联+趣味记忆
+- PostgresSaver 持久化：AsyncPostgresSaver + 自动建库 + MemorySaver fallback
+- SSE 集成重构：stream_router 改用 `graph.stream()` + stream_mode=["updates","messages"]
+- conversation_id 多轮对话：UUID4 自动创建 + checkpoint 恢复 + conversation_router GET API
+- 前端对话加载：useConversation hook + conversationId localStorage 持久化
+- Thinking 事件 + conversationId 类型 + 流式 hook 重构
+
+### R006 auth-integration (2026-05-23)
+
+- 后端 JWT 鉴权中间件：UserContext + get_current_user Depends 注入，HS256 共享密钥验证（签名+过期+type+sub），3 个受保护端点 + health 公开
+- 前端 apiClient 统一网络层：registerGetToken 回调解耦 + fetchWithAuth 自动 Bearer + refreshPromise 刷新锁去重 + 30s 超时 + X-Retry 防循环 + auth:session-expired CustomEvent
+- AuthContext TokenManager 注册：独立实例 + 共享 sdkConfig + session-expired 监听触发 login
+- useChatStream 改用 apiClient：2 行替换，SSE 流式鉴权透明处理
+- Docker 部署配置：JWT_SECRET_KEY 环境变量 + lockfile 兼容修复
+- E2E 全栈验证：后端 9/9 + 前端 15/15 全部 PASS
 
 ### R005 chat-ui-sse (2026-05-22)
 

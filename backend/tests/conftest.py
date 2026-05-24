@@ -5,13 +5,19 @@ from unittest.mock import MagicMock
 
 # 确保测试环境有必要的配置（避免 Settings 校验失败）
 os.environ.setdefault("DASHSCOPE_API_KEY", "test-api-key-for-testing")
+os.environ.setdefault("JWT_SECRET_KEY", "test-jwt-secret-key")
 
 from app.rag.models import ChunkMetadata, QueryResult
+from app.middleware.auth import UserContext, get_current_user
+
+
+# 测试用 mock 用户
+_test_user = UserContext(user_id="user-123", username="testuser")
 
 
 @pytest_asyncio.fixture
 async def client():
-    """测试用 AsyncClient（带 mock 依赖注入）"""
+    """测试用 AsyncClient（带 mock 依赖注入 + auth override）"""
     from app.main import app
 
     # Mock ChromaDBStore
@@ -25,9 +31,15 @@ async def client():
     app.state.vector_store = mock_store
     app.state.embedding_service = mock_embedding
 
+    # 覆盖鉴权依赖
+    app.dependency_overrides[get_current_user] = lambda: _test_user
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+
+    # 清理 dependency overrides
+    app.dependency_overrides.clear()
 
 
 def make_query_result(

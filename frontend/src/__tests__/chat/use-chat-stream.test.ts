@@ -34,6 +34,9 @@ function createCallbacks(): SSECallbacks & { callbackOrder: string[] } {
     onToken: vi.fn(() => {
       callbackOrder.push('onToken');
     }),
+    onThinking: vi.fn(() => {
+      callbackOrder.push('onThinking');
+    }),
     onDone: vi.fn(() => {
       callbackOrder.push('onDone');
     }),
@@ -320,5 +323,85 @@ describe('chatStreamFetch', () => {
     await new Promise((r) => setTimeout(r, 100));
     expect(cbs.onToken).toHaveBeenCalledTimes(1);
     expect(cbs.onToken).toHaveBeenCalledWith('hello');
+  });
+
+  // R007-FF001: thinking SSE 事件 → onThinking 被调用
+  it('should call onThinking when backend sends thinking event', async () => {
+    const events = [
+      { type: 'status', data: { stage: 'retrieving', message: '正在检索...' } },
+      { type: 'thinking', data: { text: '正在分析问题...', index: 0 } },
+      { type: 'thinking', data: { text: '检索相关文档...', index: 1 } },
+      { type: 'token', data: '答案' },
+      { type: 'done', data: null },
+    ];
+
+    fetchSpy.mockResolvedValue(mockFetchSSE(events));
+
+    const cbs = createCallbacks();
+    const abortController = new AbortController();
+    const setStreaming = vi.fn();
+
+    chatStreamFetch('test question', cbs, abortController, setStreaming);
+
+    await vi.waitFor(() => {
+      expect(cbs.onDone).toHaveBeenCalled();
+    });
+
+    expect(cbs.onThinking).toHaveBeenCalledTimes(2);
+    expect(cbs.onThinking).toHaveBeenNthCalledWith(1, { text: '正在分析问题...', index: 0 });
+    expect(cbs.onThinking).toHaveBeenNthCalledWith(2, { text: '检索相关文档...', index: 1 });
+    expect(cbs.onToken).toHaveBeenCalledWith('答案');
+    expect(cbs.onError).not.toHaveBeenCalled();
+  });
+
+  // R007-FF001: conversationId 传递 → fetch body 含 conversation_id
+  it('should include conversation_id in fetch body when conversationId is provided', async () => {
+    const events = [
+      { type: 'done', data: null },
+    ];
+
+    fetchSpy.mockResolvedValue(mockFetchSSE(events));
+
+    const cbs = createCallbacks();
+    const abortController = new AbortController();
+    const setStreaming = vi.fn();
+
+    chatStreamFetch('test question', cbs, abortController, setStreaming, 'conv-123');
+
+    await vi.waitFor(() => {
+      expect(cbs.onDone).toHaveBeenCalled();
+    });
+
+    // 验证 fetch 被调用且 body 包含 conversation_id
+    expect(fetchSpy).toHaveBeenCalled();
+    const fetchCall = fetchSpy.mock.calls[0];
+    const body = JSON.parse(fetchCall[1].body);
+    expect(body.conversation_id).toBe('conv-123');
+    expect(body.question).toBe('test question');
+    expect(body.top_k).toBe(10);
+  });
+
+  // R007-FF001: conversationId 为空 → fetch body 不含 conversation_id
+  it('should not include conversation_id in fetch body when conversationId is omitted', async () => {
+    const events = [
+      { type: 'done', data: null },
+    ];
+
+    fetchSpy.mockResolvedValue(mockFetchSSE(events));
+
+    const cbs = createCallbacks();
+    const abortController = new AbortController();
+    const setStreaming = vi.fn();
+
+    chatStreamFetch('test question', cbs, abortController, setStreaming);
+
+    await vi.waitFor(() => {
+      expect(cbs.onDone).toHaveBeenCalled();
+    });
+
+    const fetchCall = fetchSpy.mock.calls[0];
+    const body = JSON.parse(fetchCall[1].body);
+    expect(body).not.toHaveProperty('conversation_id');
+    expect(body.question).toBe('test question');
   });
 });

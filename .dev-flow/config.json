@@ -14,10 +14,10 @@
     { "id": "R002", "name": "dev-sandbox-enhancement", "archive_dir": "R002", "total_tasks": 2, "completed_at": "2026-05-20" },
     { "id": "R003", "name": "knowledge-base", "archive_dir": "R003", "total_tasks": 17, "completed_at": "2026-05-21" },
     { "id": "R004", "name": "rag-dialogue", "archive_dir": "R004", "total_tasks": 12, "completed_at": "2026-05-22" },
-    { "id": "R005", "name": "chat-ui-sse", "archive_dir": "R005", "total_tasks": 14, "completed_at": "2026-05-22" }
+    { "id": "R005", "name": "chat-ui-sse", "archive_dir": "R005", "total_tasks": 14, "completed_at": "2026-05-22" },
+    { "id": "R006", "name": "auth-integration", "archive_dir": "R006", "total_tasks": 7, "completed_at": "2026-05-23" },
+    { "id": "R007", "name": "persistence-agent-upgrade", "archive_dir": "R007", "total_tasks": 6, "completed_at": "2026-05-24" },
+    { "id": "R007-PATCH01", "name": "architecture-cleanup", "archive_dir": "R007-PATCH01", "patch_for": "R007", "total_tasks": 7, "completed_at": "2026-05-24" }
   ],
-  "rc_queue": [
-    { "id": "R006", "name": "auth-integration", "depends_on": "R005", "status": "planned", "analysis_topic": "用户认证打通", "analysis_ref": "R006/analysis/2026-05-22--R006-auth-integration.md", "plan_ref": "R006/feature_list.json" },
-    { "id": "R007", "name": "message-persistence", "depends_on": "R006", "status": "queued", "analysis_topic": "消息持久化 + 对话管理" }
-  ]
+  "rc_queue": []
 }

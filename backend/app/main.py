@@ -8,10 +8,39 @@ from app.rag.vector_store import ChromaDBStore
 from app.infra.bm25 import BM25Retriever
 from app.infra.reranker import DashScopeReranker
 from app.infra.llm import LLMGenerator
+from app.chat.service import ChatService
+from app.agent.graph import create_graph
 from app.api.routes.health import router as health_router
 from app.api.routes.retrieve import router as retrieve_router
+from app.api.routes.config import router as config_router
 from app.chat.router import router as chat_router
 from app.chat.stream_router import router as stream_router
+from app.chat.conversation_router import router as conversation_router
+
+
+async def _ensure_database_exists(database_url: str):
+    """连接 postgres 默认库，自动创建目标数据库
+
+    PostgreSQL 的 CREATE DATABASE 不支持 IF NOT EXISTS，
+    所以 catch "already exists" 错误视为成功。
+    """
+    from urllib.parse import urlparse
+
+    parsed = urlparse(database_url)
+    db_name = parsed.path.lstrip("/")
+
+    # 构建 postgres 默认库的连接串
+    postgres_url = database_url.replace(f"/{db_name}", "/postgres")
+
+    import psycopg
+    async with await psycopg.AsyncConnection.connect(
+        postgres_url, autocommit=True
+    ) as conn:
+        try:
+            await conn.execute(f'CREATE DATABASE "{db_name}"')
+            print(f"[startup] Database '{db_name}' created")
+        except psycopg.errors.DuplicateDatabase:
+            print(f"[startup] Database '{db_name}' already exists")
 
 
 @asynccontextmanager
@@ -56,8 +85,57 @@ async def lifespan(application: FastAPI):
     application.state.generator = generator
     print(f"[startup] LLM Generator initialized (model={settings.llm_model})")
 
+    # 初始化 ChatService（Agent graph retrieve 节点使用其检索管线）
+    chat_service = ChatService(
+        embedding=embedding_service,
+        vector_store=store,
+        bm25=bm25,
+        reranker=reranker,
+        generator=generator,
+        settings=settings,
+    )
+    application.state.chat_service = chat_service
+    print("[startup] ChatService initialized")
+
+    # 初始化 LangGraph PostgresSaver（失败时回退 MemorySaver）
+    checkpointer = None
+    checkpointer_ctx = None
+    try:
+        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+
+        # 自动建库：连接 postgres 默认库，确保目标数据库存在
+        await _ensure_database_exists(settings.database_url)
+
+        checkpointer_ctx = AsyncPostgresSaver.from_conn_string(settings.database_url)
+        checkpointer = await checkpointer_ctx.__aenter__()
+        await checkpointer.setup()
+        print("[startup] PostgresSaver initialized")
+    except Exception as e:
+        checkpointer_ctx = None
+        from langgraph.checkpoint.memory import MemorySaver
+
+        checkpointer = MemorySaver()
+        print(
+            f"[startup] WARNING: PostgresSaver failed ({e}), "
+            "using MemorySaver fallback"
+        )
+    application.state.checkpointer = checkpointer
+
+    # 编译 Agent StateGraph
+    graph = create_graph(
+        checkpointer=checkpointer,
+        chat_service=chat_service,
+        generator=generator,
+    )
+    application.state.graph = graph
+    print("[startup] Agent graph compiled")
+
     print(f"[startup] {settings.app_name} v{settings.app_version} started")
     yield
+    # shutdown: 释放 PostgresSaver 连接池
+    if checkpointer_ctx is not None:
+        await checkpointer_ctx.__aexit__(None, None, None)
+        print("[shutdown] PostgresSaver connection pool closed")
     print(f"[shutdown] {settings.app_name} stopped")
 
 
@@ -68,6 +146,8 @@ app = FastAPI(
 )
 
 app.include_router(health_router)
+app.include_router(config_router)
 app.include_router(retrieve_router)
 app.include_router(chat_router)
 app.include_router(stream_router)
+app.include_router(conversation_router)

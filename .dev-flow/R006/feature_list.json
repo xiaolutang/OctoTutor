@@ -1,0 +1,437 @@
+{
+  "version": "3.0",
+  "rc_id": "R006",
+  "name": "auth-integration",
+  "status": "archived",
+  "branch": "feat/R006-auth-integration",
+  "workflow": {
+    "mode": "A",
+    "runtime": "skill_orchestrated",
+    "evaluate_provider": "local",
+    "risk_provider": "local"
+  },
+  "test_strategy": {
+    "integration": {
+      "mode": "local",
+      "commands": [
+        "pytest backend/tests/ -v --tb=short -k auth",
+        "cd frontend && npx vitest run"
+      ],
+      "mock_policy": "mock_allowed_for_unit_only",
+      "required_for": [
+        "L3",
+        "L4",
+        "network",
+        "auth"
+      ],
+      "confirmed_by_user": false,
+      "notes": "R006 集成测试需 Docker 环境：auth-center + OctoTutor 后端 + 前端。JWT_SECRET_KEY 必须真实配置与 auth-center 一致。LLM/Embedding 可 mock。E2E 验证：登录→Chat→正常对话→token 过期→自动刷新→继续对话"
+    }
+  },
+  "capability_coverage": [
+    {
+      "capability_id": "CAP-auth-001",
+      "name": "JWT 鉴权验证",
+      "must_plan": true,
+      "covered_by": [
+        "BF001",
+        "BB001",
+        "BB002"
+      ],
+      "journey_acceptance": "entry_action: 前端发送请求附带 Authorization header, actual_endpoint: POST /api/chat/stream, user_visible_success: 正常对话, failure_path_result: 无 token/无效 token → 401 → 前端自动刷新重试"
+    },
+    {
+      "capability_id": "CAP-auth-002",
+      "name": "Token 自动刷新",
+      "must_plan": true,
+      "covered_by": [
+        "FF001",
+        "FF002"
+      ],
+      "journey_acceptance": "entry_action: token 过期, actual_endpoint: POST /api/v1/auth/token (refresh via TokenManager), user_visible_success: 用户无感知请求自动恢复, failure_path_result: refresh 失败 → 跳转登录页"
+    },
+    {
+      "capability_id": "CAP-auth-003",
+      "name": "刷新锁去重",
+      "must_plan": true,
+      "covered_by": [
+        "FF001"
+      ],
+      "journey_acceptance": "entry_action: 多个并发请求同时遇到 token 过期, actual_endpoint: POST /api/v1/auth/token (refresh), user_visible_success: 只刷新一次所有请求恢复, failure_path_result: 刷新失败 → 所有等待请求统一跳转登录"
+    },
+    {
+      "capability_id": "CAP-auth-004",
+      "name": "SSE 请求鉴权",
+      "must_plan": true,
+      "covered_by": [
+        "FF001",
+        "FB001",
+        "FB002"
+      ],
+      "journey_acceptance": "entry_action: 前端发起 SSE 流式请求, actual_endpoint: POST /api/chat/stream + Authorization header, user_visible_success: 流式回答正常显示, failure_path_result: 401 → apiClient 刷新重试后重新建立 SSE 连接"
+    }
+  ],
+  "features": [
+    {
+      "id": "BF001",
+      "phase": 1,
+      "module": "auth",
+      "name": "JWT 鉴权基础 — middleware/auth.py + config.py + requirements.txt",
+      "description": "建立后端 JWT 鉴权基础设施：(1) 新增 app/middleware/__init__.py 和 app/middleware/auth.py，包含 UserContext(user_id, username) 数据类和 get_current_user() Depends 函数，使用 python-jose 本地解码验证 HS256 JWT（校验签名+过期+type=access+提取 sub）；(2) config.py 新增 auth_jwt_secret 字段（alias=JWT_SECRET_KEY）；(3) requirements.txt 新增 python-jose[cryptography]。",
+      "verification": "L2 — get_current_user() 可 import；有效 JWT → UserContext 正确提取 user_id/username；无效/过期/缺失 token → HTTPException 401；type≠access → 401；缺少 sub → 401；JWT_SECRET_KEY 未配置 → 启动失败",
+      "depends_on": [],
+      "status": "completed",
+      "priority": 1,
+      "developer_stories": [
+        "作为后端开发者，我希望 JWT 鉴权中间件和配置在应用初始化阶段就绪，以便路由层可通过 Depends 注入获得认证能力"
+      ],
+      "technical_success_picture": "middleware/auth.py 导出 UserContext + get_current_user；config.py 新增 auth_jwt_secret 必填字段；python-jose 安装成功；单元测试覆盖 12 种 JWT 验证场景（有效/缺失/空Bearer/错误scheme/损坏/过期/边界过期/type错误/缺少sub/空sub/错误secret/未配置secret）",
+      "decision_refs": [
+        "DEC-auth-001",
+        "DEC-auth-007"
+      ],
+      "analysis_refs": [
+        "2026-05-22--R006-auth-integration",
+        "2026-05-22--R006-auth-integration-backend"
+      ],
+      "contract_refs": [
+        "new:jwt-auth-middleware"
+      ],
+      "capability_refs": [
+        "CAP-auth-001"
+      ],
+      "risk_tags": [
+        "auth",
+        "config"
+      ],
+      "test_tasks": [
+        "单元测试：有效 token → UserContext 正确提取 user_id/username",
+        "单元测试：无 Authorization header → 401",
+        "单元测试：空 Bearer（Authorization: Bearer 空字符串）→ 401",
+        "单元测试：错误 scheme（Authorization: Basic xxx）→ 401",
+        "单元测试：损坏 token（随机字符串）→ 401 Invalid token",
+        "单元测试：过期 token（exp < now）→ 401",
+        "单元测试：token 刚好在过期边界（exp ≈ now）→ 401",
+        "单元测试：type≠access（如 type=refresh）→ 401",
+        "单元测试：缺少 sub 字段 → 401",
+        "单元测试：sub 为空字符串 → 401",
+        "单元测试：错误 JWT_SECRET_KEY 签发 → 401",
+        "单元测试：JWT_SECRET_KEY 未配置 → 启动失败/明确报错"
+      ],
+      "started_at": "2026-05-22",
+      "completed_at": "2026-05-22",
+      "evidence_file": "R006/evidence/R006_BF001.md",
+      "execution_state": "evaluated"
+    },
+    {
+      "id": "BB001",
+      "phase": 2,
+      "module": "auth",
+      "name": "Router Depends 注入 — router.py/stream_router.py/retrieve.py",
+      "description": "在三个受保护端点的路由函数签名中注入 user: UserContext = Depends(get_current_user)：(1) chat/router.py 的 POST /api/chat；(2) chat/stream_router.py 的 POST /api/chat/stream；(3) api/routes/retrieve.py 的 POST /api/retrieve。R006 阶段 user 参数仅注入不传递到 service 层（R007 使用 user_id 做持久化时传递）。GET /api/health 不注入，保持公开。",
+      "verification": "L3 — 无 token 请求 POST /api/chat → 401；无 token 请求 POST /api/chat/stream → 401；无 token 请求 POST /api/retrieve → 401；无 token 请求 GET /api/health → 200；有效 token 请求 → 200",
+      "depends_on": [
+        "BF001"
+      ],
+      "status": "completed",
+      "priority": 2,
+      "user_stories": [
+        "作为用户，我希望未登录时无法调用受保护的 API，以便系统资源受到保护",
+        "作为运维，我希望 Docker 健康检查不受认证影响，以便容器状态正确反馈"
+      ],
+      "success_picture": "三个受保护端点无 token 返回 401，有效 token 正常响应；/api/health 无需 token 正常返回 200",
+      "decision_refs": [
+        "DEC-auth-002",
+        "DEC-auth-006",
+        "DEC-auth-007"
+      ],
+      "analysis_refs": [
+        "2026-05-22--R006-auth-integration",
+        "2026-05-22--R006-auth-integration-backend"
+      ],
+      "contract_refs": [],
+      "capability_refs": [
+        "CAP-auth-001"
+      ],
+      "risk_tags": [
+        "auth"
+      ],
+      "test_tasks": [
+        "集成测试：无 token → POST /api/chat → 401",
+        "集成测试：无 token → POST /api/chat/stream → 401",
+        "集成测试：无 token → POST /api/retrieve → 401",
+        "集成测试：无 token → GET /api/health → 200",
+        "集成测试：有效 token → POST /api/chat → 200",
+        "集成测试：有效 token → POST /api/chat/stream → SSE 流",
+        "集成测试：有效 token → POST /api/retrieve → 200"
+      ],
+      "started_at": "2026-05-22",
+      "completed_at": "2026-05-22",
+      "evidence_file": "R006/evidence/R006_BB001.md",
+      "execution_state": "evaluated",
+      "commit": "7143b7e"
+    },
+    {
+      "id": "BB002",
+      "phase": 2,
+      "module": "auth",
+      "name": "后端鉴权集成验证 — docker-compose + 集成测试",
+      "description": "完成部署配置和后端集成验证：(1) docker-compose.local.yml 后端服务新增 JWT_SECRET_KEY 环境变量（与 auth-center 一致）；(2) 重建 Docker 镜像并运行集成测试；(3) 验证：auth-center 登录获取 token → 请求 OctoTutor 受保护端点 → 200；无 token → 401；过期 token → 401。LLM/Embedding 可 mock。",
+      "verification": "L3 — Docker 环境中：有效 token（auth-center 签发）→ 后端 200；无 token → 401；过期 token → 401；/api/health 无 token → 200",
+      "depends_on": [
+        "BB001"
+      ],
+      "status": "completed",
+      "priority": 3,
+      "user_stories": [
+        "作为用户，我希望用 auth-center 登录后直接使用 OctoTutor 的对话功能"
+      ],
+      "success_picture": "Docker Compose 环境中 auth-center + OctoTutor 后端联合运行，登录后获取的 token 可正常访问所有受保护端点",
+      "decision_refs": [
+        "DEC-auth-001"
+      ],
+      "analysis_refs": [
+        "2026-05-22--R006-auth-integration",
+        "2026-05-22--R006-auth-integration-backend"
+      ],
+      "contract_refs": [
+        "new:jwt-secret-env"
+      ],
+      "capability_refs": [
+        "CAP-auth-001"
+      ],
+      "risk_tags": [
+        "auth",
+        "network",
+        "config"
+      ],
+      "test_tasks": [
+        "Docker 集成：auth-center 登录 → 获取 token → POST /api/chat → 200",
+        "Docker 集成：无 token → POST /api/chat → 401",
+        "Docker 集成：过期 token → POST /api/chat → 401",
+        "Docker 集成：GET /api/health → 200（不受鉴权影响）",
+        "验证：JWT_SECRET_KEY 不一致 → 所有请求 401",
+        "curl 冒烟脚本（backend/tests/e2e_auth_smoke.sh）：未登录 → 3 个受保护端点均 401；GET /api/health → 200；登录获取 token → POST /api/chat → 200；SSE 无 token → 401；SSE 有效 token → 收到事件流；损坏 token → 401。覆盖 CAP-auth-001 + CAP-auth-004"
+      ],
+      "started_at": "2026-05-22",
+      "completed_at": "2026-05-22",
+      "evidence_file": "R006/evidence/R006_BB002.md",
+      "execution_state": "evaluated",
+      "commit": "6254df7"
+    },
+    {
+      "id": "FF001",
+      "phase": 3,
+      "module": "auth",
+      "name": "apiClient 统一网络层 — api-client.ts",
+      "description": "新增 src/lib/api-client.ts，封装统一网络层：(1) registerGetToken(fn) 注册 token 获取回调；(2) fetchWithAuth(url, init) 自动附加 Bearer header + 401 刷新重试；(3) refreshAndGetToken() 刷新锁（refreshPromise 去重 + 30s 超时）；(4) X-Retry header 防止无限重试；(5) auth:session-expired CustomEvent 通知 AuthContext；(6) 返回原生 Response（兼容 SSE ReadableStream）。不导入任何 SDK 类。",
+      "verification": "L2 — registerGetToken 注册后 fetchWithAuth 自动附加 Authorization header；401 + 刷新成功 → 自动重试；401 + X-Retry → 不重试 → 触发 session-expired；并发调用 → refreshPromise 只刷新一次；未注册 getTokenFn → 不附加 header（降级）",
+      "depends_on": [],
+      "status": "completed",
+      "priority": 4,
+      "developer_stories": [
+        "作为前端开发者，我希望统一网络层在应用初始化后自动处理 token 注入和刷新，以便业务组件无需关心认证细节"
+      ],
+      "technical_success_picture": "api-client.ts 导出 registerGetToken + fetchWithAuth；mock getTokenFn 返回 token → fetch 请求包含 Authorization header；mock 401 → 刷新 + 重试一次 → 返回 200；mock 401 + X-Retry → 触发 auth:session-expired 事件；并发 mock → refreshPromise 去重；超时 mock → 锁释放不死锁",
+      "decision_refs": [
+        "DEC-auth-003",
+        "DEC-auth-004",
+        "DEC-auth-005"
+      ],
+      "analysis_refs": [
+        "2026-05-22--R006-auth-integration",
+        "2026-05-22--R006-auth-integration-frontend"
+      ],
+      "contract_refs": [
+        "new:api-client-protocol"
+      ],
+      "capability_refs": [
+        "CAP-auth-002",
+        "CAP-auth-003",
+        "CAP-auth-004"
+      ],
+      "risk_tags": [
+        "auth",
+        "network"
+      ],
+      "test_tasks": [
+        "单元测试：registerGetToken 后 fetchWithAuth 附加 Authorization header",
+        "单元测试：未注册 getTokenFn → 不附加 header（降级为普通 fetch）",
+        "单元测试：401 + 刷新成功 → 自动重试一次 → 返回 200",
+        "单元测试：401 + 刷新失败（网络错误）→ 触发 session-expired",
+        "单元测试：401 + X-Retry header → 不再重试 → 触发 session-expired",
+        "单元测试：并发 3 请求同时 401 → refresh 端点只调 1 次（mock 计数证明）",
+        "单元测试：并发刷新成功 → 所有等待者都拿到新 token",
+        "单元测试：刷新超时(>30s) → refreshPromise reject → fetchWithAuth 返回 null",
+        "单元测试：刷新超时后 refreshPromise 清空 → 下一次请求能重新触发刷新（不死锁）",
+        "单元测试：刷新期间 localStorage 被清空（用户退出）→ ensureValidToken 返回 null → 跳登录",
+        "单元测试：ensureValidToken 返回 null（无 refresh_token）→ 请求无 Authorization header → 后端 401",
+        "单元测试：SSE 请求 401 → 刷新 → 重试 → 返回 ReadableStream（SSE 兼容）",
+        "单元测试：fetchWithAuth 正常请求（非 401）直接返回 Response，不触发刷新"
+      ],
+      "started_at": "2026-05-22",
+      "completed_at": "2026-05-22",
+      "evidence_file": "R006/evidence/R006_FF001.md",
+      "execution_state": "evaluated",
+      "commit": "d20423f"
+    },
+    {
+      "id": "FF002",
+      "phase": 3,
+      "module": "auth",
+      "name": "AuthContext TokenManager 注册 — auth-context.tsx",
+      "description": "修改 auth-context.tsx：(1) 新增独立 TokenManager 实例（与 AuthService 共享 localStorage）；(2) AuthProvider init 中调用 tokenManager.setConfig(sdkConfig)；(3) init 完成后调用 registerGetToken(() => tm.ensureValidToken())；(4) AuthContextValue 新增 getAccessToken 回调；(5) 新增 useEffect 监听 auth:session-expired 事件触发 service.login()。不修改 AuthService、login、logout、handleCallback 等已有方法。",
+      "verification": "L2 — TokenManager 实例在 init 后 setConfig 被调用；registerGetToken 在 init 后被调用；getAccessToken() 返回有效 token；auth:session-expired 事件触发 login()",
+      "depends_on": [
+        "FF001"
+      ],
+      "status": "completed",
+      "priority": 5,
+      "developer_stories": [
+        "作为前端开发者，我希望 AuthContext 提供 token 获取能力并注册到 apiClient，以便 apiClient 自动处理认证"
+      ],
+      "technical_success_picture": "TokenManager 独立实例创建并 setConfig；registerGetToken 在 AuthProvider init 后被调用；getAccessToken() 通过 ensureValidToken() 返回有效 token 或自动刷新",
+      "decision_refs": [
+        "DEC-auth-003",
+        "DEC-auth-008"
+      ],
+      "analysis_refs": [
+        "2026-05-22--R006-auth-integration",
+        "2026-05-22--R006-auth-integration-frontend"
+      ],
+      "contract_refs": [],
+      "capability_refs": [
+        "CAP-auth-002"
+      ],
+      "risk_tags": [
+        "auth"
+      ],
+      "test_tasks": [
+        "单元测试：TokenManager 独立实例在 init 后 setConfig 被调用",
+        "单元测试：registerGetToken 在 AuthProvider init 完成后被调用",
+        "单元测试：getAccessToken() 返回有效 token（ensureValidToken 正常）",
+        "单元测试：auth:session-expired 事件触发 service.login()",
+        "单元测试：两个 TokenManager 实例共享 localStorage — 一个刷新后另一个能读到新 token"
+      ],
+      "started_at": "2026-05-22",
+      "completed_at": "2026-05-22",
+      "evidence_file": "R006/evidence/R006_FF002.md",
+      "execution_state": "evaluated",
+      "commit": "be0d3b8"
+    },
+    {
+      "id": "FB001",
+      "phase": 4,
+      "module": "auth",
+      "name": "useChatStream 改用 apiClient — use-chat-stream.ts",
+      "description": "修改 use-chat-stream.ts 中 chatStreamFetch 函数：(1) 将 import { API_BASE } from './api' 替换为 import { fetchWithAuth } from '../lib/api-client'；(2) 将 fetch(\\`${API_BASE}/chat/stream\\`, ...) 替换为 fetchWithAuth('/chat/stream', ...)；(3) URL 拼接由 apiClient 内部处理（BASE_URL='/api'）。函数签名和返回值不变，SSE 解析逻辑不变。",
+      "verification": "L3 — chatStreamFetch 使用 fetchWithAuth 而非原生 fetch；请求 URL 正确（/api/chat/stream）；SSE 流式接收正常；token 自动附加",
+      "depends_on": [
+        "FF001"
+      ],
+      "status": "completed",
+      "priority": 6,
+      "user_stories": [
+        "作为用户，我希望发送消息时自动携带登录凭证，无需手动操作"
+      ],
+      "success_picture": "登录后发送 Chat 消息，请求自动附加 Authorization header，SSE 流式回答正常显示",
+      "decision_refs": [
+        "DEC-auth-005"
+      ],
+      "analysis_refs": [
+        "2026-05-22--R006-auth-integration",
+        "2026-05-22--R006-auth-integration-frontend"
+      ],
+      "contract_refs": [],
+      "capability_refs": [
+        "CAP-auth-004"
+      ],
+      "risk_tags": [
+        "auth",
+        "network"
+      ],
+      "test_tasks": [
+        "单元测试：chatStreamFetch 调用 fetchWithAuth 而非 fetch",
+        "单元测试：URL 路径为 /chat/stream（非 /api/chat/stream）",
+        "单元测试：apiClient 401 自动重试 → chatStreamFetch 只看到最终 Response（无感知 token 问题）",
+        "集成测试：登录 → 发送消息 → 正常收到 SSE 流"
+      ],
+      "started_at": "2026-05-22",
+      "completed_at": "2026-05-22",
+      "evidence_file": "R006/evidence/R006_FB001.md",
+      "execution_state": "evaluated",
+      "commit": "77a278a"
+    },
+    {
+      "id": "FB002",
+      "phase": 4,
+      "module": "auth",
+      "name": "前端鉴权集成验证 — E2E 测试",
+      "description": "端到端验证完整认证链路（Docker Compose 环境：auth-center + OctoTutor 后端 + 前端）：(1) 登录 → 发送 Chat → 验证带 Authorization header → 正常收到 SSE 流；(2) Token 过期（手动修改 localStorage）→ 发送消息 → 自动刷新 → 正常响应；(3) 无 token → 发送消息 → 401 → 跳转登录页；(4) /api/health 无 token → 200。验证前端构建无报错。",
+      "verification": "L4 — 完整链路：登录 → Chat → SSE 流正常；token 过期 → 自动刷新 → 继续对话；无 token → 跳转登录；/api/health → 200",
+      "depends_on": [
+        "FB001",
+        "FF002",
+        "BB002"
+      ],
+      "status": "completed",
+      "priority": 7,
+      "user_stories": [
+        "作为用户，我希望登录后无缝使用所有功能，token 过期时自动恢复",
+        "作为用户，我希望未登录时被引导到登录页而不是看到错误"
+      ],
+      "success_picture": "登录 → 对话正常 → token 过期自动恢复 → 未登录跳转登录页",
+      "decision_refs": [
+        "DEC-auth-003",
+        "DEC-auth-004",
+        "DEC-auth-005"
+      ],
+      "analysis_refs": [
+        "2026-05-22--R006-auth-integration",
+        "2026-05-22--R006-auth-integration-frontend"
+      ],
+      "contract_refs": [],
+      "capability_refs": [
+        "CAP-auth-002",
+        "CAP-auth-003",
+        "CAP-auth-004"
+      ],
+      "risk_tags": [
+        "auth",
+        "network"
+      ],
+      "test_tasks": [
+        "E2E：登录 → 发送 Chat → SSE 流正常",
+        "E2E：token 过期 → 发送消息 → 自动刷新 → 正常响应",
+        "E2E：无 token → 发送消息 → 跳转登录页",
+        "E2E：/api/health 无 token → 200",
+        "验证：前端构建无报错（npm run build）"
+      ],
+      "started_at": "2026-05-22",
+      "completed_at": "2026-05-22",
+      "evidence_file": "R006/evidence/R006_FB002.md",
+      "execution_state": "evaluated",
+      "commit": "e281fe4"
+    }
+  ],
+  "decision_coverage": {
+    "DEC-auth-001": "BF001 — JWT HS256 共享密钥中间件实现",
+    "DEC-auth-002": "BB001 — Depends 注入三个受保护路由",
+    "DEC-auth-003": "FF001 + FF002 — apiClient 统一网络层 + TokenManager 注册",
+    "DEC-auth-004": "FF001 — refreshPromise 刷新锁实现",
+    "DEC-auth-005": "FF001 + FB001 — SSE 401 重试 + useChatStream 改用 apiClient",
+    "DEC-auth-006": "BB001 — user_id 路由层注入但不传递到 service（注释标注 R007 传递）",
+    "DEC-auth-007": "BB001 — /api/health 不注入 Depends（集成测试验证）",
+    "DEC-auth-008": "FF002 — TokenManager 独立实例 + AuthContext 暴露 getAccessToken"
+  },
+  "open_issues": [],
+  "out_of_scope_notes": [
+    "消息持久化（R007）",
+    "对话列表 UI（R007）",
+    "多轮对话上下文管理（R008）",
+    "LangGraph Agent 架构（R008）",
+    "auth-center 服务代码修改",
+    "auth-sdk-web SDK 代码修改",
+    "WebSocket 双向通信"
+  ]
+}

@@ -1,10 +1,10 @@
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import { parseSSEEvents } from './parse-sse';
-import type { SSECallbacks, SourceReference } from './types';
-import { API_BASE } from './api';
+import type { SSECallbacks, SourceReference, ThinkingStep } from './types';
+import { fetchWithAuth } from '../lib/api-client';
 
 interface UseChatStreamReturn {
-  sendMessage: (question: string, callbacks: SSECallbacks) => void;
+  sendMessage: (question: string, callbacks: SSECallbacks, conversationId?: string) => void;
   stop: () => void;
   isStreaming: boolean;
 }
@@ -18,14 +18,20 @@ export function chatStreamFetch(
   callbacks: SSECallbacks,
   abortController: AbortController,
   onSetStreaming: (v: boolean) => void,
+  conversationId?: string,
 ) {
   let firstEventReceived = false;
   let remaining = '';
 
-  fetch(`${API_BASE}/chat/stream`, {
+  const body: Record<string, unknown> = { question, top_k: 10 };
+  if (conversationId) {
+    body.conversation_id = conversationId;
+  }
+
+  fetchWithAuth('/chat/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question, top_k: 10 }),
+    body: JSON.stringify(body),
     signal: abortController.signal,
   })
     .then(async (response) => {
@@ -56,6 +62,11 @@ export function chatStreamFetch(
           for (const event of events) {
             firstEventReceived = true;
             switch (event.type) {
+              case 'init': {
+                const d = event.data as { conversation_id: string };
+                callbacks.onInit(d.conversation_id);
+                break;
+              }
               case 'status': {
                 const d = event.data as { stage: string; message: string };
                 callbacks.onStatus(d.stage, d.message);
@@ -63,6 +74,9 @@ export function chatStreamFetch(
               }
               case 'sources':
                 callbacks.onSources(event.data as SourceReference[]);
+                break;
+              case 'thinking':
+                callbacks.onThinking(event.data as ThinkingStep);
                 break;
               case 'token':
                 callbacks.onToken(event.data as string);
@@ -103,13 +117,20 @@ export function useChatStream(): UseChatStreamReturn {
   const [isStreaming, setIsStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
+  // 组件卸载时终止正在进行的 SSE 连接
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+
   const sendMessage = useCallback(
-    (question: string, callbacks: SSECallbacks) => {
+    (question: string, callbacks: SSECallbacks, conversationId?: string) => {
       const abortController = new AbortController();
       abortRef.current = abortController;
       setIsStreaming(true);
 
-      chatStreamFetch(question, callbacks, abortController, setIsStreaming);
+      chatStreamFetch(question, callbacks, abortController, setIsStreaming, conversationId);
     },
     [],
   );

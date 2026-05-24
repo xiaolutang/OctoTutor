@@ -11,6 +11,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from app.middleware.auth import UserContext, get_current_user
 from app.rag.embeddings import DashScopeEmbedding
 from app.rag.vector_store import ChromaDBStore
 
@@ -76,6 +77,7 @@ async def retrieve(
     request: RetrieveRequest,
     store: ChromaDBStore = Depends(get_vector_store),
     embedding_service: DashScopeEmbedding = Depends(get_embedding_service),
+    user: UserContext = Depends(get_current_user),
 ) -> RetrieveResponse:
     """向量检索端点
 

@@ -18,6 +18,25 @@ class Settings(BaseSettings):
     dashscope_embedding_model: str = "text-embedding-v4"
     dashscope_embedding_dimension: int = 1024
 
+    # JWT 鉴权 — 与 auth-center 共享密钥（HS256）
+    auth_jwt_secret: str = Field(
+        ...,
+        alias="JWT_SECRET_KEY",
+        description="JWT 签名密钥，与 auth-center 共享（HS256）",
+    )
+
+    # 前端鉴权 SDK 配置 — /api/config 接口返回给前端
+    auth_client_id: str = Field(
+        default="",
+        alias="AUTH_CLIENT_ID",
+        description="xlfoundry auth-center 的 OAuth Client ID",
+    )
+    auth_base_url: str = Field(
+        default="",
+        alias="AUTH_BASE_URL",
+        description="xlfoundry auth-center 的 Base URL",
+    )
+
     # NewAPI (本地 Docker, OpenAI 兼容协议) — 用于 LLM 调用
     newapi_api_key: str = Field(
         default="",
@@ -25,6 +44,12 @@ class Settings(BaseSettings):
     )
     newapi_base_url: str = "http://localhost:13000/v1"
     llm_model: str = "glm-5.1"
+
+    # PostgreSQL — LangGraph PostgresSaver 持久化
+    database_url: str = Field(
+        default="postgresql://localhost:5432/octotutor_checkpoints",
+        description="PostgreSQL 连接串，用于 LangGraph PostgresSaver",
+    )
 
     # ChromaDB
     chroma_persist_dir: str = "data/chroma_db"

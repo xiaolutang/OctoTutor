@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from app.rag.models import QueryResult
+
 
 class SourceReference(BaseModel):
     """引用来源 — 跨域共享（infra + chat + evaluation 都依赖）
@@ -24,3 +26,17 @@ class SourceReference(BaseModel):
     section: str
     page_start: int
     page_end: int
+
+
+def chunks_to_sources(chunks: list[QueryResult]) -> list[SourceReference]:
+    """从检索结果构建引用来源列表"""
+    return [
+        SourceReference(
+            chunk_id=c.chunk_id,
+            book=c.metadata.book,
+            section=c.metadata.section,
+            page_start=c.metadata.page_start,
+            page_end=c.metadata.page_end,
+        )
+        for c in chunks
+    ]
