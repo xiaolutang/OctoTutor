@@ -14,6 +14,7 @@
 | R006 | auth-integration | 7 | archived | 2026-05-23 |
 | R007 | persistence-agent-upgrade | 6 | archived | 2026-05-24 |
 | R007-PATCH01 | architecture-cleanup (补丁 R007) | 7 | archived | 2026-05-24 |
+| R007-PATCH02 | reverse-dependency-fix (补丁 R007) | 3 | archived | 2026-05-24 |
 
 ## 模块清单
 
@@ -73,10 +74,16 @@
 
 ## 变更记录
 
+### R007-PATCH02 reverse-dependency-fix（补丁 R007）(2026-05-24)
+
+- api/routes DI 模式统一：health.py + retrieve.py 改用 `request.app.state`，消除 `from app.main import app` 反向依赖
+- chunks_to_sources 层级迁移：从 domain/models.py 移入 rag/context_builder.py，消除 domain→rag 跨层反向依赖
+- 570 后端测试全通过
+
 ### R007-PATCH01 architecture-cleanup（补丁 R007）(2026-05-24)
 
 - LLMGenerator 封装修复：`get_chat_model()` 公共方法替代私有属性访问（`_client.api_key`/`_base_url`/`_model`）
-- 共享工具函数提取：`chunks_to_sources()` → domain/models.py，`build_numbered_context()` → rag/context_builder.py
+- 共享工具函数提取：`chunks_to_sources()` → domain/models.py（R007-PATCH02 迁移至 rag/context_builder.py），`build_numbered_context()` → rag/context_builder.py
 - conversation_router user_id 隔离：PostgresSaver 改用 `alist` 从存储 config 验证归属，MemorySaver `_extract_latest_messages` 统一遍历
 - 后端死代码清理：删除 `stream_chat()`、`retrieve_node`/`respond_node` 空壳、`test_chat_service_stream.py`
 - 前端死代码清理：删除 `use-chat-storage.ts`、简化 `updateMsg`、`use-conversation` 移除冗余 state

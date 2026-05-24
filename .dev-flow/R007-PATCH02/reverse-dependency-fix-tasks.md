@@ -6,7 +6,7 @@ requirement_cycle: R007-PATCH02
 workflow:
   evaluate_provider: local
   mode: auto
-status: completed
+status: archived
 ---
 
 # 架构反向依赖修复 — 任务清单
