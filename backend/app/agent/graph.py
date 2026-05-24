@@ -15,8 +15,8 @@ from typing import Annotated
 
 from app.rag.models import QueryResult
 from app.domain.models import SourceReference
-from app.rag.context_builder import chunks_to_sources
-from app.rag.context_builder import build_numbered_context
+from app.infra.context_builder import chunks_to_sources
+from app.infra.context_builder import build_numbered_context
 from app.agent.prompts import TEACHING_SYSTEM_PROMPT
 
 

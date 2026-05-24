@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from app.rag.models import QueryResult
 from app.domain.protocols import Reranker, Generator
 from app.chat.schemas import ChatResponse
-from app.chat.question_classifier import classify_question
+from app.domain.classifier import classify_question
 
 
 @dataclass

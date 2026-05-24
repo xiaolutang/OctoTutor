@@ -2,7 +2,7 @@
 
 from langchain_core.messages import AIMessage
 
-from app.chat.question_classifier import classify_question
+from app.domain.classifier import classify_question
 
 
 # ---------------------------------------------------------------------------

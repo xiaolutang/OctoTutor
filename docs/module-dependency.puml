@@ -1,0 +1,58 @@
+@startuml OctoTutor_Dependencies
+skinparam backgroundColor white
+skinparam defaultFontName Arial
+skinparam rectangle {
+  BackgroundColor #F0F0F0
+  BorderColor #555555
+  FontColor black
+  RoundCorner 10
+}
+skinparam arrow {
+  Color #555555
+}
+skinparam package {
+  BackgroundColor #FAFAFA
+  BorderColor #888888
+  FontColor #333333
+  RoundCorner 15
+}
+
+title OctoTutor Package Dependencies
+
+rectangle "agent\nAgent Orchestration" as agent
+rectangle "chat\nChat Service + Routes" as chat
+rectangle "api\nREST API Routes" as api
+rectangle "ingestion\nIngestion Pipeline" as ingestion
+rectangle "evaluation\nEval Framework" as evaluation
+
+rectangle "infra\nLLM / BM25 / Reranker / Context Builder" as infra
+rectangle "middleware\nAuth Middleware" as middleware
+
+rectangle "rag\nRAG Pipeline" as rag
+rectangle "domain\nDomain Models + Protocols / Classifier" as domain
+rectangle "config\nGlobal Config" as config
+
+agent --> infra
+agent --> rag
+agent --> domain
+
+chat --> domain
+chat --> rag
+chat --> middleware
+
+api --> rag
+api --> middleware
+
+ingestion --> rag
+
+evaluation --> rag
+evaluation --> domain
+
+infra --> rag
+infra --> domain
+
+middleware --> config
+
+rag --> domain
+
+@enduml

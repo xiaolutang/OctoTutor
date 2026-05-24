@@ -187,7 +187,7 @@ class TestBuildNumberedContext:
 
     def test_single_chunk_format(self, generator):
         """单个 chunk 的格式正确"""
-        from app.rag.context_builder import build_numbered_context
+        from app.infra.context_builder import build_numbered_context
         chunks = [make_chunk(text="集合的定义内容")]
 
         result = build_numbered_context(chunks)
@@ -200,7 +200,7 @@ class TestBuildNumberedContext:
 
     def test_multiple_chunks_numbered(self, generator):
         """多个 chunk 按顺序编号"""
-        from app.rag.context_builder import build_numbered_context
+        from app.infra.context_builder import build_numbered_context
         chunks = [
             make_chunk(chunk_id="id-1", text="内容A", page_start=1, page_end=1),
             make_chunk(chunk_id="id-2", text="内容B", page_start=3, page_end=5),
@@ -217,7 +217,7 @@ class TestBuildNumberedContext:
 
     def test_chunks_separated_by_double_newline(self, generator):
         """多个 chunk 之间用双换行分隔"""
-        from app.rag.context_builder import build_numbered_context
+        from app.infra.context_builder import build_numbered_context
         chunks = [
             make_chunk(text="内容A"),
             make_chunk(text="内容B"),
@@ -295,7 +295,7 @@ class TestEmptyContext:
 
     def test_empty_context_text_is_empty_string(self, generator):
         """空 chunks 时 build_numbered_context 返回空字符串"""
-        from app.rag.context_builder import build_numbered_context
+        from app.infra.context_builder import build_numbered_context
         result = build_numbered_context([])
 
         assert result == ""

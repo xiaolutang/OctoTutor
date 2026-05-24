@@ -11,9 +11,9 @@ from collections.abc import AsyncIterator
 from openai import AsyncOpenAI, OpenAI
 
 from app.domain.models import SourceReference
-from app.rag.context_builder import chunks_to_sources
+from app.infra.context_builder import chunks_to_sources
 from app.rag.models import QueryResult
-from app.rag.context_builder import build_numbered_context
+from app.infra.context_builder import build_numbered_context
 
 SYSTEM_PROMPT = """你是章鱼哥，一个高中数学助教。基于给定的教材内容回答学生的问题。
 规则：
