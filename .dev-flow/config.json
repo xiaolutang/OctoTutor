@@ -1,7 +1,7 @@
 {
   "version": "3.0",
   "project": "OctoTutor",
-  "active_rc": null,
+  "active_rc": "R007-PATCH02",
   "default_workflow": {
     "name": "XLFoundry",
     "mode": "A",

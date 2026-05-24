@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from app.middleware.auth import UserContext, get_current_user
@@ -53,18 +53,14 @@ class RetrieveResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def get_vector_store() -> ChromaDBStore:
+def get_vector_store(request: Request) -> ChromaDBStore:
     """获取 ChromaDBStore 单例（由 main.py 初始化并挂载到 app.state）"""
-    from app.main import app
-
-    return app.state.vector_store
+    return request.app.state.vector_store
 
 
-def get_embedding_service() -> DashScopeEmbedding:
+def get_embedding_service(request: Request) -> DashScopeEmbedding:
     """获取 DashScopeEmbedding 单例"""
-    from app.main import app
-
-    return app.state.embedding_service
+    return request.app.state.embedding_service
 
 
 # ---------------------------------------------------------------------------

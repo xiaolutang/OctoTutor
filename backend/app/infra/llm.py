@@ -10,7 +10,8 @@ from collections.abc import AsyncIterator
 
 from openai import AsyncOpenAI, OpenAI
 
-from app.domain.models import SourceReference, chunks_to_sources
+from app.domain.models import SourceReference
+from app.rag.context_builder import chunks_to_sources
 from app.rag.models import QueryResult
 from app.rag.context_builder import build_numbered_context
 

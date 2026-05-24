@@ -13,3 +13,20 @@ def build_numbered_context(chunks: list[QueryResult]) -> str:
             f"{chunk.text}"
         )
     return "\n\n".join(parts)
+
+
+from app.domain.models import SourceReference
+
+
+def chunks_to_sources(chunks: list[QueryResult]) -> list[SourceReference]:
+    """从检索结果构建引用来源列表"""
+    return [
+        SourceReference(
+            chunk_id=c.chunk_id,
+            book=c.metadata.book,
+            section=c.metadata.section,
+            page_start=c.metadata.page_start,
+            page_end=c.metadata.page_end,
+        )
+        for c in chunks
+    ]
