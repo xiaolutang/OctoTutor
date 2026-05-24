@@ -6,32 +6,40 @@ GET /api/conversations/current — 获取当前用户最近对话的消息列表
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, Response
 
 from app.chat.dependencies import get_checkpointer
 from app.chat.schemas import ApiMessage, ThinkingPayload
+from app.domain.models import SourceReference
 from app.middleware.auth import UserContext, get_current_user
 
 router = APIRouter(prefix="/api", tags=["conversations"])
 
+logger = logging.getLogger(__name__)
+
 
 @router.get("/conversations/current")
 async def get_current_conversation(
-    request: Request,
+    conversation_id: str | None = None,
     checkpointer=Depends(get_checkpointer),
     user: UserContext = Depends(get_current_user),
 ):
     """获取当前用户最近对话
 
-    从 checkpointer 加载最新 checkpoint，提取 messages。
+    必须传 conversation_id 参数精确加载指定 thread。
+    未传 conversation_id 时尝试返回最新有效对话。
     - 有消息 → 200 + {conversation_id, messages}
     - 无消息 → 204 No Content
     """
-    # 尝试从 checkpointer 获取该用户的最近 thread
-    conversation_id, messages = await _load_latest_conversation(
-        checkpointer, user.user_id
-    )
+    if conversation_id:
+        messages = await _load_conversation_by_id(checkpointer, conversation_id, user.user_id)
+    else:
+        conversation_id, messages = await _load_latest_conversation(
+            checkpointer, user.user_id
+        )
 
     if not messages:
         return Response(status_code=204)
@@ -48,72 +56,136 @@ async def get_current_conversation(
     )
 
 
-async def _load_latest_conversation(checkpointer, user_id: str):
-    """从 checkpointer 加载用户最近的对话
-
-    stream_router 使用 thread_id=conversation_id 写入 checkpoint，
-    config 中同时存入 user_id。
-    conversation_router 通过 alist 遍历最近的 thread，
-    过滤 configurable.user_id 匹配的 thread，取最新的一条。
-    """
+async def _load_conversation_by_id(checkpointer, conversation_id: str, user_id: str):
+    """通过 conversation_id 直接加载指定对话，验证 user_id 归属"""
     try:
-        # 列出最近的 thread，寻找属于该 user_id 的对话
-        # limit=10 足够覆盖最近活跃的对话
-        async for tuple_item in checkpointer.alist(
-            {"configurable": {"user_id": user_id}},
-            limit=10,
-        ):
-            # 验证 configurable 中的 user_id 匹配
-            cfg = tuple_item.config
-            configurable = cfg.get("configurable", {})
-            thread_user_id = configurable.get("user_id")
+        # MemorySaver：直接从 storage 读取
+        if hasattr(checkpointer, "storage"):
+            if conversation_id not in checkpointer.storage:
+                return []
+            namespaces = checkpointer.storage[conversation_id]
+            messages, _ = _extract_latest_messages(
+                {conversation_id: namespaces}, user_id
+            )
+            return messages
 
-            if thread_user_id != user_id:
-                continue
-
-            # 找到匹配的 thread
-            conversation_id = configurable.get("thread_id")
+        # PostgresSaver：alist 返回带 config 的 CheckpointTuple，可验证 user_id
+        config = {"configurable": {"thread_id": conversation_id}}
+        async for tuple_item in checkpointer.alist(config, limit=1):
+            cp_user_id = tuple_item.config.get("configurable", {}).get("user_id")
+            if cp_user_id and cp_user_id != user_id:
+                return []
             checkpoint = tuple_item.checkpoint
             if not checkpoint:
-                continue
+                return []
+            channel_values = checkpoint.get("channel_values", {})
+            return channel_values.get("messages", [])
+        return []
+    except Exception as e:
+        logger.warning(f"[conversation] load by id failed: {e}")
+        return []
 
+
+def _extract_latest_messages(namespaces: dict, user_id: str | None = None) -> tuple[list, str]:
+    """从 MemorySaver namespaces 提取最新 messages（可选按 user_id 过滤）
+
+    Returns:
+        (messages, ts) tuple — 最新消息列表和时间戳
+    """
+    best_messages = []
+    best_ts = ""
+    for _ns, checkpoints in namespaces.items():
+        for _cp_id, (checkpoint, meta, _parent) in checkpoints.items():
+            # user_id 过滤
+            if user_id:
+                cp_user_id = meta.get("configurable", {}).get("user_id") if meta else None
+                if cp_user_id and cp_user_id != user_id:
+                    continue
             channel_values = checkpoint.get("channel_values", {})
             messages = channel_values.get("messages", [])
+            ts = checkpoint.get("ts", "")
+            if messages and ts >= best_ts:
+                best_ts = ts
+                best_messages = messages
+    return best_messages, best_ts
 
-            if messages:
-                return conversation_id, messages
 
+async def _load_latest_conversation(checkpointer, user_id: str):
+    """从 checkpointer 加载用户最近的对话（fallback：无 conversation_id 时使用）"""
+    try:
+        if hasattr(checkpointer, "storage"):
+            return await _load_from_memory_saver(checkpointer, user_id)
+        return await _load_from_postgres_saver(checkpointer, user_id)
+    except Exception as e:
+        logger.warning(f"[conversation] load failed: {e}")
         return None, []
 
-    except Exception:
-        return None, []
+
+async def _load_from_memory_saver(checkpointer, user_id: str):
+    """从 MemorySaver 加载最新有效 thread"""
+    best_thread_id = None
+    best_messages = []
+    best_ts = ""
+
+    for thread_id, namespaces in checkpointer.storage.items():
+        if not thread_id or thread_id in ("undefined", "null", ""):
+            continue
+        messages, ts = _extract_latest_messages({thread_id: namespaces}, user_id)
+        if messages and ts >= best_ts:
+            best_ts = ts
+            best_thread_id = thread_id
+            best_messages = messages
+
+    if best_messages:
+        return best_thread_id, best_messages
+    return None, []
+
+
+async def _load_from_postgres_saver(checkpointer, user_id: str):
+    """从 PostgresSaver 加载最新有效 thread（按时间戳倒序，跳过无效 thread_id）"""
+    best_thread_id = None
+    best_messages = []
+    best_ts = ""
+
+    async for tuple_item in checkpointer.alist(None, limit=100):
+        tid = tuple_item.config.get("configurable", {}).get("thread_id")
+        if not tid or tid in ("undefined", "null", ""):
+            continue
+        # user_id 过滤
+        tid_user_id = tuple_item.config.get("configurable", {}).get("user_id")
+        if tid_user_id and tid_user_id != user_id:
+            continue
+        checkpoint = tuple_item.checkpoint
+        if not checkpoint:
+            continue
+        ts = checkpoint.get("ts", "")
+        channel_values = checkpoint.get("channel_values", {})
+        messages = channel_values.get("messages", [])
+        if messages and ts > best_ts:
+            best_ts = ts
+            best_thread_id = tid
+            best_messages = messages
+
+    if best_messages:
+        logger.info(f"[conversation] fallback thread={best_thread_id}, msgs={len(best_messages)}")
+        return best_thread_id, best_messages
+    return None, []
 
 
 def _to_api_message(msg, index: int) -> ApiMessage:
-    """将 LangGraph message 转换为 ApiMessage 格式
-
-    ApiMessage 包含 7 个字段：id/role/content/status/sources/thinking_steps/created_at
-    """
-    # 提取基本属性
+    """将 LangGraph message 转换为 ApiMessage 格式"""
     msg_id = getattr(msg, "id", None) or str(index)
     content = getattr(msg, "content", "") or ""
     msg_type = getattr(msg, "type", "unknown")
 
-    # 映射 role — 输出 human/ai 与前端 ApiMessage.role 类型对齐
-    role_map = {
-        "human": "human",
-        "ai": "ai",
-        "system": "system",
-    }
+    role_map = {"human": "human", "ai": "ai", "system": "system"}
     role = role_map.get(msg_type, msg_type)
 
-    # 提取 additional_kwargs 中的 sources 和 thinking_steps
     additional_kwargs = getattr(msg, "additional_kwargs", {}) or {}
 
     sources = []
     raw_sources = additional_kwargs.get("sources", [])
     if raw_sources:
-        from app.domain.models import SourceReference
         for s in raw_sources:
             if isinstance(s, SourceReference):
                 sources.append(s)
@@ -135,7 +207,6 @@ def _to_api_message(msg, index: int) -> ApiMessage:
                 except Exception:
                     pass
 
-    # 提取 created_at
     created_at = ""
     response_metadata = getattr(msg, "response_metadata", {}) or {}
     if "created_at" in response_metadata:

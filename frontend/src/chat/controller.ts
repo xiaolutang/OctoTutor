@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useChatStream } from './use-chat-stream';
-import { saveMessages } from './use-chat-storage';
-import { useConversation } from './use-conversation';
+import { useConversation, saveConversationId, loadConversationId } from './use-conversation';
+import { useAuth } from '@/contexts/auth-context';
 import type { Message, MessageStatus, ThinkingStep } from './types';
 
 function createId(): string {
@@ -12,33 +12,33 @@ export function useChatController() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [mounted, setMounted] = useState(false);
-  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(loadConversationId());
   const { sendMessage, stop, isStreaming } = useChatStream();
   const { loadConversation } = useConversation();
+  const { isInitialized } = useAuth();
   const aiMsgIdRef = useRef<string>('');
 
-  // 加载对话历史（优先 API，降级 localStorage）
+  // 等 Auth SDK 初始化完成后再加载对话历史，避免 token 未就绪导致 401
   useEffect(() => {
+    if (!isInitialized) return;
     let cancelled = false;
     loadConversation().then(({ messages: loadedMessages }) => {
       if (!cancelled) {
         setMessages(loadedMessages);
+        const storedId = loadConversationId();
+        if (storedId) {
+          setConversationId(storedId);
+        }
         setMounted(true);
       }
     });
     return () => { cancelled = true; };
-  }, [loadConversation]);
+  }, [isInitialized, loadConversation]);
 
-  // 更新单条消息，terminalStatus 存在时保存
+  // 更新单条消息
   const updateMsg = useCallback(
-    (id: string, patch: Partial<Message>, terminalStatus?: MessageStatus) => {
-      setMessages((prev) => {
-        const next = prev.map((m) => (m.id === id ? { ...m, ...patch } : m));
-        if (terminalStatus) {
-          saveMessages(next);
-        }
-        return next;
-      });
+    (id: string, patch: Partial<Message>) => {
+      setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)));
     },
     [],
   );
@@ -51,6 +51,7 @@ export function useChatController() {
         {
           onInit: (convId: string) => {
             setConversationId(convId);
+            saveConversationId(convId);
           },
           onStatus: (stage: string, _message: string) => {
             if (stage === 'retrieving' || stage === 'generating') {
@@ -85,7 +86,7 @@ export function useChatController() {
               updateMsg(aiMsgId, { status: 'error', error });
               setInput(question);
             } else {
-              updateMsg(aiMsgId, { status: 'error', error }, 'error');
+              updateMsg(aiMsgId, { status: 'error', error });
             }
           },
         },
@@ -129,7 +130,7 @@ export function useChatController() {
     stop();
     const aiMsgId = aiMsgIdRef.current;
     if (aiMsgId) {
-      updateMsg(aiMsgId, { status: 'stopped' }, 'stopped');
+      updateMsg(aiMsgId, { status: 'stopped' });
     }
   }, [stop, updateMsg]);
 

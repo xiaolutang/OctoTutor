@@ -1,16 +1,21 @@
 """SSE 流式对话路由
 
 POST /api/chat/stream — Server-Sent Events 流式对话端点。
-使用 graph.astream(stream_mode="updates") 驱动 Agent StateGraph，
-respond 节点只构建 prompt，LLM 逐 token 调用在 router 层执行。
+使用 graph.astream(stream_mode=["updates","messages"]) 驱动 Agent StateGraph：
+- updates 事件：节点完成时推送 thinking/status/sources
+- messages 事件：respond 节点内 LLM 逐 token 流式输出
+respond 节点在 graph 内部调用 ChatOpenAI，PostgresSaver 自动保存 AIMessage checkpoint。
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from dataclasses import asdict
 from typing import Any
+
+from langchain_core.messages import HumanMessage
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
@@ -21,6 +26,8 @@ from app.chat.schemas import ChatRequest
 from app.middleware.auth import UserContext, get_current_user
 
 router = APIRouter(prefix="/api", tags=["chat"])
+
+logger = logging.getLogger(__name__)
 
 
 @router.post("/chat/stream")
@@ -33,14 +40,11 @@ async def stream_chat(
 ):
     """SSE 流式对话端点
 
-    使用 graph.astream(stream_mode="updates") 驱动 Agent StateGraph。
-    - classify/retrieve 节点由 graph 执行
-    - respond 节点只构建 prompt，不调用 LLM
-    - LLM 逐 token 流式在 router 层通过 generator.generate_stream() 执行
+    使用 graph.astream(stream_mode=["updates","messages"]) 驱动 Agent StateGraph。
+    - updates：classify/retrieve/respond/refuse 节点完成时推送状态事件
+    - messages：respond 节点内 LLM 逐 token 流式推送
+    - respond 节点完成后 PostgresSaver 自动保存 AIMessage
     """
-    from app.chat.dependencies import get_generator
-
-    generator = http_request.app.state.generator
     conversation_id = body.conversation_id or str(uuid.uuid4())
 
     config = {
@@ -50,8 +54,9 @@ async def stream_chat(
         }
     }
 
+    # 将用户问题作为 HumanMessage 传入 graph state，checkpointer 自动持久化
     input_state = {
-        "messages": [],
+        "messages": [HumanMessage(content=body.question)],
         "question": body.question,
     }
 
@@ -60,23 +65,22 @@ async def stream_chat(
             # 首个事件：回传 conversation_id 给前端
             yield _sse_frame("init", {"conversation_id": conversation_id})
 
-            async for node_name, node_output in _iter_graph_updates(
-                graph, input_state, config
+            async for event in graph.astream(
+                input_state,
+                config=config,
+                stream_mode=["updates", "messages"],
             ):
                 if await http_request.is_disconnected():
                     break
 
-                async for frame in _map_node_to_sse(
-                    node_name, node_output, generator, http_request
-                ):
+                async for frame in _map_event_to_sse(event, http_request):
                     yield frame
 
             if not await http_request.is_disconnected():
                 yield "event: done\ndata: null\n\n"
 
         except Exception as e:
-            import logging
-            logging.getLogger(__name__).error(f"SSE stream error: {e}", exc_info=True)
+            logger.error(f"SSE stream error: {e}", exc_info=True)
             yield (
                 f"event: error\ndata: {json.dumps(make_error(ChatErrorCode.INTERNAL_ERROR), ensure_ascii=False)}\n\n"
             )
@@ -84,26 +88,41 @@ async def stream_chat(
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
-async def _iter_graph_updates(graph, input_state, config):
-    """遍历 graph.astream updates，产出 (node_name, node_output) 对"""
-    async for event in graph.astream(
-        input_state,
-        config=config,
-        stream_mode="updates",
-    ):
-        if isinstance(event, dict):
-            for node_name, node_output in event.items():
-                yield node_name, node_output
+async def _map_event_to_sse(event, http_request: Request):
+    """将 graph.astream 双流事件映射为 SSE 帧
 
-
-async def _map_node_to_sse(node_name: str, node_output: dict, generator, http_request: Request):
-    """将 graph 节点输出映射为 SSE 事件帧
-
-    classify → thinking 事件
-    retrieve → status(retrieving) + sources 事件
-    respond → status(generating) + 逐 token 流式（调用 generator）
-    refuse → token 事件（拒绝消息）
+    双流事件格式：
+    - updates: ("updates", {node_name: node_output})
+    - messages: ("messages", (AIMessageChunk, metadata))
     """
+    if not isinstance(event, tuple) or len(event) != 2:
+        return
+
+    stream_type, data = event
+
+    if stream_type == "updates":
+        # 节点完成事件 — data 是 {node_name: node_output}
+        if not isinstance(data, dict):
+            return
+        for node_name, node_output in data.items():
+            async for frame in _map_node_update_to_sse(node_name, node_output):
+                yield frame
+
+    elif stream_type == "messages":
+        # LLM token 事件 — data 是 (message_chunk, metadata)
+        if not isinstance(data, tuple) or len(data) != 2:
+            return
+        message_chunk, metadata = data
+        # 只推送 respond 节点的 token（其他节点的 messages 事件忽略）
+        node_name = metadata.get("langgraph_node", "")
+        if node_name == "respond":
+            token = getattr(message_chunk, "content", "")
+            if token:
+                yield _sse_frame("token", token)
+
+
+async def _map_node_update_to_sse(node_name: str, node_output: dict):
+    """将节点完成事件映射为 SSE 帧"""
     if node_name == "classify":
         intent = node_output.get("intent", "")
         yield _sse_frame(
@@ -127,15 +146,8 @@ async def _map_node_to_sse(node_name: str, node_output: dict, generator, http_re
             "status",
             {"stage": "generating", "message": "正在生成回答..."},
         )
-
-        # 逐 token 流式：从 respond 节点获取 question + chunks，调用 generator
-        question = node_output.get("_question", "")
-        chunks = node_output.get("_chunks", [])
-
-        async for token in generator.generate_stream(question, chunks):
-            if await http_request.is_disconnected():
-                break
-            yield _sse_frame("token", token)
+        # respond 节点完成后，AIMessage 已由 PostgresSaver 自动保存
+        # token 级别的事件已通过 messages 流推送，此处无需额外处理
 
     elif node_name == "refuse":
         messages = node_output.get("messages", [])

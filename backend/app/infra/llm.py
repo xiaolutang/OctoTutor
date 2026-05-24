@@ -10,8 +10,9 @@ from collections.abc import AsyncIterator
 
 from openai import AsyncOpenAI, OpenAI
 
-from app.domain.models import SourceReference
+from app.domain.models import SourceReference, chunks_to_sources
 from app.rag.models import QueryResult
+from app.rag.context_builder import build_numbered_context
 
 SYSTEM_PROMPT = """你是章鱼哥，一个高中数学助教。基于给定的教材内容回答学生的问题。
 规则：
@@ -38,9 +39,21 @@ class LLMGenerator:
     """
 
     def __init__(self, api_key: str, base_url: str, model: str) -> None:
+        self._api_key = api_key
+        self._base_url = base_url
         self._model = model
         self._client = OpenAI(api_key=api_key, base_url=base_url)
         self._async_client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+
+    def get_chat_model(self):
+        """返回 LangChain ChatOpenAI 实例（用于 LangGraph respond 节点）"""
+        from langchain_openai import ChatOpenAI
+        return ChatOpenAI(
+            api_key=self._api_key,
+            base_url=self._base_url,
+            model=self._model,
+            streaming=True,
+        )
 
     def generate(
         self, query: str, context_chunks: list[QueryResult]
@@ -63,16 +76,7 @@ class LLMGenerator:
         answer = response.choices[0].message.content
 
         # 从 context_chunks metadata 构建 sources（非从 LLM 输出解析）
-        sources = [
-            SourceReference(
-                chunk_id=chunk.chunk_id,
-                book=chunk.metadata.book,
-                section=chunk.metadata.section,
-                page_start=chunk.metadata.page_start,
-                page_end=chunk.metadata.page_end,
-            )
-            for chunk in context_chunks
-        ]
+        sources = chunks_to_sources(context_chunks)
         return answer, sources
 
     async def generate_stream(
@@ -99,33 +103,12 @@ class LLMGenerator:
                 if token:
                     yield token
 
-    def _build_numbered_context(self, chunks: list[QueryResult]) -> str:
-        """构建带编号标记的 context 文本
-
-        每个片段按 [编号] (书名 - 章节, 第x-y页) 格式标记，
-        便于 LLM 在回答中引用具体出处。
-
-        Args:
-            chunks: 检索到的教材片段列表
-
-        Returns:
-            格式化后的 context 文本
-        """
-        parts = []
-        for i, chunk in enumerate(chunks, 1):
-            parts.append(
-                f"[{i}] ({chunk.metadata.book} - {chunk.metadata.section}, "
-                f"第{chunk.metadata.page_start}-{chunk.metadata.page_end}页)\n"
-                f"{chunk.text}"
-            )
-        return "\n\n".join(parts)
-
     def _build_messages(
         self, query: str, context_chunks: list[QueryResult]
     ) -> list[dict[str, str]]:
         """根据是否有 context 构建不同的 messages 列表"""
         if context_chunks:
-            context_text = self._build_numbered_context(context_chunks)
+            context_text = build_numbered_context(context_chunks)
             return [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {

@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from langchain_core.messages import AIMessage, HumanMessage
 
-from app.agent.nodes import refuse_node, respond_node, _REFUSE_MESSAGE
+from app.agent.nodes import refuse_node, _REFUSE_MESSAGE
 from app.agent.prompts import TEACHING_SYSTEM_PROMPT
 from app.chat.errors import ChatErrorCode
 
@@ -53,28 +53,7 @@ class TestRefuseNode:
 
 
 # ===================================================================
-# 2. respond_node 测试（stub 阶段 + mock LLM 场景）
-# ===================================================================
-
-
-class TestRespondNodeStub:
-    """respond_node 当前为 stub，返回空 dict"""
-
-    @pytest.mark.asyncio
-    async def test_stub_returns_empty_dict(self):
-        """stub 阶段 respond_node 返回空 dict"""
-        state = {
-            "messages": [],
-            "question": "什么是集合？",
-            "context_chunks": [],
-            "sources": [],
-        }
-        result = await respond_node(state)
-        assert result == {}
-
-
-# ===================================================================
-# 3. respond_node mock LLM 场景 — 验证 prompt 包含教学策略关键词
+# 2. TEACHING_SYSTEM_PROMPT 内容验证
 # ===================================================================
 
 # 模拟未来 respond_node 的完整行为（闭包注入 LLM 后）
@@ -114,29 +93,21 @@ class TestTeachingSystemPrompt:
 
 
 # ===================================================================
-# 4. respond_node LLM 错误处理 — 验证错误码映射
+# 3. 错误码映射验证
 # ===================================================================
 
-# 当 respond_node 通过闭包注入 LLM generator 后，
-# generator 抛出异常时应映射到对应的 ChatErrorCode。
-# 这里通过 mock 模拟完整行为来验证错误码。
 
+class TestErrorCodeMapping:
+    """验证 ChatErrorCode 错误码值"""
 
-class TestRespondNodeErrorHandling:
-    """respond_node LLM 错误处理 — 验证 SSE error event code"""
-
-    @pytest.mark.asyncio
-    async def test_connection_error_maps_to_02201(self):
+    def test_connection_error_maps_to_02201(self):
         """ConnectionError → LLM_CONNECT_FAILED (02201)"""
-        # 验证错误码映射存在
         assert ChatErrorCode.LLM_CONNECT_FAILED.value == "02201"
 
-    @pytest.mark.asyncio
-    async def test_runtime_error_maps_to_02202(self):
+    def test_runtime_error_maps_to_02202(self):
         """RuntimeError → LLM_STREAM_ERROR (02202)"""
         assert ChatErrorCode.LLM_STREAM_ERROR.value == "02202"
 
-    @pytest.mark.asyncio
-    async def test_timeout_error_maps_to_02204(self):
+    def test_timeout_error_maps_to_02204(self):
         """TimeoutError → LLM_TIMEOUT (02204)"""
         assert ChatErrorCode.LLM_TIMEOUT.value == "02204"

@@ -1,25 +1,14 @@
 /**
- * R007-FB002 ChatUI 逻辑测试
+ * ChatUI 逻辑测试
  *
  * 由于项目未安装 @testing-library/react 且 vitest 环境为 node，
  * 本测试直接测试 ChatUI 的核心逻辑：
- * - 通过 mock useChatStream 和 useChatStorage 验证回调绑定
+ * - 通过 mock useChatStream 验证回调绑定
  * - 通过模拟 React 组件行为验证状态管理逻辑
- * - FB002: saveMessages 调用验证、onThinking 回调、conversationId 集成
+ * - onThinking 回调、conversationId 集成
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Message, SSECallbacks, ThinkingStep } from '@/chat/types';
-
-// ============================================================
-// Mock: loadMessages / saveMessages
-// ============================================================
-const mockLoadMessages = vi.fn<() => Message[]>();
-const mockSaveMessages = vi.fn();
-
-vi.mock('@/chat/use-chat-storage', () => ({
-  loadMessages: () => mockLoadMessages(),
-  saveMessages: (msgs: Message[]) => mockSaveMessages(msgs),
-}));
 
 // ============================================================
 // Mock: useChatStream
@@ -46,7 +35,6 @@ const mockLoadConversation = vi.fn();
 
 vi.mock('@/chat/use-conversation', () => ({
   useConversation: () => ({
-    conversationId: 'test-conv-id',
     loadConversation: () => mockLoadConversation(),
   }),
 }));
@@ -103,7 +91,7 @@ function simulateHandleSend(
 }
 
 // ============================================================
-// FB002: 模拟 handleRegenerate 纯函数（无 saveMessages）
+// FB002: 模拟 handleRegenerate 纯函数
 // ============================================================
 function simulateHandleRegenerate(
   currentMessages: Message[],
@@ -155,7 +143,6 @@ describe('ChatUI 核心逻辑', () => {
     vi.clearAllMocks();
     capturedCallbacks = null;
     capturedConversationId = undefined;
-    mockLoadMessages.mockReturnValue([]);
   });
 
   afterEach(() => {
@@ -236,17 +223,6 @@ describe('ChatUI 核心逻辑', () => {
     mockStop();
     expect(mockStop).toHaveBeenCalledOnce();
   });
-
-  it('should save messages on terminal status (stopped)', () => {
-    const messages: Message[] = [
-      { id: '1', role: 'user', content: 'hi', status: 'done', timestamp: 1 },
-      { id: '2', role: 'ai', content: 'hello', status: 'stopped', timestamp: 2 },
-    ];
-
-    mockSaveMessages(messages);
-    expect(mockSaveMessages).toHaveBeenCalledWith(messages);
-    expect(mockSaveMessages).toHaveBeenCalledOnce();
-  });
 });
 
 // ============================================================
@@ -317,63 +293,7 @@ describe('code=00000 rollback behavior', () => {
 });
 
 // ============================================================
-// R007-FB002: saveMessages 调用验证
-// ============================================================
-describe('FB002: saveMessages call verification', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    capturedCallbacks = null;
-    capturedConversationId = undefined;
-  });
-
-  // onDone 不调用 saveMessages
-  it('should NOT call saveMessages on onDone', () => {
-    const sendFn = vi.fn((_q, cbs) => {
-      capturedCallbacks = cbs;
-    });
-    simulateHandleSend([], '测试', sendFn);
-
-    // 模拟 onDone 被调用
-    // 在重构后的 ChatUI 中，onDone 只更新 status，不调用 saveMessages
-    // 验证方式：确认 mockSaveMessages 未被调用
-    expect(mockSaveMessages).not.toHaveBeenCalled();
-  });
-
-  // handleStop 调用 saveMessages
-  it('should call saveMessages on handleStop', () => {
-    const messages: Message[] = [
-      { id: '1', role: 'user', content: 'hi', status: 'done', timestamp: 1 },
-      { id: '2', role: 'ai', content: 'partial answer', status: 'stopped', timestamp: 2 },
-    ];
-
-    // handleStop 终态时保存
-    mockSaveMessages(messages);
-    expect(mockSaveMessages).toHaveBeenCalledWith(messages);
-    expect(mockSaveMessages).toHaveBeenCalledOnce();
-  });
-
-  // onError(00000) 调用 saveMessages + 撤回
-  it('should call saveMessages on onError code=00000 with rolled back messages', () => {
-    const existingMessages: Message[] = [
-      { id: '1', role: 'user', content: '保留的', status: 'done', timestamp: 1 },
-    ];
-
-    const { messages: afterSend } = simulateHandleSend(
-      existingMessages,
-      '会失败的',
-      () => {},
-    );
-
-    // 撤回到原始消息
-    const rolledBack = afterSend.slice(0, -2);
-    mockSaveMessages(rolledBack);
-
-    expect(mockSaveMessages).toHaveBeenCalledWith(existingMessages);
-  });
-});
-
-// ============================================================
-// FB002: handleRegenerate 验证（不调用 saveMessages）
+// handleRegenerate 验证
 // ============================================================
 describe('handleRegenerate', () => {
   it('should replace old AI message with a new one', () => {

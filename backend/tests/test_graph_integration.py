@@ -44,7 +44,11 @@ def _make_mock_generator(tokens=None):
             yield t
 
     gen.generate_stream = _stream
-    gen._build_numbered_context = MagicMock(return_value="[1] mock context")
+
+    # get_chat_model 返回一个 mock ChatOpenAI，ainvoke 是异步的
+    mock_chat_model = MagicMock()
+    mock_chat_model.ainvoke = AsyncMock(return_value=AIMessage(content="mock answer"))
+    gen.get_chat_model.return_value = mock_chat_model
     return gen
 
 
@@ -159,11 +163,12 @@ class TestTextbookPath:
         # 验证经过 retrieve 节点 — _retrieve 被调用
         chat_svc._retrieve.assert_called_once_with("什么是集合？", 10)
 
-        # 验证经过 respond 节点 — 返回 question + chunks 给 stream_router
+        # 验证经过 respond 节点 — 返回 AIMessage
         last_event = events[-1]
         respond_output = last_event.get("respond", {})
-        assert respond_output.get("_question") == "什么是集合？"
-        assert "_chunks" in respond_output
+        assert "messages" in respond_output
+        assert len(respond_output["messages"]) == 1
+        assert isinstance(respond_output["messages"][0], AIMessage)
 
         # 验证 context_chunks 在 state 中
         retrieve_event = None
@@ -365,16 +370,16 @@ class TestGraphStreaming:
 
 
 class TestBackwardCompatibility:
-    """无参数调用 create_graph 仍可编译（向后兼容）"""
+    """create_graph 编译验证"""
 
-    def test_create_graph_no_args(self):
-        """不传 chat_service 和 generator 时仍可编译"""
-        graph = create_graph()
+    def test_create_graph_minimal_args(self):
+        """只传 generator 时仍可编译"""
+        graph = create_graph(generator=_make_mock_generator())
         assert "classify" in graph.nodes
         assert "refuse" in graph.nodes
 
     def test_create_graph_only_checkpointer(self):
         from langgraph.checkpoint.memory import MemorySaver
 
-        graph = create_graph(checkpointer=MemorySaver())
+        graph = create_graph(checkpointer=MemorySaver(), generator=_make_mock_generator())
         assert "classify" in graph.nodes

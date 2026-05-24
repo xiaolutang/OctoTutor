@@ -1,10 +1,10 @@
 /**
- * R007-FB002 use-conversation.ts 测试
+ * use-conversation.ts 测试
  *
  * 测试场景：
  * 1. 页面加载 → API 返回历史消息（含 thinkingSteps）
  * 2. API 返回 204 → 空态
- * 3. API 失败 → 降级 localStorage loadMessages
+ * 3. API 失败 → 返回空消息
  * 4. role 映射：human → user
  * 5. status 映射：completed → done, stopped → stopped, error → error
  */
@@ -20,16 +20,6 @@ const mockFetchWithAuth = vi.fn<
 
 vi.mock('@/lib/api-client', () => ({
   fetchWithAuth: (url: string, init?: RequestInit) => mockFetchWithAuth(url, init),
-}));
-
-// ============================================================
-// Mock: loadMessages
-// ============================================================
-const mockLoadMessages = vi.fn<() => Message[]>();
-
-vi.mock('@/chat/use-chat-storage', () => ({
-  loadMessages: () => mockLoadMessages(),
-  saveMessages: vi.fn(),
 }));
 
 // ============================================================
@@ -61,7 +51,6 @@ interface ConversationState {
 async function simulateLoadConversation(
   state: ConversationState,
   fetchWithAuth: (url: string) => Promise<Response>,
-  loadMessages: () => Message[],
 ): Promise<{ messages: Message[]; fromCache: boolean }> {
   try {
     const response = await fetchWithAuth('/conversations/current');
@@ -81,8 +70,7 @@ async function simulateLoadConversation(
     }));
     return { messages: mapped, fromCache: false };
   } catch {
-    const cached = loadMessages();
-    return { messages: cached ?? [], fromCache: true };
+    return { messages: [], fromCache: false };
   }
 }
 
@@ -145,7 +133,7 @@ describe('useConversation - loadConversation', () => {
 
     mockFetchWithAuth.mockResolvedValue(mockJsonResponse(apiResponse));
 
-    const result = await simulateLoadConversation(state, mockFetchWithAuth, mockLoadMessages);
+    const result = await simulateLoadConversation(state, mockFetchWithAuth);
 
     // 验证 API 调用
     expect(mockFetchWithAuth).toHaveBeenCalledWith('/conversations/current');
@@ -176,27 +164,21 @@ describe('useConversation - loadConversation', () => {
   it('should return empty messages when API returns 204', async () => {
     mockFetchWithAuth.mockResolvedValue(mockNoContentResponse());
 
-    const result = await simulateLoadConversation(state, mockFetchWithAuth, mockLoadMessages);
+    const result = await simulateLoadConversation(state, mockFetchWithAuth);
 
     expect(result.messages).toEqual([]);
     expect(result.fromCache).toBe(false);
     expect(state.conversationId).toBeNull();
   });
 
-  // 测试 3: API 失败 → 降级 localStorage
-  it('should fallback to localStorage when API throws error', async () => {
-    const cachedMessages: Message[] = [
-      { id: 'cached-1', role: 'user', content: '缓存问题', status: 'done', timestamp: 1000 },
-      { id: 'cached-2', role: 'ai', content: '缓存回答', status: 'done', timestamp: 1001 },
-    ];
+  // 测试 3: API 失败 → 返回空消息
+  it('should return empty messages when API throws error', async () => {
     mockFetchWithAuth.mockRejectedValue(new Error('Network error'));
-    mockLoadMessages.mockReturnValue(cachedMessages);
 
-    const result = await simulateLoadConversation(state, mockFetchWithAuth, mockLoadMessages);
+    const result = await simulateLoadConversation(state, mockFetchWithAuth);
 
-    expect(result.fromCache).toBe(true);
-    expect(result.messages).toEqual(cachedMessages);
-    expect(mockLoadMessages).toHaveBeenCalledOnce();
+    expect(result.fromCache).toBe(false);
+    expect(result.messages).toEqual([]);
     // conversationId 保持 null
     expect(state.conversationId).toBeNull();
   });
@@ -215,7 +197,7 @@ describe('useConversation - loadConversation', () => {
 
     mockFetchWithAuth.mockResolvedValue(mockJsonResponse(apiResponse));
 
-    const result = await simulateLoadConversation(state, mockFetchWithAuth, mockLoadMessages);
+    const result = await simulateLoadConversation(state, mockFetchWithAuth);
 
     expect(result.messages[0].role).toBe('user');
     expect(result.messages[1].role).toBe('ai');
@@ -236,7 +218,7 @@ describe('useConversation - loadConversation', () => {
 
     mockFetchWithAuth.mockResolvedValue(mockJsonResponse(apiResponse));
 
-    const result = await simulateLoadConversation(state, mockFetchWithAuth, mockLoadMessages);
+    const result = await simulateLoadConversation(state, mockFetchWithAuth);
 
     expect(result.messages[0].status).toBe('done');
     expect(result.messages[1].status).toBe('stopped');
@@ -255,7 +237,7 @@ describe('useConversation - loadConversation', () => {
 
     mockFetchWithAuth.mockResolvedValue(mockJsonResponse(apiResponse));
 
-    const result = await simulateLoadConversation(state, mockFetchWithAuth, mockLoadMessages);
+    const result = await simulateLoadConversation(state, mockFetchWithAuth);
 
     // 用户消息无 thinkingSteps
     expect(result.messages[0].thinkingSteps).toBeUndefined();
@@ -263,14 +245,13 @@ describe('useConversation - loadConversation', () => {
     expect(result.messages[1].thinkingSteps).toBeUndefined();
   });
 
-  // 测试 7: API 失败且 localStorage 也为空
-  it('should return empty array when API fails and localStorage is empty', async () => {
+  // 测试 7: API 失败时返回空数组
+  it('should return empty array when API fails', async () => {
     mockFetchWithAuth.mockRejectedValue(new Error('Server error'));
-    mockLoadMessages.mockReturnValue([]);
 
-    const result = await simulateLoadConversation(state, mockFetchWithAuth, mockLoadMessages);
+    const result = await simulateLoadConversation(state, mockFetchWithAuth);
 
-    expect(result.fromCache).toBe(true);
+    expect(result.fromCache).toBe(false);
     expect(result.messages).toEqual([]);
   });
 
@@ -285,7 +266,7 @@ describe('useConversation - loadConversation', () => {
 
     mockFetchWithAuth.mockResolvedValue(mockJsonResponse(apiResponse));
 
-    const result = await simulateLoadConversation(state, mockFetchWithAuth, mockLoadMessages);
+    const result = await simulateLoadConversation(state, mockFetchWithAuth);
 
     expect(result.messages[0].timestamp).toBe(new Date('2026-05-23T08:30:00.000Z').getTime());
   });

@@ -1,10 +1,19 @@
 """R007-BF001 单元测试 — AgentState 结构 + graph 编译"""
 
+from unittest.mock import MagicMock
+
 from langchain_core.messages import HumanMessage
 
 from app.agent.graph import AgentState, create_graph
 from app.rag.models import QueryResult, ChunkMetadata
 from app.domain.models import SourceReference
+
+
+def _mock_generator():
+    """构造 mock LLMGenerator，提供 get_chat_model"""
+    gen = MagicMock()
+    gen.get_chat_model.return_value = MagicMock()
+    return gen
 
 
 class TestAgentState:
@@ -84,7 +93,7 @@ class TestGraphCompilation:
 
     def test_compile_without_checkpointer(self):
         """compile 不抛异常，graph.nodes 包含 classify/retrieve/respond/refuse"""
-        graph = create_graph()
+        graph = create_graph(generator=_mock_generator())
         node_names = set(graph.nodes.keys())
         for expected in ("classify", "retrieve", "respond", "refuse"):
             assert expected in node_names, f"missing node: {expected}"
@@ -94,7 +103,7 @@ class TestGraphCompilation:
         from langgraph.checkpoint.memory import MemorySaver
 
         checkpointer = MemorySaver()
-        graph = create_graph(checkpointer=checkpointer)
+        graph = create_graph(checkpointer=checkpointer, generator=_mock_generator())
         node_names = set(graph.nodes.keys())
         assert "classify" in node_names
         assert "respond" in node_names

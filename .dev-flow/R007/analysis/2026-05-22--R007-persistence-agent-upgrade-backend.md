@@ -88,16 +88,19 @@ class AgentState(TypedDict):
 | `intent` 用 Literal 而非 str | 条件路由类型安全，路由函数不会拼错字符串 |
 | `degraded` + `degradation_reason` | 检索质量不达标时仍返回结果，但标记降级供后续版本暴露给前端 |
 
-#### PostgresSaver 表结构
+#### PostgresSaver 数据库与表结构
 
-由 `AsyncPostgresSaver.setup()` 自动管理（幂等），创建 `checkpoint` 和 `checkpoint_writes` 表，无需手动建表或迁移。
+**数据库自动创建**：应用启动时先连接 `postgres` 默认库，执行 `CREATE DATABASE IF NOT EXISTS`，确保 `octotutor_checkpoints` 存在后，再创建 PostgresSaver 实例。部署时无需手动建库或执行 SQL 脚本。
+
+**表结构**：由 `AsyncPostgresSaver.setup()` 自动管理（幂等），创建 `checkpoint` 和 `checkpoint_writes` 表，无需手动建表或迁移。
 
 | 决策 | 理由 |
 |------|------|
-| 复用 xlfoundryTest PostgreSQL 实例 | 不新增基础设施，新建数据库 `octotutor_checkpoints` |
+| 复用 xlfoundryTest PostgreSQL 实例 | 不新增基础设施 |
+| 应用启动时自动建库（IF NOT EXISTS） | 自包含，部署零手动操作，上线/回滚/多环境部署均无需额外步骤 |
 | AsyncPostgresSaver 而非同步版本 | 与 FastAPI async 框架兼容 |
 | thread_id = conversation_id | 一一映射，简单直接 |
-| config 中携带 user_id | 用于后续按用户查询对话列表 |
+| config 中携带 user_id | 用于按用户查询对话列表 |
 
 ### 接口契约
 

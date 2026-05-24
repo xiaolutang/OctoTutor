@@ -4,7 +4,7 @@
 1. 正常 generate — 返回 (answer, sources) tuple
 2. answer 非空
 3. sources 包含所有 context_chunks 的引用信息
-4. _build_numbered_context 格式正确
+4. build_numbered_context 格式正确
 5. OpenAI 调用参数正确（model, messages）
 6. 空上下文处理
 """
@@ -178,18 +178,19 @@ class TestGenerate:
 
 
 # ---------------------------------------------------------------------------
-# 测试：_build_numbered_context 格式
+# 测试：build_numbered_context 格式
 # ---------------------------------------------------------------------------
 
 
 class TestBuildNumberedContext:
-    """_build_numbered_context 格式测试"""
+    """build_numbered_context 格式测试"""
 
     def test_single_chunk_format(self, generator):
         """单个 chunk 的格式正确"""
+        from app.rag.context_builder import build_numbered_context
         chunks = [make_chunk(text="集合的定义内容")]
 
-        result = generator._build_numbered_context(chunks)
+        result = build_numbered_context(chunks)
 
         assert "[1]" in result
         assert "必修第一册" in result
@@ -199,12 +200,13 @@ class TestBuildNumberedContext:
 
     def test_multiple_chunks_numbered(self, generator):
         """多个 chunk 按顺序编号"""
+        from app.rag.context_builder import build_numbered_context
         chunks = [
             make_chunk(chunk_id="id-1", text="内容A", page_start=1, page_end=1),
             make_chunk(chunk_id="id-2", text="内容B", page_start=3, page_end=5),
         ]
 
-        result = generator._build_numbered_context(chunks)
+        result = build_numbered_context(chunks)
 
         assert "[1]" in result
         assert "[2]" in result
@@ -215,12 +217,13 @@ class TestBuildNumberedContext:
 
     def test_chunks_separated_by_double_newline(self, generator):
         """多个 chunk 之间用双换行分隔"""
+        from app.rag.context_builder import build_numbered_context
         chunks = [
             make_chunk(text="内容A"),
             make_chunk(text="内容B"),
         ]
 
-        result = generator._build_numbered_context(chunks)
+        result = build_numbered_context(chunks)
 
         # 确认 chunk 之间有双换行
         parts = result.split("\n\n")
@@ -291,7 +294,8 @@ class TestEmptyContext:
         assert sources == []
 
     def test_empty_context_text_is_empty_string(self, generator):
-        """空 chunks 时 _build_numbered_context 返回空字符串"""
-        result = generator._build_numbered_context([])
+        """空 chunks 时 build_numbered_context 返回空字符串"""
+        from app.rag.context_builder import build_numbered_context
+        result = build_numbered_context([])
 
         assert result == ""

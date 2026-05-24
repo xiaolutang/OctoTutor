@@ -87,7 +87,12 @@ def _make_mock_generator(tokens=None):
             yield t
 
     gen.generate_stream = _stream
-    gen._build_numbered_context = MagicMock(return_value="[1] mock context")
+
+    # get_chat_model 返回 mock ChatOpenAI，ainvoke 是异步的
+    from langchain_core.messages import AIMessage
+    mock_chat_model = MagicMock()
+    mock_chat_model.ainvoke = AsyncMock(return_value=AIMessage(content="mock answer"))
+    gen.get_chat_model.return_value = mock_chat_model
     return gen
 
 

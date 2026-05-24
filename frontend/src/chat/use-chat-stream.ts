@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import { parseSSEEvents } from './parse-sse';
 import type { SSECallbacks, SourceReference, ThinkingStep } from './types';
 import { fetchWithAuth } from '../lib/api-client';
@@ -116,6 +116,13 @@ export function chatStreamFetch(
 export function useChatStream(): UseChatStreamReturn {
   const [isStreaming, setIsStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+
+  // 组件卸载时终止正在进行的 SSE 连接
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
 
   const sendMessage = useCallback(
     (question: string, callbacks: SSECallbacks, conversationId?: string) => {

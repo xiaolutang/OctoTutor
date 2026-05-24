@@ -78,15 +78,6 @@ def client():
         "context_used": 0,
     }
 
-    # stream_chat 返回一个异步迭代器
-    async def _mock_stream(*args, **kwargs) -> AsyncIterator:
-        from app.chat.schemas import StreamEvent, StatusPayload
-        yield StreamEvent(type="status", data=StatusPayload(stage="retrieving", message="检索中"))
-        yield StreamEvent(type="status", data=StatusPayload(stage="generating", message="生成中"))
-        yield StreamEvent(type="done", data=None)
-
-    mock_chat_service.stream_chat = _mock_stream
-
     # --- Mock ChromaDBStore ---
     mock_store = MagicMock(spec=ChromaDBStore)
     mock_store.count.return_value = 42
@@ -109,7 +100,7 @@ def client():
     async def _fake_stream(*args, **kwargs):
         yield "mock answer"
     mock_gen.generate_stream = _fake_stream
-    mock_gen._build_numbered_context = MagicMock(return_value="[1] mock")
+    mock_gen.get_chat_model.return_value = MagicMock()
 
     checkpointer = MemorySaver()
     graph = create_graph(

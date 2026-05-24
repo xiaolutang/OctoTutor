@@ -27,7 +27,7 @@ SSE 流式连接：Browser → Traefik → Backend SSE Endpoint (/api/chat/strea
 - **ChromaDB 嵌入式**: 4GB 服务器约束下，嵌入式方案优于独立向量服务
 - **DashScope Embedding**: tongyi-embedding-vision-flash 768 维，中文数学效果好
 - **全量 OCR**: 数学教材图文混排多，PyMuPDF 无法识别图表公式图片，每页都 OCR
-- **Monorepo**: 1 人团队，前后端在同一仓库（services/frontend/ + services/backend/）
+- **Monorepo**: 1 人团队，前后端在同一仓库（frontend/ + backend/）
 - **SQLite 先行**: 嵌入式零运维，SQLAlchemy ORM 抽象层可后期迁移 PostgreSQL
 - **DashScope gte-rerank**: 中文 Reranker 效果好，TextReRank API 稳定（DEC-rag-001）
 - **BM25+RRF 混合检索**: rank_bm25 + jieba 分词，RRF(k=60) 融合向量与关键词结果（DEC-rag-013）
@@ -50,7 +50,7 @@ SSE 流式连接：Browser → Traefik → Backend SSE Endpoint (/api/chat/strea
 
 ## 不变量
 
-- Monorepo 结构不变：services/frontend/ + services/backend/ + deploy/
+- Monorepo 结构不变：frontend/ + backend/ + deploy/
 - ChromaDB 嵌入式运行（不独立部署为服务）
 - 入库管线幂等：先删旧数据再入库
 - OCR 缓存优先：有缓存跳过，无缓存才调 DashScope
@@ -69,4 +69,4 @@ SSE 流式连接：Browser → Traefik → Backend SSE Endpoint (/api/chat/strea
 - R004 不做多轮对话状态管理（DEC-rag-007，留给 R005+ 跟 UI 一起做）
 - R004 不做前端 Chat UI（留给 R005）
 - 不做 WebSocket：SSE 已满足单向流式推送需求，WebSocket 的双向能力不需要
-- 不做前端 LLM 回答缓存：每次对话都是独立请求，避免缓存一致性难题
+- 不做前端 LLM 回答缓存：每次对话都是独立请求，避免缓存一致性难题（R007-PATCH01 已移除 localStorage 消息缓存）

@@ -2,18 +2,21 @@
 
 graph.compile(checkpointer=...) 返回 CompiledStateGraph.
 节点函数来自 nodes.py (classify, refuse) 和闭包 (retrieve, respond).
+respond 节点内调用 ChatOpenAI，LangGraph 自动拦截 token 流推给 stream_mode="messages"。
 """
 
 import asyncio
 from typing import Literal
 
-from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from typing import Annotated
 
 from app.rag.models import QueryResult
-from app.domain.models import SourceReference
+from app.domain.models import SourceReference, chunks_to_sources
+from app.rag.context_builder import build_numbered_context
+from app.agent.prompts import TEACHING_SYSTEM_PROMPT
 
 
 class AgentState(dict):
@@ -27,7 +30,6 @@ class AgentState(dict):
         sources: 引用来源列表
         degraded: 是否处于降级模式
         degradation_reason: 降级原因
-        prompt_messages: respond 节点构建的 LLM 输入消息列表
     """
 
     messages: Annotated[list[BaseMessage], add_messages]
@@ -37,8 +39,6 @@ class AgentState(dict):
     sources: list[SourceReference]
     degraded: bool
     degradation_reason: str | None
-    _question: str
-    _chunks: list[QueryResult]
 
 
 def _route_by_intent(state: AgentState) -> str:
@@ -54,13 +54,15 @@ def create_graph(checkpointer=None, chat_service=None, generator=None):
         checkpointer: LangGraph checkpointer 实例
             (AsyncPostgresSaver / MemorySaver)
         chat_service: ChatService 实例，用于 retrieve 节点检索
-        generator: LLMGenerator 实例，用于 respond 节点构建 prompt
+        generator: LLMGenerator 实例，用于提取 api_key/base_url/model 构建 ChatOpenAI
 
     Returns:
         CompiledStateGraph: 编译后的可执行图
     """
     from app.agent.nodes import classify_node, refuse_node
-    from app.agent.prompts import TEACHING_SYSTEM_PROMPT
+
+    # 从 generator 获取 ChatOpenAI 实例（支持原生 streaming）
+    chat_model = generator.get_chat_model()
 
     async def _retrieve(state):
         """retrieve 节点 — 调用 ChatService._retrieve 检索管线"""
@@ -70,16 +72,7 @@ def create_graph(checkpointer=None, chat_service=None, generator=None):
         result = await asyncio.to_thread(chat_service._retrieve, question, top_k)
 
         chunks = result.chunks
-        sources = [
-            SourceReference(
-                chunk_id=c.chunk_id,
-                book=c.metadata.book,
-                section=c.metadata.section,
-                page_start=c.metadata.page_start,
-                page_end=c.metadata.page_end,
-            )
-            for c in chunks
-        ] if chunks else []
+        sources = chunks_to_sources(chunks) if chunks else []
 
         return {
             "context_chunks": chunks,
@@ -89,19 +82,34 @@ def create_graph(checkpointer=None, chat_service=None, generator=None):
         }
 
     async def _respond(state):
-        """respond 节点 — 构建 LLM prompt，不调用 LLM（由 stream_router 逐 token 流式）
+        """respond 节点 — 调用 ChatOpenAI 流式生成回答
 
-        只负责构建 prompt_messages，LLM 调用移至 stream_router 层执行，
-        以实现真正的逐 token SSE 流式输出。
+        LLM 在 graph 节点内调用，LangGraph 自动拦截 token 流推给 stream_mode="messages"。
+        节点完成后 PostgresSaver 自动保存 AIMessage 到 checkpoint。
         """
         question = state.get("question", "")
         chunks = state.get("context_chunks", [])
 
-        return {
-            "prompt_messages": [],  # 不再需要，stream_router 直接用 generator
-            "_question": question,
-            "_chunks": chunks,
-        }
+        # 构建 messages
+        if chunks:
+            context_text = build_numbered_context(chunks)
+            user_content = f"参考教材内容：\n{context_text}\n\n学生问题：{question}"
+            messages = [
+                SystemMessage(content=TEACHING_SYSTEM_PROMPT),
+                HumanMessage(content=user_content),
+            ]
+        else:
+            # 无检索结果时使用简化 prompt
+            messages = [
+                SystemMessage(content=TEACHING_SYSTEM_PROMPT),
+                HumanMessage(content=question),
+            ]
+
+        # 调用 ChatOpenAI（streaming=True），LangGraph 拦截 token 流
+        response = await chat_model.ainvoke(messages)
+
+        # 返回 AIMessage 写入 state.messages，PostgresSaver 自动 checkpoint
+        return {"messages": [response]}
 
     graph = StateGraph(AgentState)
     graph.add_node("classify", classify_node)
