@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import base64
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import select, func, delete as sa_delete, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -57,11 +57,12 @@ class ConversationRepo:
             )
             pinned_items = list(pinned_result.scalars().all())
 
+            normal_limit = max(limit + 1 - len(pinned_items), 1)
             normal_result = await session.execute(
                 select(Conversation)
                 .where(Conversation.user_id == user_id, Conversation.pinned == False)
                 .order_by(Conversation.updated_at.desc(), Conversation.id.desc())
-                .limit(limit + 1 - len(pinned_items))
+                .limit(normal_limit)
             )
             normal_items = list(normal_result.scalars().all())
 
@@ -97,14 +98,14 @@ class ConversationRepo:
     @staticmethod
     async def update(session: AsyncSession, conv_id: str, user_id: str, **fields) -> Conversation | None:
         """更新指定字段（title/pinned/pinned_at 等）"""
-        conv = await ConversationRepo.get_by_id(session, conv_id, user_id)
-        if not conv:
-            return None
-        for key, value in fields.items():
-            if hasattr(conv, key):
-                setattr(conv, key, value)
-        await session.flush()
-        return conv
+        result = await session.execute(
+            sa_update(Conversation)
+            .where(Conversation.id == conv_id, Conversation.user_id == user_id)
+            .values(**fields)
+            .returning(Conversation)
+        )
+        row = result.scalar_one_or_none()
+        return row
 
     @staticmethod
     async def delete_by_id(session: AsyncSession, conv_id: str, user_id: str) -> bool:
@@ -135,7 +136,7 @@ class ConversationRepo:
             sa_update(Conversation)
             .where(Conversation.id == conv_id)
             .values(
-                updated_at=datetime.now(),
+                updated_at=datetime.now(timezone.utc),
                 message_count=Conversation.message_count + message_count_delta,
             )
         )

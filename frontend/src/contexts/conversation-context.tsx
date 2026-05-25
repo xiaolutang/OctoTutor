@@ -93,12 +93,17 @@ function conversationReducer(
     case 'SET_NEW_CONVERSATION':
       return { ...state, isNewConversation: action.payload, activeId: null };
     case 'INSERT_NEW':
-      return {
-        ...state,
-        items: [action.payload, ...state.items],
-        activeId: action.payload.id,
-        isNewConversation: false,
-      };
+      // 新对话 pinned=false，插入到普通区头部（置顶区之后）
+      {
+        const pinned = state.items.filter((i) => i.pinned);
+        const normal = state.items.filter((i) => !i.pinned);
+        return {
+          ...state,
+          items: [...pinned, action.payload, ...normal],
+          activeId: action.payload.id,
+          isNewConversation: false,
+        };
+      }
     case 'UPDATE_TITLE':
       return {
         ...state,
@@ -116,17 +121,30 @@ function conversationReducer(
         hasMore: action.payload.hasMore,
       };
     case 'REMOVE_ITEM':
-      return {
-        ...state,
-        items: state.items.filter((item) => item.id !== action.payload),
-      };
+      {
+        const remaining = state.items.filter((item) => item.id !== action.payload);
+        const newActiveId = state.activeId === action.payload
+          ? (remaining.length > 0 ? remaining[0].id : null)
+          : state.activeId;
+        if (newActiveId !== state.activeId) {
+          storeActiveId(newActiveId);
+        }
+        return { ...state, items: remaining, activeId: newActiveId, isNewConversation: newActiveId ? false : state.isNewConversation };
+      }
     case 'UPDATE_ITEM':
-      return {
-        ...state,
-        items: state.items.map((item) =>
-          item.id === action.payload.id ? action.payload : item,
-        ),
-      };
+      // 更新后重新排序：置顶的移到置顶区顶部，普通的移到普通区顶部
+      {
+        const updated = action.payload;
+        const rest = state.items.filter((item) => item.id !== updated.id);
+        if (updated.pinned) {
+          const pinned = rest.filter((i) => i.pinned);
+          const normal = rest.filter((i) => !i.pinned);
+          return { ...state, items: [updated, ...pinned, ...normal] };
+        }
+        const pinned = rest.filter((i) => i.pinned);
+        const normal = rest.filter((i) => !i.pinned);
+        return { ...state, items: [...pinned, updated, ...normal] };
+      }
     default:
       return state;
   }
@@ -182,8 +200,12 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
         const result = await fetchConversationList(undefined, 20);
         if (!cancelled) {
           dispatch({ type: 'INIT_LIST', payload: result });
-          // 如果存储的 activeId 不在列表中，清除它
-          if (state.activeId && !result.items.some((i) => i.id === state.activeId)) {
+          const storedId = getStoredActiveId();
+          if (storedId && result.items.some((i) => i.id === storedId)) {
+            dispatch({ type: 'SET_ACTIVE', payload: storedId });
+          } else if (result.items.length > 0) {
+            dispatch({ type: 'SET_ACTIVE', payload: result.items[0].id });
+          } else {
             dispatch({ type: 'SET_ACTIVE', payload: null });
           }
         }
@@ -241,39 +263,19 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
   );
 
   const pinConversation = useCallback(async (id: string) => {
-    try {
-      const updated = await patchConversation(id, { pinned: true });
-      dispatch({ type: 'UPDATE_ITEM', payload: updated });
-    } catch {
-      // 错误已在 patchConversation 中抛出，调用方负责 toast
-      throw new Error('置顶失败');
-    }
+    const updated = await patchConversation(id, { pinned: true });
+    dispatch({ type: 'UPDATE_ITEM', payload: updated });
   }, []);
 
   const unpinConversation = useCallback(async (id: string) => {
-    try {
-      const updated = await patchConversation(id, { pinned: false });
-      dispatch({ type: 'UPDATE_ITEM', payload: updated });
-    } catch {
-      throw new Error('取消置顶失败');
-    }
+    const updated = await patchConversation(id, { pinned: false });
+    dispatch({ type: 'UPDATE_ITEM', payload: updated });
   }, []);
 
-  const deleteConversation = useCallback(
-    async (id: string) => {
-      await deleteConversationApi(id);
-      dispatch({ type: 'REMOVE_ITEM', payload: id });
-      // 删除当前 activeId 对话后，自动切换到列表第一个
-      if (state.activeId === id) {
-        const remaining = state.items.filter((i) => i.id !== id);
-        dispatch({
-          type: 'SET_ACTIVE',
-          payload: remaining.length > 0 ? remaining[0].id : null,
-        });
-      }
-    },
-    [state.activeId, state.items],
-  );
+  const deleteConversation = useCallback(async (id: string) => {
+    await deleteConversationApi(id);
+    dispatch({ type: 'REMOVE_ITEM', payload: id });
+  }, []);
 
   const value: ConversationContextValue = {
     ...state,

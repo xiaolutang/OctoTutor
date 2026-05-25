@@ -23,7 +23,7 @@ export function ChatUI() {
   // 自动滚动到底部
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length, isStreaming]);
+  }, [messages]);
 
   if (!mounted) {
     return (

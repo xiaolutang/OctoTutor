@@ -19,7 +19,7 @@ function mapApiStatus(status: ApiMessage['status']): MessageStatus {
 }
 
 interface UseConversationReturn {
-  loadConversation: (conversationId?: string | null) => Promise<{ messages: Message[] }>;
+  loadConversation: (conversationId?: string | null) => Promise<{ messages: Message[]; stale?: boolean }>;
 }
 
 /**
@@ -32,14 +32,11 @@ interface UseConversationReturn {
  * - conversationId 由调用方传入（ConversationContext），不再使用 localStorage
  */
 export function useConversation(): UseConversationReturn {
-  const loadingRef = useRef(false);
+  const requestIdRef = useRef(0);
 
   const loadConversation = useCallback(
-    async (conversationId?: string | null): Promise<{ messages: Message[] }> => {
-      if (loadingRef.current) {
-        return { messages: [] };
-      }
-      loadingRef.current = true;
+    async (conversationId?: string | null): Promise<{ messages: Message[]; stale?: boolean }> => {
+      const myRequestId = ++requestIdRef.current;
 
       try {
         const url = conversationId
@@ -47,7 +44,7 @@ export function useConversation(): UseConversationReturn {
           : '/conversations/current';
         const response = await fetchWithAuth(url);
         if (response.status === 204 || !response.ok) {
-          return { messages: [] };
+          return { messages: [], stale: myRequestId !== requestIdRef.current };
         }
         const data: ConversationResponse = await response.json();
         const mapped: Message[] = data.messages.map((apiMsg) => ({
@@ -59,11 +56,9 @@ export function useConversation(): UseConversationReturn {
           thinkingSteps: apiMsg.thinking_steps,
           timestamp: apiMsg.created_at ? new Date(apiMsg.created_at).getTime() : Date.now(),
         }));
-        return { messages: mapped };
+        return { messages: mapped, stale: myRequestId !== requestIdRef.current };
       } catch {
-        return { messages: [] };
-      } finally {
-        loadingRef.current = false;
+        return { messages: [], stale: myRequestId !== requestIdRef.current };
       }
     },
     [],

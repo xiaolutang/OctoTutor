@@ -57,7 +57,13 @@ export function ConversationItemCard({
   const handleRenameSubmit = async () => {
     const trimmed = renameValue.trim();
     if (trimmed && trimmed !== item.title) {
-      await onRename(item.id, trimmed);
+      try {
+        await onRename(item.id, trimmed);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : '重命名失败';
+        toast.error(msg);
+        setRenameValue(item.title);
+      }
     } else if (!trimmed) {
       setRenameValue(item.title);
     }
@@ -119,7 +125,7 @@ export function ConversationItemCard({
       {/* 三点菜单按钮 */}
       {!isRenaming && (
         <div
-          className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+          className="relative opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Menu toggle button */}
@@ -153,8 +159,9 @@ export function ConversationItemCard({
                     } else {
                       await onPin(item.id);
                     }
-                  } catch {
-                    toast.error(item.pinned ? '取消置顶失败' : '置顶失败，可能已达上限');
+                  } catch (err) {
+                    const msg = err instanceof Error ? err.message : (item.pinned ? '取消置顶失败' : '置顶失败');
+                    toast.error(msg);
                   }
                 }}
               >
@@ -188,7 +195,7 @@ export function ConversationItemCard({
                 取消
               </button>
               <button
-                className="px-4 py-2 text-sm rounded-md bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                className="px-4 py-2 text-sm rounded-md bg-destructive text-white hover:bg-red-700"
                 onClick={handleDelete}
               >
                 确认删除

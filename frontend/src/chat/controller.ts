@@ -25,6 +25,8 @@ export function useChatController() {
   } = useConversationContext();
   const aiMsgIdRef = useRef<string>('');
   const prevActiveIdRef = useRef<string | null>(activeId);
+  const messagesRef = useRef<Message[]>(messages);
+  messagesRef.current = messages;
 
   // 同步 isStreaming 到 ConversationContext（供 sidebar 使用）
   useEffect(() => {
@@ -59,8 +61,10 @@ export function useChatController() {
     if (prevActiveIdRef.current === activeId) return;
     prevActiveIdRef.current = activeId;
 
-    loadConversation(activeId).then(({ messages: loadedMessages }) => {
-      setMessages(loadedMessages);
+    loadConversation(activeId).then(({ messages: loadedMessages, stale }) => {
+      if (!stale) {
+        setMessages(loadedMessages);
+      }
     });
   }, [activeId, isNewConversation, mounted, loadConversation]);
 
@@ -179,20 +183,21 @@ export function useChatController() {
     (messageId: string) => {
       if (isStreaming) return;
 
-      const msgIndex = messages.findIndex((m) => m.id === messageId);
+      const currentMessages = messagesRef.current;
+      const msgIndex = currentMessages.findIndex((m) => m.id === messageId);
       if (msgIndex < 0) return;
 
-      const aiMsg = messages[msgIndex];
+      const aiMsg = currentMessages[msgIndex];
       if (aiMsg.role !== 'ai') return;
 
       // 向前查找最近的用户消息
       let userMsgIndex = msgIndex - 1;
-      while (userMsgIndex >= 0 && messages[userMsgIndex].role !== 'user') {
+      while (userMsgIndex >= 0 && currentMessages[userMsgIndex].role !== 'user') {
         userMsgIndex--;
       }
       if (userMsgIndex < 0) return;
 
-      const userText = messages[userMsgIndex].content;
+      const userText = currentMessages[userMsgIndex].content;
       const newAiMsgId = createId();
       aiMsgIdRef.current = newAiMsgId;
 
@@ -204,12 +209,12 @@ export function useChatController() {
         timestamp: Date.now(),
       };
 
-      const newMessages = [...messages];
+      const newMessages = [...currentMessages];
       newMessages[msgIndex] = newAiMsg;
       setMessages(newMessages);
       startSSE(userText, newAiMsgId);
     },
-    [isStreaming, messages, startSSE],
+    [isStreaming, startSSE],
   );
 
   return {

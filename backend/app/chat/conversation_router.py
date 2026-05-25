@@ -191,8 +191,7 @@ def _to_api_message(msg, index: int) -> ApiMessage:
     content = getattr(msg, "content", "") or ""
     msg_type = getattr(msg, "type", "unknown")
 
-    role_map = {"human": "human", "ai": "ai", "system": "system"}
-    role = role_map.get(msg_type, msg_type)
+    role = msg_type
 
     additional_kwargs = getattr(msg, "additional_kwargs", {}) or {}
 

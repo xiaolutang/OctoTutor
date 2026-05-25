@@ -22,12 +22,6 @@ async_session_factory = async_sessionmaker(
 )
 
 
-async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """async generator，yield AsyncSession（供路由层 Depends 使用）"""
-    async with async_session_factory() as session:
-        yield session
-
-
 async def create_tables():
     """创建所有 SQLAlchemy 表（lifespan 中调用）"""
     from app.domain.models import Base  # noqa: WPS433 — 延迟导入避免循环依赖

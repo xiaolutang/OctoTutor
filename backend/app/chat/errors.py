@@ -41,10 +41,15 @@ ERROR_REGISTRY: dict[ChatErrorCode, ErrorDef] = {
 }
 
 
+def _make_error(code: Enum, registry: dict[Enum, ErrorDef]) -> dict:
+    """通用错误字典生成"""
+    defn = registry[code]
+    return {"code": defn.code, "message": defn.message, "action": defn.action}
+
+
 def make_error(code: ChatErrorCode) -> dict:
     """根据 ChatErrorCode 枚举值生成错误字典"""
-    defn = ERROR_REGISTRY[code]
-    return {"code": defn.code, "message": defn.message, "action": defn.action}
+    return _make_error(code, ERROR_REGISTRY)
 
 
 # ---------------------------------------------------------------------------
@@ -69,5 +74,4 @@ CONVERSATION_ERROR_REGISTRY: dict[ConversationErrorCode, ErrorDef] = {
 
 def make_conversation_error(code: ConversationErrorCode) -> dict:
     """根据 ConversationErrorCode 枚举值生成错误字典"""
-    defn = CONVERSATION_ERROR_REGISTRY[code]
-    return {"code": defn.code, "message": defn.message, "action": defn.action}
+    return _make_error(code, CONVERSATION_ERROR_REGISTRY)

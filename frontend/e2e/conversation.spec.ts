@@ -50,9 +50,6 @@ test.describe("对话管理", () => {
         .catch(() => { /* AI 未响应不阻塞后续测试 */ })
     })
 
-    // 记录创建后的卡片数
-    const cardCountAfterCreate = await cards.count()
-
     // ── 场景 3: 再建一个对话 → 切换 ──
     await test.step("切换对话加载历史", async () => {
       await page.getByRole("button", { name: /新建对话/ }).click()
@@ -114,6 +111,7 @@ test.describe("对话管理", () => {
     // ── 场景 7: 删除对话 ──
     await test.step("删除对话", async () => {
       const lastCard = cards.last()
+      const countBeforeDelete = await cards.count()
       await openCardMenu(page, lastCard)
       await lastCard.getByText("删除").click()
 
@@ -126,7 +124,7 @@ test.describe("对话管理", () => {
 
       // 验证卡片已删除（数量减少）
       const countAfterDelete = await cards.count()
-      expect(countAfterDelete).toBeLessThanOrEqual(cardCountAfterCreate)
+      expect(countAfterDelete).toBeLessThan(countBeforeDelete)
     })
   })
 
