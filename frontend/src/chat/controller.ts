@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useChatStream } from './use-chat-stream';
-import { useConversation, saveConversationId, loadConversationId } from './use-conversation';
+import { useConversation } from './use-conversation';
 import { useAuth } from '@/contexts/auth-context';
+import { useConversationContext } from '@/contexts/conversation-context';
 import type { Message, MessageStatus, ThinkingStep } from './types';
 
 function createId(): string {
@@ -12,28 +13,48 @@ export function useChatController() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [mounted, setMounted] = useState(false);
-  const [conversationId, setConversationId] = useState<string | null>(loadConversationId());
   const { sendMessage, stop, isStreaming } = useChatStream();
   const { loadConversation } = useConversation();
   const { isInitialized } = useAuth();
+  const {
+    activeId,
+    isNewConversation,
+    insertNewConversation,
+    updateTitle,
+  } = useConversationContext();
   const aiMsgIdRef = useRef<string>('');
+  const prevActiveIdRef = useRef<string | null>(activeId);
 
-  // 等 Auth SDK 初始化完成后再加载对话历史，避免 token 未就绪导致 401
+  // Auth 初始化后加载对话历史
   useEffect(() => {
     if (!isInitialized) return;
     let cancelled = false;
-    loadConversation().then(({ messages: loadedMessages }) => {
+    loadConversation(activeId).then(({ messages: loadedMessages }) => {
       if (!cancelled) {
         setMessages(loadedMessages);
-        const storedId = loadConversationId();
-        if (storedId) {
-          setConversationId(storedId);
-        }
         setMounted(true);
       }
     });
     return () => { cancelled = true; };
-  }, [isInitialized, loadConversation]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isInitialized]);
+
+  // 切换对话时重新加载历史消息
+  useEffect(() => {
+    if (!mounted) return;
+    if (prevActiveIdRef.current === activeId) return;
+    prevActiveIdRef.current = activeId;
+
+    if (activeId === null && isNewConversation) {
+      // 新对话：清空消息
+      setMessages([]);
+      return;
+    }
+
+    loadConversation(activeId).then(({ messages: loadedMessages }) => {
+      setMessages(loadedMessages);
+    });
+  }, [activeId, isNewConversation, mounted, loadConversation]);
 
   // 更新单条消息
   const updateMsg = useCallback(
@@ -50,8 +71,17 @@ export function useChatController() {
         question,
         {
           onInit: (convId: string) => {
-            setConversationId(convId);
-            saveConversationId(convId);
+            if (isNewConversation) {
+              insertNewConversation({
+                id: convId,
+                title: '新对话',
+                pinned: false,
+                pinned_at: null,
+                message_count: 0,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              });
+            }
           },
           onStatus: (stage: string, _message: string) => {
             if (stage === 'retrieving' || stage === 'generating') {
@@ -80,9 +110,11 @@ export function useChatController() {
           onDone: () => {
             updateMsg(aiMsgId, { status: 'done' });
           },
+          onTitle: (convId: string, title: string) => {
+            updateTitle(convId, title);
+          },
           onError: (error) => {
             if (error.code === '00000') {
-              // 保留用户消息，AI 标记 error + 回填输入框
               updateMsg(aiMsgId, { status: 'error', error });
               setInput(question);
             } else {
@@ -90,10 +122,10 @@ export function useChatController() {
             }
           },
         },
-        conversationId ?? undefined,
+        activeId ?? undefined,
       );
     },
-    [sendMessage, updateMsg, conversationId],
+    [sendMessage, updateMsg, activeId, isNewConversation, insertNewConversation, updateTitle],
   );
 
   // 发送消息

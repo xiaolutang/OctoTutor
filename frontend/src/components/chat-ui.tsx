@@ -1,5 +1,6 @@
 'use client';
 
+import { useRef, useEffect } from 'react';
 import { useChatController } from '@/chat/controller';
 import { ChatInput } from './chat-input';
 import { MessageBubble } from './message-bubble';
@@ -16,6 +17,13 @@ export function ChatUI() {
     handleStop,
     handleRegenerate,
   } = useChatController();
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // 自动滚动到底部
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages.length, isStreaming]);
 
   if (!mounted) {
     return (
@@ -43,6 +51,7 @@ export function ChatUI() {
             />
           ))
         )}
+        <div ref={messagesEndRef} />
       </div>
 
       {/* 输入区 */}
