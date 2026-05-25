@@ -84,6 +84,11 @@ export function chatStreamFetch(
               case 'done':
                 callbacks.onDone();
                 break;
+              case 'title': {
+                const d = event.data as { conversation_id: string; title: string };
+                callbacks.onTitle(d.conversation_id, d.title);
+                break;
+              }
               case 'error':
                 callbacks.onError(event.data as { code: string; message: string; action: string });
                 break;

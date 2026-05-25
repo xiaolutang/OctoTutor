@@ -29,6 +29,28 @@ export interface ConversationResponse {
   messages: ApiMessage[];
 }
 
+/** 对话列表项（对应后端 GET /api/conversations 响应，保持 snake_case） */
+export interface ConversationItem {
+  id: string;
+  title: string;
+  pinned: boolean;
+  pinned_at: string | null;
+  message_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** 对话列表状态 */
+export interface ConversationListState {
+  items: ConversationItem[];
+  cursor: string | null;
+  hasMore: boolean;
+  isLoading: boolean;
+  isInitialized: boolean;
+  activeId: string | null;
+  isNewConversation: boolean;
+}
+
 export interface SSECallbacks {
   onInit: (conversationId: string) => void;
   onStatus: (stage: string, message: string) => void;
@@ -36,6 +58,7 @@ export interface SSECallbacks {
   onToken: (token: string) => void;
   onThinking: (step: ThinkingStep) => void;
   onDone: () => void;
+  onTitle: (conversationId: string, title: string) => void;
   onError: (error: { code: string; message: string; action: string }) => void;
 }
 

@@ -79,11 +79,13 @@ function simulateHandleSend(
   const newMessages = [...currentMessages, userMsg, aiMsg];
 
   sendMessage(text, {
+    onInit: vi.fn(),
     onStatus: vi.fn(),
     onSources: vi.fn(),
     onToken: vi.fn(),
     onThinking: vi.fn(),
     onDone: vi.fn(),
+    onTitle: vi.fn(),
     onError: vi.fn(),
   }, conversationId);
 

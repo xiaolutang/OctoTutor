@@ -25,6 +25,9 @@ function createCallbacks(): SSECallbacks & { callbackOrder: string[] } {
   const callbackOrder: string[] = [];
   return {
     callbackOrder,
+    onInit: vi.fn((conversationId: string) => {
+      callbackOrder.push(`onInit:${conversationId}`);
+    }),
     onStatus: vi.fn((stage: string, message: string) => {
       callbackOrder.push(`onStatus:${stage}`);
     }),
@@ -39,6 +42,9 @@ function createCallbacks(): SSECallbacks & { callbackOrder: string[] } {
     }),
     onDone: vi.fn(() => {
       callbackOrder.push('onDone');
+    }),
+    onTitle: vi.fn(() => {
+      callbackOrder.push('onTitle');
     }),
     onError: vi.fn(() => {
       callbackOrder.push('onError');
