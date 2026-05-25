@@ -33,7 +33,7 @@ export async function patchConversation(
   });
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    throw new Error(err.detail || `更新对话失败: ${response.status}`);
+    throw new Error(err.message || `更新对话失败: ${response.status}`);
   }
   return response.json();
 }

@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { MoreVertical } from 'lucide-react';
+import { toast } from 'sonner';
 import type { ConversationItem } from '@/chat/types';
 
 interface ConversationItemCardProps {
@@ -56,6 +58,8 @@ export function ConversationItemCard({
     const trimmed = renameValue.trim();
     if (trimmed && trimmed !== item.title) {
       await onRename(item.id, trimmed);
+    } else if (!trimmed) {
+      setRenameValue(item.title);
     }
     setIsRenaming(false);
   };
@@ -120,11 +124,7 @@ export function ConversationItemCard({
             className="p-1 rounded hover:bg-accent/80"
             onClick={() => setMenuOpen(!menuOpen)}
           >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <circle cx="8" cy="3" r="1" fill="currentColor" stroke="none" />
-              <circle cx="8" cy="8" r="1" fill="currentColor" stroke="none" />
-              <circle cx="8" cy="13" r="1" fill="currentColor" stroke="none" />
-            </svg>
+            <MoreVertical className="h-4 w-4" />
           </button>
 
           {/* Dropdown menu */}
@@ -144,10 +144,14 @@ export function ConversationItemCard({
                 className="w-full text-left px-3 py-1.5 text-sm hover:bg-accent/50"
                 onClick={async () => {
                   setMenuOpen(false);
-                  if (item.pinned) {
-                    await onUnpin(item.id);
-                  } else {
-                    await onPin(item.id);
+                  try {
+                    if (item.pinned) {
+                      await onUnpin(item.id);
+                    } else {
+                      await onPin(item.id);
+                    }
+                  } catch {
+                    toast.error(item.pinned ? '取消置顶失败' : '置顶失败，可能已达上限');
                   }
                 }}
               >

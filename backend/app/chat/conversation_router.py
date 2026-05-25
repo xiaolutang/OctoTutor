@@ -241,6 +241,19 @@ def _to_api_message(msg, index: int) -> ApiMessage:
 # ---------------------------------------------------------------------------
 
 
+def _conv_to_response(conv: Conversation) -> ConversationItemResponse:
+    """ORM Conversation → ConversationItemResponse"""
+    return ConversationItemResponse(
+        id=conv.id,
+        title=conv.title,
+        pinned=conv.pinned,
+        pinned_at=conv.pinned_at,
+        message_count=conv.message_count,
+        created_at=conv.created_at,
+        updated_at=conv.updated_at,
+    )
+
+
 @router.get("/conversations")
 async def list_conversations(
     cursor: str | None = Query(None),
@@ -251,18 +264,7 @@ async def list_conversations(
     """分页列表（游标）— 首页返回置顶 + 普通，翻页只返回普通"""
     items, has_more = await ConversationRepo.list_by_user(db, user.user_id, cursor, limit)
 
-    response_items = [
-        ConversationItemResponse(
-            id=item.id,
-            title=item.title,
-            pinned=item.pinned,
-            pinned_at=item.pinned_at,
-            message_count=item.message_count,
-            created_at=item.created_at,
-            updated_at=item.updated_at,
-        )
-        for item in items
-    ]
+    response_items = [_conv_to_response(item) for item in items]
 
     next_cursor = None
     if has_more and items:
@@ -308,15 +310,7 @@ async def update_conversation(
         conv = await ConversationRepo.update(db, conversation_id, user.user_id, **updates)
         await db.commit()
 
-    return ConversationItemResponse(
-        id=conv.id,
-        title=conv.title,
-        pinned=conv.pinned,
-        pinned_at=conv.pinned_at,
-        message_count=conv.message_count,
-        created_at=conv.created_at,
-        updated_at=conv.updated_at,
-    )
+    return _conv_to_response(conv)
 
 
 @router.delete("/conversations/{conversation_id}")

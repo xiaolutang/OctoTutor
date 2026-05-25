@@ -136,6 +136,8 @@ function conversationReducer(
 // ---------------------------------------------------------------------------
 
 interface ConversationContextValue extends ConversationListState {
+  isStreaming: boolean;
+  setIsStreaming: (v: boolean) => void;
   switchTo: (id: string) => void;
   createNew: () => void;
   insertNewConversation: (item: ConversationItem) => void;
@@ -167,6 +169,7 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
     ...initialState,
     activeId: getStoredActiveId(),
   });
+  const [isStreaming, setIsStreaming] = React.useState(false);
   const loadingMoreRef = useRef(false);
 
   // 初始化加载对话列表
@@ -237,13 +240,22 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
   );
 
   const pinConversation = useCallback(async (id: string) => {
-    const updated = await patchConversation(id, { pinned: true });
-    dispatch({ type: 'UPDATE_ITEM', payload: updated });
+    try {
+      const updated = await patchConversation(id, { pinned: true });
+      dispatch({ type: 'UPDATE_ITEM', payload: updated });
+    } catch {
+      // 错误已在 patchConversation 中抛出，调用方负责 toast
+      throw new Error('置顶失败');
+    }
   }, []);
 
   const unpinConversation = useCallback(async (id: string) => {
-    const updated = await patchConversation(id, { pinned: false });
-    dispatch({ type: 'UPDATE_ITEM', payload: updated });
+    try {
+      const updated = await patchConversation(id, { pinned: false });
+      dispatch({ type: 'UPDATE_ITEM', payload: updated });
+    } catch {
+      throw new Error('取消置顶失败');
+    }
   }, []);
 
   const deleteConversation = useCallback(
@@ -264,6 +276,8 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
 
   const value: ConversationContextValue = {
     ...state,
+    isStreaming,
+    setIsStreaming,
     switchTo,
     createNew,
     insertNewConversation,

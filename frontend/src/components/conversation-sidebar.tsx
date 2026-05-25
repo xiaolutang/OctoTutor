@@ -5,15 +5,12 @@ import { Plus } from 'lucide-react';
 import { useConversationContext } from '@/contexts/conversation-context';
 import { ConversationItemCard } from '@/components/conversation-item-card';
 
-interface ConversationSidebarProps {
-  isStreaming: boolean;
-}
-
-export function ConversationSidebar({ isStreaming }: ConversationSidebarProps) {
+export function ConversationSidebar() {
   const {
     items,
     activeId,
     hasMore,
+    isStreaming,
     switchTo,
     createNew,
     loadMore,

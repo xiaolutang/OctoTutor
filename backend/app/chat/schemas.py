@@ -31,7 +31,7 @@ class ChatResponse(BaseModel):
 @dataclass
 class StreamEvent:
     """SSE 结构化事件"""
-    type: Literal["status", "sources", "token", "thinking", "done", "error"]
+    type: Literal["status", "sources", "token", "thinking", "done", "title", "error"]
     data: Any
 
 

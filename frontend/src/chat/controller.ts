@@ -21,9 +21,15 @@ export function useChatController() {
     isNewConversation,
     insertNewConversation,
     updateTitle,
+    setIsStreaming: setContextStreaming,
   } = useConversationContext();
   const aiMsgIdRef = useRef<string>('');
   const prevActiveIdRef = useRef<string | null>(activeId);
+
+  // 同步 isStreaming 到 ConversationContext（供 sidebar 使用）
+  useEffect(() => {
+    setContextStreaming(isStreaming);
+  }, [isStreaming, setContextStreaming]);
 
   // Auth 初始化后加载对话历史
   useEffect(() => {
