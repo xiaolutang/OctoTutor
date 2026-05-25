@@ -6,9 +6,12 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator
 
 from openai import AsyncOpenAI, OpenAI
+
+logger = logging.getLogger(__name__)
 
 from app.domain.models import SourceReference
 from app.infra.context_builder import chunks_to_sources
@@ -103,6 +106,27 @@ class LLMGenerator:
                 token = chunk.choices[0].delta.content or ""
                 if token:
                     yield token
+
+    async def generate_title(self, user_message: str) -> str | None:
+        """根据首条用户消息生成对话标题（非流式，5s timeout）
+
+        失败或超时时返回 None，不抛出异常。
+        """
+        try:
+            response = await self._async_client.chat.completions.create(
+                model=self._model,
+                messages=[
+                    {"role": "system", "content": "请用不超过20个字概括以下问题的核心主题，直接输出标题，不要加引号。"},
+                    {"role": "user", "content": user_message},
+                ],
+                max_tokens=50,
+                timeout=5.0,
+            )
+            title = response.choices[0].message.content.strip().strip('"').strip("'")
+            return title if title else None
+        except Exception as e:
+            logger.warning(f"[llm] title generation failed: {e}")
+            return None
 
     def _build_messages(
         self, query: str, context_chunks: list[QueryResult]
