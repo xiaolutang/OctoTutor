@@ -20,7 +20,7 @@ from jose import jwt
 from starlette.testclient import TestClient
 
 from app.agent.graph import create_graph
-from app.chat.dependencies import get_chat_service, get_graph, get_checkpointer
+from app.chat.dependencies import get_chat_service, get_graph, get_checkpointer, get_db
 from app.chat.stream_router import router as stream_router
 from app.chat.conversation_router import router as conversation_router
 from app.middleware.auth import ALGORITHM, UserContext, get_current_user
@@ -79,7 +79,7 @@ def _make_mock_chat_service(chunks=None):
     return svc
 
 
-def _make_mock_generator(tokens=None):
+def _make_mock_generator(tokens=None, title=None):
     gen = MagicMock()
 
     async def _stream(*args, **kwargs):
@@ -87,6 +87,7 @@ def _make_mock_generator(tokens=None):
             yield t
 
     gen.generate_stream = _stream
+    gen.generate_title = AsyncMock(return_value=title)
 
     # get_chat_model 返回 mock ChatOpenAI，ainvoke 是异步的
     from langchain_core.messages import AIMessage
@@ -136,6 +137,14 @@ def _create_test_app(mock_service=None, mock_graph=None, mock_checkpointer=None)
 
     # 注入 generator 到 app.state（stream_router 直接访问）
     app.state.generator = gen
+
+    # 覆盖 get_db（stream_router 新增 db session 依赖）
+    mock_db = AsyncMock()
+
+    async def _override_get_db():
+        yield mock_db
+
+    app.dependency_overrides[get_db] = _override_get_db
 
     # 覆盖 chat_service（部分测试仍需要）
     if mock_service:

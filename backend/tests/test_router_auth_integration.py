@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import AsyncIterator
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -64,7 +64,7 @@ def client():
 
     from app.main import app
     from app.chat.service import ChatService
-    from app.chat.dependencies import get_chat_service, get_graph, get_checkpointer
+    from app.chat.dependencies import get_chat_service, get_graph, get_checkpointer, get_db
     from app.rag.embeddings import DashScopeEmbedding
     from app.rag.vector_store import ChromaDBStore
     from app.api.routes.retrieve import get_vector_store as get_vs_retrieve
@@ -100,6 +100,7 @@ def client():
     async def _fake_stream(*args, **kwargs):
         yield "mock answer"
     mock_gen.generate_stream = _fake_stream
+    mock_gen.generate_title = AsyncMock(return_value=None)
     mock_gen.get_chat_model.return_value = MagicMock()
 
     checkpointer = MemorySaver()
@@ -120,6 +121,14 @@ def client():
     app.dependency_overrides[get_emb_retrieve] = lambda: mock_embedding
     app.dependency_overrides[get_graph] = lambda: graph
     app.dependency_overrides[get_checkpointer] = lambda: checkpointer
+
+    # --- Mock DB session ---
+    mock_db = AsyncMock()
+
+    async def _override_get_db():
+        yield mock_db
+
+    app.dependency_overrides[get_db] = _override_get_db
 
     with patch("app.middleware.auth.settings") as mock_settings:
         mock_settings.auth_jwt_secret = TEST_SECRET

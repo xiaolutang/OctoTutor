@@ -19,10 +19,13 @@ from langchain_core.messages import HumanMessage
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.chat.dependencies import get_graph, get_checkpointer
+from app.chat.dependencies import get_graph, get_checkpointer, get_db
 from app.chat.errors import ChatErrorCode, make_error
 from app.chat.schemas import ChatRequest
+from app.domain.models import Conversation
+from app.infra.conversation_repo import ConversationRepo
 from app.middleware.auth import UserContext, get_current_user
 
 router = APIRouter(prefix="/api", tags=["chat"])
@@ -36,6 +39,7 @@ async def stream_chat(
     http_request: Request,
     graph=Depends(get_graph),
     checkpointer=Depends(get_checkpointer),
+    db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(get_current_user),
 ):
     """SSE 流式对话端点
@@ -46,6 +50,13 @@ async def stream_chat(
     - respond 节点完成后 PostgresSaver 自动保存 AIMessage
     """
     conversation_id = body.conversation_id or str(uuid.uuid4())
+    is_new_conversation = not body.conversation_id
+
+    # 新对话：init 阶段前创建 conversation 记录
+    if is_new_conversation:
+        conv = Conversation(id=conversation_id, user_id=user.user_id)
+        await ConversationRepo.create(db, conv)
+        await db.commit()
 
     config = {
         "configurable": {
@@ -77,7 +88,31 @@ async def stream_chat(
                     yield frame
 
             if not await http_request.is_disconnected():
+                # 更新统计：updated_at + message_count
+                try:
+                    await ConversationRepo.update_message_stats(db, conversation_id)
+                    await db.commit()
+                except Exception as e:
+                    logger.warning(f"[stream] update_message_stats failed: {e}")
+
                 yield "event: done\ndata: null\n\n"
+
+                # 新对话：尝试生成标题
+                if is_new_conversation:
+                    try:
+                        generator = http_request.app.state.generator
+                        title = await generator.generate_title(body.question)
+                        if title:
+                            await ConversationRepo.update(
+                                db, conversation_id, user.user_id, title=title
+                            )
+                            await db.commit()
+                            yield _sse_frame("title", {
+                                "conversation_id": conversation_id,
+                                "title": title,
+                            })
+                    except Exception as e:
+                        logger.warning(f"[stream] title generation failed: {e}")
 
         except Exception as e:
             logger.error(f"SSE stream error: {e}", exc_info=True)
