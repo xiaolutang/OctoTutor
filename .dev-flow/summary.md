@@ -1,6 +1,6 @@
 # OctoTutor Development Summary
 
-最后更新: 2026-05-24
+最后更新: 2026-05-25
 
 ## 需求包索引
 
@@ -15,6 +15,8 @@
 | R007 | persistence-agent-upgrade | 6 | archived | 2026-05-24 |
 | R007-PATCH01 | architecture-cleanup (补丁 R007) | 7 | archived | 2026-05-24 |
 | R007-PATCH02 | reverse-dependency-fix (补丁 R007) | 3 | archived | 2026-05-24 |
+| R008 | architecture-refactor | 3 | archived | 2026-05-24 |
+| R009 | conversation-management | 25 | archived | 2026-05-25 |
 
 ## 模块清单
 
@@ -39,6 +41,10 @@
 | agent | LangGraph StateGraph 编排（classify→retrieve→respond / refuse） |
 | persistence | PostgresSaver/MemorySaver 对话持久化 + conversation_id 多轮 |
 | conversation | GET /api/conversations/current 对话历史加载 + user_id 隔离 |
+| conversation-api | GET/PATCH/DELETE /api/conversations 对话列表+更新+删除+置顶 |
+| conversation-repo | SQLAlchemy 2.0 async ORM Conversation CRUD 数据访问层 |
+| conversation-context | ConversationProvider + useReducer 对话状态管理 |
+| sidebar | 侧边栏组件（对话列表+新建+置顶分组+右键菜单） |
 
 ## 能力清单
 
@@ -71,8 +77,27 @@
 | CAP-agent-002 | 教学策略 prompt（类比驱动+启发式引导+步骤化叙事） |
 | CAP-agent-003 | conversation_id 多轮对话（PostgresSaver 持久化 + MemorySaver fallback） |
 | CAP-agent-004 | 对话历史加载（GET /api/conversations/current + user_id 隔离） |
+| CAP-conv-001 | 对话列表分页加载（cursor-based + 置顶分离） |
+| CAP-conv-002 | 对话重命名（inline edit + PATCH API） |
+| CAP-conv-003 | 对话置顶/取消置顶（PATCH pinned + 分组排序） |
+| CAP-conv-004 | 对话删除（DELETE API + 确认弹窗 + 自动切换） |
+| CAP-conv-005 | 多对话切换（ConversationContext + activeId + 消息加载） |
+| CAP-conv-006 | 流式中切换阻止（isStreaming 检测 + toast 提示） |
+| CAP-conv-007 | 对话标题自动生成（LLM generate_title + SSE title 事件） |
 
 ## 变更记录
+
+### R009 conversation-management (2026-05-25)
+
+- 后端 SQLAlchemy async ORM：Conversation 模型 + composite indexes + ConversationRepo CRUD（单次 DB round trip UPDATE RETURNING）
+- conversation_router：GET 列表（cursor 分页 + 置顶分离）+ PATCH 更新（标题/置顶）+ DELETE 删除 + user_id 隔离
+- LLM 标题自动生成：generate_title 非流式调用 + SSE title 事件推送
+- 前端 ConversationContext + useReducer：9 种 action 管理对话状态（SET_ACTIVE/INSERT_NEW/UPDATE_ITEM/REMOVE_ITEM 等）
+- 侧边栏组件：对话列表 + 新建按钮 + 置顶分组 + 右键菜单（重命名/置顶/删除）+ 确认弹窗
+- chat-layout 集成：ConversationProvider + sidebar + main 三区布局
+- Simplify 收敛修复：requestIdRef 竞态、INSERT_NEW 排序、UPDATE_ITEM 重排、auto-scroll、死代码清理、错误处理
+- E2E：Playwright conversation.spec.ts 8 场景覆盖（布局/创建/切换/重命名/置顶/取消/删除/流式阻止）
+- 241 前端单元测试 + 3 E2E 测试全通过
 
 ### R007-PATCH02 reverse-dependency-fix（补丁 R007）(2026-05-24)
 

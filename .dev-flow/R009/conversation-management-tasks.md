@@ -6,7 +6,7 @@ requirement_cycle: R009
 workflow:
   evaluate_provider: local
   mode: auto
-status: planned
+status: archived
 ---
 
 # 多对话管理 — 后端 任务清单

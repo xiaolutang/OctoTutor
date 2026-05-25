@@ -6,15 +6,19 @@
 graph LR
     User[用户] --> ChatUI[Chat UI]
     ChatUI --> SSEHook[useChatStream]
+    ChatUI --> ConvCtx[ConversationContext]
+    ConvCtx --> Sidebar[Sidebar 侧边栏]
     SSEHook --> ApiClient[apiClient 统一网络层]
     ApiClient --> SSEEndpoint[SSE /api/chat/stream]
     ApiClient --> TokenMgr[TokenManager]
+    ApiClient --> ConvAPI[Conversation API]
 
     Dev[开发者] --> ChatAPI[POST /api/chat]
 
     SSEEndpoint --> AuthMiddleware[JWT 鉴权 Depends]
     ChatAPI --> AuthMiddleware
     RetrieveAPI[POST /api/retrieve] --> AuthMiddleware
+    ConvAPI --> AuthMiddleware
 
     AuthMiddleware --> StateGraph[LangGraph StateGraph]
     StateGraph --> Classify[classify 节点]
@@ -29,6 +33,9 @@ graph LR
 
     SSEEndpoint --> ConvRouter[conversation_router]
     ConvRouter --> Checkpointer[PostgresSaver/MemorySaver]
+
+    ConvAPI --> ConvRepo[ConversationRepo]
+    ConvRepo --> PG[(PostgreSQL)]
 
     Respond --> Generator[LLMGenerator]
     Generator --> LLM[OpenAI 兼容 LLM]
@@ -59,9 +66,12 @@ graph LR
     style Refuse fill:#A5D6A7
     style ConvRouter fill:#A5D6A7
     style Checkpointer fill:#A5D6A7
+    style ConvRepo fill:#A5D6A7
+    style AuthMiddleware fill:#A5D6A7
     style ApiClient fill:#90CAF9
     style TokenMgr fill:#90CAF9
-    style AuthMiddleware fill:#A5D6A7
+    style ConvCtx fill:#90CAF9
+    style Sidebar fill:#90CAF9
     style SSEHook fill:#FFB74D
 ```
 
@@ -69,7 +79,7 @@ graph LR
 
 | 颜色 | 前缀 | 含义 |
 |------|------|------|
-| 🔵 蓝色 | FF | 前端基础（apiClient, TokenManager） |
-| 🟢 绿色 | BF/BB | 后端基础+业务（StateGraph, Auth, Checkpointer, ConvRouter） |
+| 🔵 蓝色 | FF | 前端基础（apiClient, TokenManager, ConversationContext, Sidebar） |
+| 🟢 绿色 | BF/BB | 后端基础+业务（StateGraph, Auth, Checkpointer, ConvRouter, ConvRepo） |
 | 🟡 黄色 | BB | 后端业务（Router Depends 注入） |
 | 🟠 橙色 | FB | 前端业务（useChatStream, useConversation） |
