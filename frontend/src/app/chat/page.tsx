@@ -1,9 +1,27 @@
-import { ChatUI } from '@/components/chat-ui'
+'use client';
+
+import { ConversationProvider } from '@/contexts/conversation-context';
+import { ChatLayout } from '@/components/chat-layout';
+import { ConversationSidebar } from '@/components/conversation-sidebar';
+import { ChatUI } from '@/components/chat-ui';
+import { useChatStream } from '@/chat/use-chat-stream';
+
+function ChatPageInner() {
+  const { isStreaming } = useChatStream();
+
+  return (
+    <ChatLayout
+      sidebar={<ConversationSidebar isStreaming={isStreaming} />}
+    >
+      <ChatUI />
+    </ChatLayout>
+  );
+}
 
 export default function ChatPage() {
   return (
-    <div className="container mx-auto flex h-[calc(100vh-3.5rem)] flex-col px-4">
-      <ChatUI />
-    </div>
-  )
+    <ConversationProvider>
+      <ChatPageInner />
+    </ConversationProvider>
+  );
 }
