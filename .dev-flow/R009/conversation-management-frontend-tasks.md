@@ -18,29 +18,29 @@ status: planned
 
 ## 执行顺序
 
-1. ✅ 任务 1 — shadcn/ui 组件安装（无依赖）
-   - ✅ 1.1 安装 sidebar/popover/alert-dialog/sonner/input
-2. ✅ 任务 2 — chat/types.ts + chat/use-chat-stream.ts — 类型 + SSE title 事件（无依赖）
-   - ✅ 2.1 新增 ConversationItem 等类型
-   - ✅ 2.2 新增 SSE title 事件解析
-3. ✅ 任务 3 — contexts/conversation-context.tsx — 对话状态管理（依赖任务 2）
-   - ✅ 3.1 新建 ConversationContext
-   - ✅ 3.2 新建 chat/use-conversation-list.ts
-4. ✅ 任务 4 — components/chat-layout.tsx — 布局骨架（依赖任务 1）
-   - ✅ 4.1 新建 sidebar + main 布局
-5. ✅ 任务 5 — components/conversation-sidebar.tsx + conversation-item.tsx — 对话列表 UI（依赖任务 3, 4）
-   - ✅ 5.1 新建 conversation-sidebar.tsx
-   - ✅ 5.2 新建 conversation-item.tsx
-6. ✅ 任务 6 — components/conversation-menu.tsx + delete-confirm-dialog.tsx — 三点菜单（依赖任务 3）— 合并到 FB001
-   - ✅ 6.1 内联在 ConversationItemCard 中
-   - ✅ 6.2 内联在 ConversationItemCard 中
-7. ✅ 任务 7 — chat/controller.ts + components/chat-ui.tsx — 集成 ConversationContext（依赖任务 3）
-   - ✅ 7.1 修改 controller.ts — activeId 从 Context 读取
-   - ✅ 7.2 修改 chat-ui.tsx — 自动滚动 + 外部 conversationId
-   - ✅ 7.3 修改 chat/use-conversation.ts — 移除 localStorage
-8. ✅ 任务 8 — app/chat/page.tsx — 页面布局集成（依赖任务 4, 7）
-   - ✅ 8.1 ConversationProvider 包裹 + sidebar + main 布局
-9. ✅ 最后 — 编译验证 + 现有测试通过
+1. ⬜ 任务 1 — shadcn/ui 组件安装（无依赖）
+   - ⬜ 1.1 安装 sidebar/popover/alert-dialog/sonner/input
+2. ⬜ 任务 2 — chat/types.ts + chat/use-chat-stream.ts — 类型 + SSE title 事件（无依赖）
+   - ⬜ 2.1 新增 ConversationItem 等类型
+   - ⬜ 2.2 新增 SSE title 事件解析
+3. ⬜ 任务 3 — contexts/conversation-context.tsx — 对话状态管理（依赖任务 2）
+   - ⬜ 3.1 新建 ConversationContext
+   - ⬜ 3.2 新建 chat/use-conversation-list.ts
+4. ⬜ 任务 4 — components/chat-layout.tsx — 布局骨架（依赖任务 1）
+   - ⬜ 4.1 新建 sidebar + main 布局
+5. ⬜ 任务 5 — components/conversation-sidebar.tsx + conversation-item.tsx — 对话列表 UI（依赖任务 3, 4）
+   - ⬜ 5.1 新建 conversation-sidebar.tsx
+   - ⬜ 5.2 新建 conversation-item.tsx
+6. ⬜ 任务 6 — components/conversation-menu.tsx + delete-confirm-dialog.tsx — 三点菜单（依赖任务 3）— 合并到 FB001
+   - ⬜ 6.1 内联在 ConversationItemCard 中
+   - ⬜ 6.2 内联在 ConversationItemCard 中
+7. ⬜ 任务 7 — chat/controller.ts + components/chat-ui.tsx — 集成 ConversationContext（依赖任务 3）
+   - ⬜ 7.1 修改 controller.ts — activeId 从 Context 读取
+   - ⬜ 7.2 修改 chat-ui.tsx — 自动滚动 + 外部 conversationId
+   - ⬜ 7.3 修改 chat/use-conversation.ts — 移除 localStorage
+8. ⬜ 任务 8 — app/chat/page.tsx — 页面布局集成（依赖任务 4, 7）
+   - ⬜ 8.1 ConversationProvider 包裹 + sidebar + main 布局
+9. ⬜ 最后 — 编译验证 + 现有测试通过
 
 ---
 
@@ -72,7 +72,7 @@ status: planned
 - decision_refs: []
 - blocked_files: []
 
-### FF001.1 安装 shadcn/ui 组件 `✅`
+### FF001.1 安装 shadcn/ui 组件 `⬜`
 
 在 `frontend/` 目录下执行：
 
@@ -114,7 +114,7 @@ npx shadcn@latest add input
 - decision_refs: []
 - blocked_files: []
 
-### FF002.1 修改 types.ts `✅`
+### FF002.1 修改 types.ts `⬜`
 
 新增 ConversationItem 和 ConversationListState：
 
@@ -151,7 +151,7 @@ export interface SSECallbacks {
 }
 ```
 
-### FF002.2 修改 use-chat-stream.ts `✅`
+### FF002.2 修改 use-chat-stream.ts `⬜`
 
 在 `chatStreamFetch` 的事件分发中新增 `case 'title'`：
 
@@ -201,7 +201,7 @@ case 'title':
 - decision_refs: []
 - blocked_files: []
 
-### FF003.1 新建 conversation-context.tsx `✅`
+### FF003.1 新建 conversation-context.tsx `⬜`
 
 ```typescript
 // contexts/conversation-context.tsx
@@ -242,7 +242,7 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
 
 reducer 处理上述 9 种 action。初始化时从 sessionStorage 读取 activeId。
 
-### FF003.2 新建 use-conversation-list.ts `✅`
+### FF003.2 新建 use-conversation-list.ts `⬜`
 
 封装 API 调用逻辑（供 ConversationContext 使用）：
 
@@ -280,7 +280,7 @@ export async function deleteConversation(id: string): Promise<void>
 - decision_refs: []
 - blocked_files: []
 
-### FF004.1 新建 chat-layout.tsx `✅`
+### FF004.1 新建 chat-layout.tsx `⬜`
 
 ```tsx
 // components/chat-layout.tsx
@@ -335,7 +335,7 @@ export function ChatLayout({ sidebar, children }: { sidebar: React.ReactNode; ch
 - decision_refs: []
 - blocked_files: []
 
-### FB001.1 新建 conversation-sidebar.tsx `✅`
+### FB001.1 新建 conversation-sidebar.tsx `⬜`
 
 ```tsx
 // components/conversation-sidebar.tsx
@@ -349,7 +349,7 @@ export function ConversationSidebar() {
 }
 ```
 
-### FB001.2 新建 conversation-item-card.tsx `✅`
+### FB001.2 新建 conversation-item-card.tsx `⬜`
 
 ```tsx
 // components/conversation-item-card.tsx
@@ -400,7 +400,7 @@ export function ConversationItemCard({ item, isActive, onSelect }: {
 - decision_refs: []
 - blocked_files: []
 
-### FB002.1 新建 conversation-menu.tsx `✅`（内联在 ConversationItemCard）
+### FB002.1 新建 conversation-menu.tsx `⬜`（内联在 ConversationItemCard）
 
 ```tsx
 // components/conversation-menu.tsx
@@ -420,7 +420,7 @@ export function ConversationMenu({ item, onRenameStart }: {
 }
 ```
 
-### FB002.2 新建 delete-confirm-dialog.tsx `✅`（内联在 ConversationItemCard）
+### FB002.2 新建 delete-confirm-dialog.tsx `⬜`（内联在 ConversationItemCard）
 
 ```tsx
 // components/delete-confirm-dialog.tsx
@@ -473,7 +473,7 @@ export function DeleteConfirmDialog({ open, onOpenChange, onConfirm }: {
 - decision_refs: []
 - blocked_files: []
 
-### FB003.1 修改 controller.ts `✅`
+### FB003.1 修改 controller.ts `⬜`
 
 关键改动：
 1. 移除内部 `conversationId` 状态管理，改为从 ConversationContext 获取 activeId
@@ -503,7 +503,7 @@ const startSSE = (question: string) => {
 };
 ```
 
-### FB003.2 修改 chat-ui.tsx `✅`
+### FB003.2 修改 chat-ui.tsx `⬜`
 
 1. 添加自动滚动逻辑：
    - 发送消息后 scroll to bottom
@@ -520,7 +520,7 @@ useEffect(() => {
 }, [messages.length, isStreaming]);
 ```
 
-### FB003.3 修改 use-conversation.ts `✅`
+### FB003.3 修改 use-conversation.ts `⬜`
 
 1. 移除 `loadConversationId()` / `saveConversationId()` localStorage 逻辑
 2. `useConversation` hook 改为接收 `conversationId: string` 参数（不再从 localStorage 读取）
@@ -554,7 +554,7 @@ useEffect(() => {
 - decision_refs: []
 - blocked_files: []
 
-### FB004.1 ConversationProvider 包裹 + 布局 `✅`
+### FB004.1 ConversationProvider 包裹 + 布局 `⬜`
 
 ```tsx
 // app/chat/page.tsx

@@ -410,4 +410,86 @@ describe('chatStreamFetch', () => {
     expect(body).not.toHaveProperty('conversation_id');
     expect(body.question).toBe('test question');
   });
+
+  // R009-FF002: title SSE 事件 → onTitle 被调用且参数正确
+  it('should call onTitle when backend sends title event', async () => {
+    const events = [
+      { type: 'init', data: { conversation_id: 'conv-abc' } },
+      { type: 'status', data: { stage: 'retrieving', message: '正在检索...' } },
+      { type: 'token', data: 'Hello' },
+      { type: 'done', data: null },
+      { type: 'title', data: { conversation_id: 'conv-abc', title: '关于数学的问题' } },
+    ];
+
+    fetchSpy.mockResolvedValue(mockFetchSSE(events));
+
+    const cbs = createCallbacks();
+    const abortController = new AbortController();
+    const setStreaming = vi.fn();
+
+    chatStreamFetch('test question', cbs, abortController, setStreaming);
+
+    await vi.waitFor(() => {
+      expect(cbs.onTitle).toHaveBeenCalled();
+    });
+
+    expect(cbs.onTitle).toHaveBeenCalledTimes(1);
+    expect(cbs.onTitle).toHaveBeenCalledWith('conv-abc', '关于数学的问题');
+    expect(cbs.onError).not.toHaveBeenCalled();
+  });
+
+  // R009-FF002: onTitle 在 onDone 之后触发（后端通常在 done 后发 title）
+  it('should call onTitle after onDone with correct order', async () => {
+    const events = [
+      { type: 'init', data: { conversation_id: 'conv-xyz' } },
+      { type: 'token', data: 'world' },
+      { type: 'done', data: null },
+      { type: 'title', data: { conversation_id: 'conv-xyz', title: '新对话标题' } },
+    ];
+
+    fetchSpy.mockResolvedValue(mockFetchSSE(events));
+
+    const cbs = createCallbacks();
+    const abortController = new AbortController();
+    const setStreaming = vi.fn();
+
+    chatStreamFetch('test', cbs, abortController, setStreaming);
+
+    await vi.waitFor(() => {
+      expect(cbs.onTitle).toHaveBeenCalled();
+    });
+
+    // 验证顺序：onInit -> onToken -> onDone -> onTitle
+    expect(cbs.callbackOrder).toEqual([
+      'onInit:conv-xyz',
+      'onToken',
+      'onDone',
+      'onTitle',
+    ]);
+  });
+
+  // R009-FF002: title 事件中 conversation_id 和 title 参数解析正确
+  it('should correctly parse conversation_id and title from title event data', async () => {
+    const events = [
+      { type: 'title', data: { conversation_id: 'conv-12345', title: '这是一个较长的标题包含特殊字符：©️§¶' } },
+    ];
+
+    fetchSpy.mockResolvedValue(mockFetchSSE(events));
+
+    const cbs = createCallbacks();
+    const abortController = new AbortController();
+    const setStreaming = vi.fn();
+
+    chatStreamFetch('test', cbs, abortController, setStreaming);
+
+    await vi.waitFor(() => {
+      expect(cbs.onTitle).toHaveBeenCalled();
+    });
+
+    expect(cbs.onTitle).toHaveBeenCalledWith(
+      'conv-12345',
+      '这是一个较长的标题包含特殊字符：©️§¶',
+    );
+    expect(setStreaming).toHaveBeenCalledWith(false);
+  });
 });

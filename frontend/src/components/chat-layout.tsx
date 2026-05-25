@@ -11,7 +11,7 @@ interface ChatLayoutProps {
 export function ChatLayout({ sidebar, children }: ChatLayoutProps) {
   return (
     <SidebarProvider>
-      <div className="flex h-screen">
+      <div className="flex h-full">
         <aside className="w-64 shrink-0 border-r bg-background">{sidebar}</aside>
         <main className="flex-1 overflow-hidden">{children}</main>
       </div>

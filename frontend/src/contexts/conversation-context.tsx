@@ -14,6 +14,7 @@ import {
   patchConversation,
   deleteConversation as deleteConversationApi,
 } from '@/chat/use-conversation-list';
+import { useAuth } from '@/contexts/auth-context';
 
 // ---------------------------------------------------------------------------
 // Reducer
