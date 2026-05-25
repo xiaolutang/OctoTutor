@@ -4,6 +4,8 @@
 复用 settings.database_url，驱动替换为 postgresql+psycopg://。
 """
 
+from collections.abc import AsyncGenerator
+
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.config import settings
@@ -18,6 +20,12 @@ engine = create_async_engine(_database_url, pool_size=5)
 async_session_factory = async_sessionmaker(
     engine, class_=AsyncSession, expire_on_commit=False,
 )
+
+
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    """async generator，yield AsyncSession（供路由层 Depends 使用）"""
+    async with async_session_factory() as session:
+        yield session
 
 
 async def create_tables():
