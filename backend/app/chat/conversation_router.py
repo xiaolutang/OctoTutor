@@ -1,19 +1,32 @@
 """对话历史路由
 
-GET /api/conversations/current — 获取当前用户最近对话的消息列表。
-通过 LangGraph checkpointer 加载 checkpoint，提取 messages 转换为 ApiMessage 格式。
+GET  /api/conversations/current  — 获取当前用户最近对话的消息列表。
+GET  /api/conversations          — 分页列表（游标）。
+PATCH /api/conversations/{id}    — 更新对话（重命名 / 置顶）。
+DELETE /api/conversations/{id}   — 删除对话。
 """
 
 from __future__ import annotations
 
+import base64
 import logging
+from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse, Response
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.chat.dependencies import get_checkpointer
-from app.chat.schemas import ApiMessage, ThinkingPayload
+from app.chat.dependencies import get_checkpointer, get_db
+from app.chat.errors import ConversationErrorCode, make_conversation_error
+from app.chat.schemas import (
+    ApiMessage,
+    ConversationItemResponse,
+    ConversationListResponse,
+    ConversationUpdateRequest,
+    ThinkingPayload,
+)
 from app.domain.models import SourceReference
+from app.infra.conversation_repo import ConversationRepo
 from app.middleware.auth import UserContext, get_current_user
 
 router = APIRouter(prefix="/api", tags=["conversations"])
@@ -221,3 +234,111 @@ def _to_api_message(msg, index: int) -> ApiMessage:
         thinking_steps=thinking_steps,
         created_at=created_at,
     )
+
+
+# ---------------------------------------------------------------------------
+# Conversation CRUD 端点 (R009)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/conversations")
+async def list_conversations(
+    cursor: str | None = Query(None),
+    limit: int = Query(20, ge=1, le=50),
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(get_current_user),
+):
+    """分页列表（游标）— 首页返回置顶 + 普通，翻页只返回普通"""
+    items, has_more = await ConversationRepo.list_by_user(db, user.user_id, cursor, limit)
+
+    response_items = [
+        ConversationItemResponse(
+            id=item.id,
+            title=item.title,
+            pinned=item.pinned,
+            pinned_at=item.pinned_at,
+            message_count=item.message_count,
+            created_at=item.created_at,
+            updated_at=item.updated_at,
+        )
+        for item in items
+    ]
+
+    next_cursor = None
+    if has_more and items:
+        last = items[-1]
+        raw = f"{last.updated_at.isoformat()}|{last.id}"
+        next_cursor = base64.b64encode(raw.encode()).decode()
+
+    return ConversationListResponse(items=response_items, cursor=next_cursor, has_more=has_more)
+
+
+@router.patch("/conversations/{conversation_id}")
+async def update_conversation(
+    conversation_id: str,
+    body: ConversationUpdateRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(get_current_user),
+):
+    """更新对话 — 重命名 / 置顶 / 取消置顶"""
+    conv = await ConversationRepo.get_by_id(db, conversation_id, user.user_id)
+    if not conv:
+        return JSONResponse(status_code=404, content=make_conversation_error(ConversationErrorCode.NOT_FOUND))
+
+    updates = {}
+
+    if body.title is not None:
+        if not body.title.strip() or len(body.title) > 200:
+            return JSONResponse(status_code=400, content=make_conversation_error(ConversationErrorCode.TITLE_INVALID))
+        updates["title"] = body.title.strip()
+
+    if body.pinned is not None:
+        if body.pinned and not conv.pinned:
+            count = await ConversationRepo.count_pinned(db, user.user_id)
+            if count >= 5:
+                return JSONResponse(status_code=400, content=make_conversation_error(ConversationErrorCode.PIN_LIMIT))
+            updates["pinned"] = True
+            updates["pinned_at"] = datetime.now(timezone.utc)
+        elif not body.pinned and conv.pinned:
+            updates["pinned"] = False
+            updates["pinned_at"] = None
+
+    if updates:
+        conv = await ConversationRepo.update(db, conversation_id, user.user_id, **updates)
+        await db.commit()
+
+    return ConversationItemResponse(
+        id=conv.id,
+        title=conv.title,
+        pinned=conv.pinned,
+        pinned_at=conv.pinned_at,
+        message_count=conv.message_count,
+        created_at=conv.created_at,
+        updated_at=conv.updated_at,
+    )
+
+
+@router.delete("/conversations/{conversation_id}")
+async def delete_conversation(
+    conversation_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    checkpointer=Depends(get_checkpointer),
+    user: UserContext = Depends(get_current_user),
+):
+    """删除对话 + 清理 checkpoint"""
+    deleted = await ConversationRepo.delete_by_id(db, conversation_id, user.user_id)
+    if not deleted:
+        return JSONResponse(status_code=404, content=make_conversation_error(ConversationErrorCode.NOT_FOUND))
+
+    await db.commit()
+
+    # 清理 checkpoint（失败不阻断）
+    try:
+        if hasattr(checkpointer, "adelete_thread"):
+            await checkpointer.adelete_thread(conversation_id)
+    except Exception as e:
+        logger.warning(f"[conversation] checkpoint cleanup failed for {conversation_id}: {e}")
+
+    return Response(status_code=204)
