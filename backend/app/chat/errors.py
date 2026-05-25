@@ -45,3 +45,29 @@ def make_error(code: ChatErrorCode) -> dict:
     """根据 ChatErrorCode 枚举值生成错误字典"""
     defn = ERROR_REGISTRY[code]
     return {"code": defn.code, "message": defn.message, "action": defn.action}
+
+
+# ---------------------------------------------------------------------------
+# 对话管理模块错误码 (03xxx) — R009
+# ---------------------------------------------------------------------------
+
+class ConversationErrorCode(Enum):
+    """对话管理模块错误码"""
+    NOT_FOUND = "03901"        # 对话不存在
+    PIN_LIMIT = "03902"        # 置顶超限
+    TITLE_INVALID = "03903"    # 标题校验失败
+    CREATE_FAILED = "03904"    # 对话创建失败
+
+
+CONVERSATION_ERROR_REGISTRY: dict[ConversationErrorCode, ErrorDef] = {
+    ConversationErrorCode.NOT_FOUND: ErrorDef("03901", "对话不存在", "refresh"),
+    ConversationErrorCode.PIN_LIMIT: ErrorDef("03902", "最多置顶 5 条对话", "unpin_first"),
+    ConversationErrorCode.TITLE_INVALID: ErrorDef("03903", "标题不能为空且不超过200字", "retry"),
+    ConversationErrorCode.CREATE_FAILED: ErrorDef("03904", "对话创建失败", "retry"),
+}
+
+
+def make_conversation_error(code: ConversationErrorCode) -> dict:
+    """根据 ConversationErrorCode 枚举值生成错误字典"""
+    defn = CONVERSATION_ERROR_REGISTRY[code]
+    return {"code": defn.code, "message": defn.message, "action": defn.action}

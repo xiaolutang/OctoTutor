@@ -1,4 +1,7 @@
+from collections.abc import AsyncGenerator
+
 from fastapi import Request, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.protocols import Reranker, Generator
 from app.chat.service import ChatService
@@ -52,3 +55,10 @@ def get_graph(request: Request):
 def get_checkpointer(request: Request):
     """获取 LangGraph checkpointer 实例"""
     return request.app.state.checkpointer
+
+
+async def get_db(request: Request) -> AsyncGenerator[AsyncSession, None]:
+    """注入 SQLAlchemy async session（conversation CRUD 使用）"""
+    factory = request.app.state.db_session_factory
+    async with factory() as session:
+        yield session

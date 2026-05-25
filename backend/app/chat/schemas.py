@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -57,3 +58,31 @@ class ApiMessage(BaseModel):
     sources: list[SourceReference] = Field(default_factory=list)
     thinking_steps: list[ThinkingPayload] = Field(default_factory=list)
     created_at: str = ""
+
+
+# ---------------------------------------------------------------------------
+# Conversation 对话管理 Schema (R009)
+# ---------------------------------------------------------------------------
+
+class ConversationItemResponse(BaseModel):
+    """对话列表项"""
+    id: str
+    title: str
+    pinned: bool
+    pinned_at: datetime | None = None
+    message_count: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class ConversationListResponse(BaseModel):
+    """对话列表响应"""
+    items: list[ConversationItemResponse]
+    cursor: str | None = None
+    has_more: bool = False
+
+
+class ConversationUpdateRequest(BaseModel):
+    """对话更新请求"""
+    title: str | None = None
+    pinned: bool | None = None
