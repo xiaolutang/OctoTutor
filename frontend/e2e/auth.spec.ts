@@ -1,29 +1,5 @@
-import { test, expect, type Page } from "@playwright/test"
-
-const TEST_USER = {
-  username: process.env.E2E_USERNAME!,
-  password: process.env.E2E_PASSWORD!,
-}
-
-const TIMEOUTS = {
-  AUTH_NAV: 15_000,
-  AUTH_FORM: 10_000,
-}
-
-/** 辅助函数：完成 OAuth 登录并等待回到 OctoTutor */
-async function loginViaAuthCenter(page: Page) {
-  await page.goto("/")
-  await page.locator("button:has-text('登录'), a:has-text('登录')").first().click()
-  await page.waitForURL(/auth\.localhost/, { timeout: TIMEOUTS.AUTH_FORM })
-
-  await page.locator("#username").fill(TEST_USER.username)
-  await page.locator("#password").fill(TEST_USER.password)
-  await page.locator("#btn-submit").click()
-
-  // 等待回调完成并回到 OctoTutor，用退出按钮出现作为登录成功标志
-  await page.waitForURL(/octotutor\.localhost/, { timeout: TIMEOUTS.AUTH_NAV })
-  await expect(page.locator("button:has-text('退出')").first()).toBeVisible({ timeout: 10000 })
-}
+import { test, expect } from "@playwright/test"
+import { loginViaAuthCenter, TEST_USER, TIMEOUTS } from "./helpers"
 
 test.describe("OctoTutor Auth Integration", () => {
   test("首页加载正常，显示登录按钮", async ({ page }) => {

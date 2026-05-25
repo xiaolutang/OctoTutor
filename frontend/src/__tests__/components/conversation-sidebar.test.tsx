@@ -73,15 +73,21 @@ function simulateSidebarRender(state: SidebarState): {
 
 /**
  * 模拟点击 item 时的行为
- * ConversationItemCard 的 onClick: if (isStreaming) return; onSelect(item.id)
+ * ConversationItemCard 的 onClick:
+ *   if (isStreaming) { toast.warning('请等待当前回答完成'); return; }
+ *   onSelect(item.id)
  */
 function simulateItemClick(
   itemId: string,
   isStreaming: boolean,
   onSelect: (id: string) => void,
-): { called: boolean; calledWith?: string } {
+  toastWarning?: ReturnType<typeof vi.fn>,
+): { called: boolean; calledWith?: string; toastCalled?: boolean; toastMessage?: string } {
   if (isStreaming) {
-    return { called: false };
+    if (toastWarning) {
+      toastWarning('请等待当前回答完成');
+    }
+    return { called: false, toastCalled: true, toastMessage: '请等待当前回答完成' };
   }
   onSelect(itemId);
   return { called: true, calledWith: itemId };
@@ -300,10 +306,14 @@ describe('ConversationSidebar 正在生成时点击切换', () => {
     mockSwitchTo.mockClear();
   });
 
-  it('isStreaming=true 时点击 item 不调用 switchTo', () => {
-    const result = simulateItemClick('conv-123', true, mockSwitchTo);
+  it('isStreaming=true 时点击 item 不调用 switchTo 但显示 toast 提示', () => {
+    const mockToastWarning = vi.fn();
+    const result = simulateItemClick('conv-123', true, mockSwitchTo, mockToastWarning);
     expect(result.called).toBe(false);
     expect(mockSwitchTo).not.toHaveBeenCalled();
+    expect(result.toastCalled).toBe(true);
+    expect(result.toastMessage).toBe('请等待当前回答完成');
+    expect(mockToastWarning).toHaveBeenCalledWith('请等待当前回答完成');
   });
 
   it('isStreaming=false 时点击 item 正常调用 switchTo', () => {

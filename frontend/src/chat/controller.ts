@@ -48,14 +48,16 @@ export function useChatController() {
   // 切换对话时重新加载历史消息
   useEffect(() => {
     if (!mounted) return;
-    if (prevActiveIdRef.current === activeId) return;
-    prevActiveIdRef.current = activeId;
 
+    // 新对话：始终清空消息（不依赖 prevActiveId 比较）
     if (activeId === null && isNewConversation) {
-      // 新对话：清空消息
+      prevActiveIdRef.current = null;
       setMessages([]);
       return;
     }
+
+    if (prevActiveIdRef.current === activeId) return;
+    prevActiveIdRef.current = activeId;
 
     loadConversation(activeId).then(({ messages: loadedMessages }) => {
       setMessages(loadedMessages);

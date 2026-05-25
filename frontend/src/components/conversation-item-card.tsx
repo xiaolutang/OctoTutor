@@ -87,7 +87,10 @@ export function ConversationItemCard({
           : 'hover:bg-accent/50'
       }`}
       onClick={() => {
-        if (isStreaming) return;
+        if (isStreaming) {
+          toast.warning('请等待当前回答完成');
+          return;
+        }
         onSelect(item.id);
       }}
     >

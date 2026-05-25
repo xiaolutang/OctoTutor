@@ -302,7 +302,7 @@ export function ChatLayout({ sidebar, children }: { sidebar: React.ReactNode; ch
 
 ---
 
-## R009-FB001：conversation-sidebar.tsx + conversation-item.tsx — 对话列表 UI `✅ 已完成`
+## R009-FB001：conversation-sidebar.tsx + conversation-item.tsx — 对话列表 UI `✅ 已完成（重冲通过）`
 
 - 文件：
   - `frontend/src/components/conversation-sidebar.tsx`（新建）
