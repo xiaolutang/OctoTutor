@@ -10,6 +10,7 @@ from app.infra.reranker import DashScopeReranker
 from app.infra.llm import LLMGenerator
 from app.chat.service import ChatService
 from app.agent.graph import create_graph
+from app.infra.database import engine, async_session_factory, create_tables
 from app.api.routes.health import router as health_router
 from app.api.routes.retrieve import router as retrieve_router
 from app.api.routes.config import router as config_router
@@ -121,6 +122,14 @@ async def lifespan(application: FastAPI):
         )
     application.state.checkpointer = checkpointer
 
+    # 初始化 SQLAlchemy async engine + 自动建表（R009）
+    try:
+        await create_tables()
+        application.state.db_session_factory = async_session_factory
+        print("[startup] SQLAlchemy engine + conversations table initialized")
+    except Exception as e:
+        print(f"[startup] WARNING: SQLAlchemy init failed ({e})")
+
     # 编译 Agent StateGraph
     graph = create_graph(
         checkpointer=checkpointer,
@@ -136,6 +145,12 @@ async def lifespan(application: FastAPI):
     if checkpointer_ctx is not None:
         await checkpointer_ctx.__aexit__(None, None, None)
         print("[shutdown] PostgresSaver connection pool closed")
+    # shutdown: 释放 SQLAlchemy engine (R009)
+    try:
+        await engine.dispose()
+        print("[shutdown] SQLAlchemy engine disposed")
+    except Exception:
+        pass
     print(f"[shutdown] {settings.app_name} stopped")
 
 
