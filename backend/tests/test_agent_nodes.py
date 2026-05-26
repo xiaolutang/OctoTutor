@@ -1,5 +1,6 @@
 """R007-BB003+BB004 单元测试 — refuse / respond / prompts"""
 
+import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -250,4 +251,66 @@ class TestSummarizeNode:
             "conversation_summary": "",
         }
         result = await summarize(state)
+        assert result == {}
+
+
+# ===================================================================
+# 5. _rewrite 闭包测试
+# ===================================================================
+
+
+class TestRewriteNode:
+    """_make_rewrite 工厂函数单元测试"""
+
+    def test_first_turn_passthrough(self):
+        """首轮（messages <= 1）→ return {}"""
+        from app.agent.graph import _make_rewrite
+        mock_chat_model = AsyncMock()
+        _rewrite = _make_rewrite(mock_chat_model)
+
+        state = {
+            "messages": [HumanMessage(content="什么是函数？")],
+            "question": "什么是函数？",
+        }
+        result = asyncio.get_event_loop().run_until_complete(_rewrite(state))
+        assert result == {}
+        mock_chat_model.ainvoke.assert_not_called()
+
+    def test_multi_turn_rewrite(self):
+        """多轮 → LLM 改写 → 返回 rewritten_question"""
+        from app.agent.graph import _make_rewrite
+        mock_chat_model = AsyncMock()
+        mock_chat_model.ainvoke.return_value = MagicMock(content="函数的定义域怎么求？")
+        _rewrite = _make_rewrite(mock_chat_model)
+
+        state = {
+            "messages": [
+                HumanMessage(content="什么是函数？", id="m1"),
+                AIMessage(content="函数是一种对应关系...", id="m2"),
+                HumanMessage(content="它的定义域怎么求？", id="m3"),
+            ],
+            "question": "它的定义域怎么求？",
+        }
+        result = asyncio.get_event_loop().run_until_complete(_rewrite(state))
+        assert "rewritten_question" in result
+        assert "函数" in result["rewritten_question"]
+        assert "定义域" in result["rewritten_question"]
+        mock_chat_model.ainvoke.assert_called_once()
+
+    def test_llm_failure_fallback(self):
+        """LLM 失败 → return {}"""
+        from app.agent.graph import _make_rewrite
+        mock_chat_model = AsyncMock()
+        mock_chat_model.ainvoke.side_effect = Exception("LLM error")
+        _rewrite = _make_rewrite(mock_chat_model)
+
+        state = {
+            "messages": [
+                HumanMessage(content="什么是函数？", id="m1"),
+                AIMessage(content="函数是一种对应关系...", id="m2"),
+                HumanMessage(content="它的定义域怎么求？", id="m3"),
+            ],
+            "question": "它的定义域怎么求？",
+        }
+        result = asyncio.get_event_loop().run_until_complete(_rewrite(state))
         assert result == {}

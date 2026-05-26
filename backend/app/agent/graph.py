@@ -42,6 +42,7 @@ class AgentState(dict):
     degraded: bool
     degradation_reason: str | None
     conversation_summary: str
+    rewritten_question: str
 
 
 def _route_by_intent(state: AgentState) -> str:
@@ -113,6 +114,48 @@ def _make_summarize(chat_model):
     return _summarize
 
 
+def _make_rewrite(chat_model):
+    """创建 rewrite 节点闭包（可独立测试）
+
+    首轮（len(messages)<=1）→ no-op（return {}）
+    多轮 → LLM 改写追问为独立问题
+    """
+
+    async def _rewrite(state):
+        """rewrite 节点 — 多轮时改写追问为独立问题"""
+        messages = state.get("messages", [])
+        question = state.get("question", "")
+
+        # 1. 首轮（messages 只有当前 HumanMessage 或为空）→ 透传
+        if len(messages) <= 1:
+            return {}
+
+        # 2. 多轮 → 取最近几轮构建 history
+        # 只取最近 6 条消息（3 轮对话）作为 history
+        recent = messages[-6:] if len(messages) > 6 else messages[:-1]
+        history_lines = []
+        for msg in recent:
+            role = "用户" if isinstance(msg, HumanMessage) else "助手"
+            history_lines.append(f"{role}：{msg.content}")
+        history = "\n".join(history_lines)
+
+        # 3. 调用 LLM 改写
+        from app.agent.prompts import REWRITE_PROMPT
+        prompt = REWRITE_PROMPT.format(history=history, question=question)
+
+        try:
+            response = await chat_model.ainvoke([HumanMessage(content=prompt)])
+            rewritten = response.content.strip()
+            if rewritten:
+                return {"rewritten_question": rewritten}
+        except Exception:
+            pass  # LLM 失败 → fallback 原始 question
+
+        return {}  # fallback：不设 rewritten_question，_retrieve 会用 question
+
+    return _rewrite
+
+
 def create_graph(checkpointer=None, chat_service=None, generator=None):
     """创建并编译 Agent StateGraph
 
@@ -132,6 +175,9 @@ def create_graph(checkpointer=None, chat_service=None, generator=None):
 
     # summarize 节点闭包（此阶段不注册到图拓扑，BB003 负责）
     _summarize = _make_summarize(chat_model)
+
+    # rewrite 节点闭包（此阶段不注册到图拓扑，BB003 负责）
+    _rewrite = _make_rewrite(chat_model)
 
     async def _retrieve(state):
         """retrieve 节点 — 调用 ChatService._retrieve 检索管线"""
