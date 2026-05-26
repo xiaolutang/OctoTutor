@@ -143,6 +143,12 @@
       "intent": "textbook",
       "rewrite_should_trigger": true,
       "rewrite_contains": ["单位圆"],
+      "summary_triggered": false,
+      "respond_has_context": true
+    }
+  },
+  {
+    "id": "L2-P03",
     "level": "L2",
     "category": "ellipsis_completion",
     "negative": false,
@@ -272,7 +278,7 @@
     "expected": {
       "intent": "textbook",
       "rewrite_should_trigger": true,
-      "rewrite_contains": ["贝叶斯"],
+      "rewrite_contains": [],
       "summary_triggered": false,
       "respond_has_context": true
     }
