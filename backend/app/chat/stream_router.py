@@ -159,19 +159,19 @@ async def _map_event_to_sse(event, http_request: Request):
 async def _map_node_update_to_sse(node_name: str, node_output: dict):
     """将节点完成事件映射为 SSE 帧"""
     if node_name == "classify":
-        intent = node_output.get("intent", "")
+        intent = node_output.get("intent", "") if node_output else ""
         yield _sse_frame(
             "thinking",
             {"text": f"意图分类: {intent}", "index": 0},
         )
 
     elif node_name == "summarize":
-        summary = node_output.get("conversation_summary")
+        summary = node_output.get("conversation_summary") if node_output else None
         if summary:
             yield _sse_frame("thinking", {"text": "上下文已压缩", "index": 0})
 
     elif node_name == "rewrite":
-        rewritten = node_output.get("rewritten_question")
+        rewritten = node_output.get("rewritten_question") if node_output else None
         if rewritten:
             yield _sse_frame("thinking", {"text": f"查询改写: {rewritten}", "index": 1})
 
@@ -181,7 +181,7 @@ async def _map_node_update_to_sse(node_name: str, node_output: dict):
             {"stage": "retrieving", "message": "正在检索教材..."},
         )
 
-        sources = node_output.get("sources", [])
+        sources = node_output.get("sources", []) if node_output else []
         if sources:
             serialized = [_serialize_source(s) for s in sources]
             yield _sse_frame("sources", serialized)

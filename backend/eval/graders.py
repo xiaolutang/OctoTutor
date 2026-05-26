@@ -127,13 +127,13 @@ def transcript_check(
     """Grader 4: 验证执行轨迹约束
 
     - 首轮不触发 summarize LLM 调用（summarize 返回 {}）
-    - 单轮全链路 <= 30s
+    - 单轮全链路 <= 120s（真实 LLM 每轮约 15-25s）
     """
     failures = []
 
-    # 全链路耗时 <= 30s
-    if elapsed_ms > 30000:
-        failures.append(f"全链路耗时 {elapsed_ms:.0f}ms 超过 30s 上限")
+    # 全链路耗时 <= 120s（适配真实 LLM 延迟）
+    if elapsed_ms > 120000:
+        failures.append(f"全链路耗时 {elapsed_ms:.0f}ms 超过 120s 上限")
 
     return GraderResult(
         name="transcript",

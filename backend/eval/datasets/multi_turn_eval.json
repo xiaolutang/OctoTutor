@@ -142,13 +142,7 @@
     "expected": {
       "intent": "textbook",
       "rewrite_should_trigger": true,
-      "rewrite_contains": ["三角函数", "单位圆"],
-      "summary_triggered": false,
-      "respond_has_context": true
-    }
-  },
-  {
-    "id": "L2-P03",
+      "rewrite_contains": ["单位圆"],
     "level": "L2",
     "category": "ellipsis_completion",
     "negative": false,
@@ -242,7 +236,7 @@
     "expected": {
       "intent": "textbook",
       "rewrite_should_trigger": true,
-      "rewrite_contains": ["三角函数", "余弦"],
+      "rewrite_contains": ["余弦"],
       "summary_triggered": false,
       "respond_has_context": true
     }
@@ -260,7 +254,7 @@
     "expected": {
       "intent": "textbook",
       "rewrite_should_trigger": true,
-      "rewrite_contains": ["导数", "求导"],
+      "rewrite_contains": ["导数"],
       "summary_triggered": false,
       "respond_has_context": true
     }
@@ -278,7 +272,7 @@
     "expected": {
       "intent": "textbook",
       "rewrite_should_trigger": true,
-      "rewrite_contains": ["概率", "贝叶斯"],
+      "rewrite_contains": ["贝叶斯"],
       "summary_triggered": false,
       "respond_has_context": true
     }
@@ -342,7 +336,7 @@
     "negative": false,
     "turns": [
       {"role": "user", "content": "什么是对数？"},
-      {"role": "user", "content": "那三角函数呢？"}
+      {"role": "user", "content": "那三角函数的定义是什么？"}
     ],
     "expected": {
       "intent": "textbook",

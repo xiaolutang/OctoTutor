@@ -10,11 +10,10 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import re
 import sys
 import time
 
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
 
 from eval.graders import (
@@ -26,96 +25,30 @@ from eval.graders import (
 )
 
 
-# ---------------------------------------------------------------------------
-# Mock LLM — 根据 prompt 内容智能返回
-# ---------------------------------------------------------------------------
-
-# 复合数学关键词（优先匹配长词）
-_COMPOUND_KEYWORDS = [
-    "等差数列", "等比数列", "三角函数", "对数函数",
-    "条件概率", "单位圆", "几何意义", "贝叶斯",
-]
-
-# 基础数学关键词列表
-_MATH_KEYWORDS = {
-    "函数", "方程", "不等式", "数列", "集合", "概率", "统计",
-    "三角", "向量", "导数", "积分", "极限", "矩阵",
-    "直线", "圆", "椭圆", "双曲线", "抛物线", "圆锥",
-    "求", "计算", "证明", "解", "化简", "推导",
-    "最大值", "最小值", "极值", "单调", "奇偶",
-    "排列", "组合", "二项式", "分布",
-    "平面", "空间", "坐标", "角度", "距离",
-    "公式", "定理", "性质", "定义",
-    "模", "通项", "对数", "等差", "等比",
-    "单位圆", "图像", "例子", "条件概率", "贝叶斯",
-    "几何意义", "余弦", "求和", "运算", "定义域",
-    "等差数列", "等比数列", "三角函数", "对数函数",
-}
-
-
-def _extract_keywords(text: str) -> list[str]:
-    """从文本中提取数学关键词（优先匹配复合词）"""
-    found = []
-    # 先匹配复合关键词
-    for kw in _COMPOUND_KEYWORDS:
-        if kw in text:
-            found.append(kw)
-    # 再匹配基础关键词（跳过已被复合词包含的）
-    for kw in _MATH_KEYWORDS:
-        if kw in text and not any(kw in compound for compound in found if compound != kw):
-            found.append(kw)
-    return found
-
-
-async def _mock_llm_ainvoke(messages):
-    """智能 mock LLM：根据 prompt 内容返回合适的 rewrite 或 respond"""
-    last_msg = messages[-1].content if messages else ""
-
-    # 如果是 rewrite prompt（包含"改写后的独立问题"）
-    if "改写后的独立问题" in last_msg:
-        # 分区提取关键词：从"对话历史"区域提取主概念
-        history_section = last_msg.split("对话历史：")[1].split("用户追问：")[0] if "对话历史：" in last_msg else ""
-
-        # 尝试提取用户追问
-        question_match = re.search(r"用户追问：(.+?)(?:\n|$)", last_msg)
-        question = question_match.group(1).strip() if question_match else ""
-
-        # 替换代词
-        pronouns = {"它", "它们", "这个", "那个", "其"}
-        result = question
-        for pronoun in pronouns:
-            result = result.replace(pronoun, "")
-
-        # 找到历史中的主概念（用户第一个问题中的核心复合关键词）
-        # 这些是首轮用户消息中的关键词，代表对话主题
-        first_user_keywords = []
-        user_lines = [line for line in history_section.split("\n") if line.startswith("用户：")]
-        if user_lines:
-            first_user_keywords = _extract_keywords(user_lines[0])
-
-        # 如果追问中缺少主概念，从首轮用户消息中补充
-        missing_concepts = [
-            kw for kw in first_user_keywords
-            if kw not in result and len(kw) >= 2
-        ]
-        # 按长度降序，优先补全最长的主概念
-        missing_concepts.sort(key=len, reverse=True)
-        if missing_concepts:
-            result = f"{missing_concepts[0]}{result.lstrip('的')}"
-
-        return AIMessage(content=result if result else question)
-
-    # 默认 respond
-    return AIMessage(content="这是测试回答")
-
-
 def _build_graph():
-    """构建带 mock 的 graph（使用真实 graph 拓扑 + mock 外部依赖）"""
+    """构建 graph：真实 LLM（GLM-5.1）+ mock ChatService._retrieve"""
     from unittest.mock import MagicMock
+    from dotenv import dotenv_values
 
     from app.agent.graph import create_graph
+    from app.infra.llm import LLMGenerator
 
-    # mock ChatService
+    # 直接从 .env 读取 LLM 配置（避免依赖完整 Settings）
+    env = dotenv_values(".env")
+    api_key = env.get("NEWAPI_API_KEY", "")
+    base_url = env.get("NEWAPI_BASE_URL", "http://localhost:13000/v1")
+    model = env.get("LLM_MODEL", "glm-5.1")
+
+    print(f"[eval] LLM: {model} @ {base_url}")
+
+    # 真实 LLMGenerator
+    generator = LLMGenerator(
+        api_key=api_key,
+        base_url=base_url,
+        model=model,
+    )
+
+    # mock ChatService（不依赖向量数据库）
     mock_chat_service = MagicMock()
     mock_result = MagicMock()
     mock_result.chunks = []
@@ -123,31 +56,21 @@ def _build_graph():
     mock_result.degradation_reason = None
     mock_chat_service._retrieve.return_value = mock_result
 
-    # mock LLMGenerator — 返回智能 mock ChatOpenAI
-    mock_generator = MagicMock()
-    mock_chat_model = MagicMock()
-    mock_chat_model.ainvoke = _mock_llm_ainvoke
-    mock_generator.get_chat_model.return_value = mock_chat_model
-
     graph = create_graph(
         checkpointer=MemorySaver(),
         chat_service=mock_chat_service,
-        generator=mock_generator,
+        generator=generator,
     )
 
-    return graph, mock_chat_service, mock_chat_model
+    return graph, mock_chat_service, generator
 
 
 def _merge_state_from_events(events: list[dict]) -> dict:
-    """从 LangGraph astream 事件列表合并最终 state
-
-    注意：节点返回 {} 时 node_output 为 None，需要跳过。
-    """
+    """从 LangGraph astream 事件列表合并最终 state"""
     merged = {}
     for evt in events:
         for _node_name, node_output in evt.items():
             if isinstance(node_output, dict):
-                # messages 用 add_messages reducer，只取非 messages 字段
                 for k, v in node_output.items():
                     if k != "messages":
                         merged[k] = v
@@ -162,33 +85,26 @@ def _extract_event_keys(events: list[dict]) -> list[str]:
 def _get_last_turn_events(all_events: list[dict]) -> list[dict]:
     """从全部事件中提取最后一轮的事件"""
     last_turn_events = []
-    found_start = False
     for evt in reversed(all_events):
         key = list(evt.keys())[0]
-        if key == "summarize":
-            last_turn_events.insert(0, evt)
-            found_start = True
-            break
         last_turn_events.insert(0, evt)
+        if key == "summarize":
+            break
 
-    if not found_start:
-        last_turn_events = all_events  # fallback
-
-    return last_turn_events
+    return last_turn_events if last_turn_events else all_events
 
 
 async def _run_single_case(
     graph,
     case: dict,
-) -> TestCaseResult:
-    """执行单条评估用例"""
+) -> tuple[TestCaseResult, dict]:
+    """执行单条评估用例，返回 (result, final_state)"""
     turns = case["turns"]
     expected = case["expected"]
     is_negative = case.get("negative", False)
 
     start_time = time.perf_counter()
 
-    # 逐轮执行
     all_events: list[dict] = []
     all_states: list[dict] = []
     conversation_id = f"eval-{case['id']}"
@@ -212,20 +128,15 @@ async def _run_single_case(
             turn_events.append(event)
 
         all_events.extend(turn_events)
-
-        # 合并当前轮次的 state
         merged = _merge_state_from_events(turn_events)
         all_states.append(merged)
 
     elapsed_ms = (time.perf_counter() - start_time) * 1000
 
-    # 取最终 state
     final_state = all_states[-1] if all_states else {}
-    # 注入 question（最终轮的 question）
     final_state["question"] = turns[-1]["content"]
     is_first_turn = len(turns) == 1
 
-    # 取最后一轮的事件 keys
     last_turn_events = _get_last_turn_events(all_events)
     last_turn_keys = _extract_event_keys(last_turn_events)
 
@@ -235,14 +146,13 @@ async def _run_single_case(
     tr = transcript_check(all_events, elapsed_ms, is_first_turn=is_first_turn)
     df = deterministic_filter(final_state, all_events, expected, is_negative)
 
-    # Tracked metrics
     metrics = {
         "n_events": len(all_events),
         "n_turns": len(turns),
         "time_to_last_token_ms": round(elapsed_ms, 1),
     }
 
-    return TestCaseResult(
+    result = TestCaseResult(
         test_id=case["id"],
         level=case["level"],
         category=case["category"],
@@ -254,27 +164,32 @@ async def _run_single_case(
         tracked_metrics=metrics,
         execution_time_ms=elapsed_ms,
     )
+    return result, final_state
 
 
-async def run_eval(dataset_path: str) -> list[TestCaseResult]:
-    """运行完整评估"""
+async def run_eval(
+    dataset_path: str,
+) -> tuple[list[TestCaseResult], list[dict]]:
+    """运行完整评估，返回 (results, all_final_states)"""
     with open(dataset_path, "r", encoding="utf-8") as f:
         cases = json.load(f)
 
     graph, _, _ = _build_graph()
 
     results = []
+    all_states = []
     for case in cases:
-        result = await _run_single_case(graph, case)
+        result, final_state = await _run_single_case(graph, case)
         results.append(result)
+        all_states.append(final_state)
 
-    return results
+    return results, all_states
 
 
 def print_report(results: list[TestCaseResult]) -> bool:
     """打印评估报告，返回 True 如果全部通过"""
     print("\n" + "=" * 60)
-    print("R010 多轮对话确定性评估报告")
+    print("R010 多轮对话确定性评估报告（GLM-5.1 真实 LLM）")
     print("=" * 60)
 
     all_passed = True
@@ -307,7 +222,6 @@ def print_report(results: list[TestCaseResult]) -> bool:
 
         print(f"  metrics: {r.execution_time_ms:.0f}ms | {r.tracked_metrics}")
 
-    # 汇总
     total = len(results)
     passed = sum(
         1
@@ -341,10 +255,9 @@ def main():
     )
     args = parser.parse_args()
 
-    results = asyncio.run(run_eval(args.dataset))
+    results, _ = asyncio.run(run_eval(args.dataset))
     all_passed = print_report(results)
 
-    # 额外运行 static_analysis
     print("--- static_analysis ---")
     import subprocess
 
