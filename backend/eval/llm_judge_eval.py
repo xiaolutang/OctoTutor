@@ -14,15 +14,7 @@ import json
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Any
-
-from eval.graders import (
-    TestCaseResult,
-    state_check,
-    tool_calls_check,
-    transcript_check,
-    deterministic_filter,
-)
+from eval.graders import TestCaseResult
 
 
 # ---------------------------------------------------------------------------
@@ -139,7 +131,7 @@ async def _run_llm_judge_for_case(
         REWRITE_QUALITY_PROMPT,
         RETRIEVAL_RELEVANCE_PROMPT,
         CONTEXT_COHERENCE_PROMPT,
-        SUMMARY_FIDELITY_PROMPT,
+        SUMMARY_FIDELITY_PROMPT,  # noqa: F401 — future use
     )
 
     result = LLMJudgeCaseResult(
@@ -342,7 +334,7 @@ def print_full_report(
         else 0
     )
 
-    print(f"\n  BB005 汇总:")
+    print("\n  BB005 汇总:")
     print(f"    平均得分: {overall_avg:.1f}/5")
     print(f"    断言通过率: {overall_assertion_rate:.0%}")
 
