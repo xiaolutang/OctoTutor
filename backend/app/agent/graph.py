@@ -10,7 +10,7 @@ from typing import Literal
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, START, END
-from langgraph.graph.message import add_messages
+from langgraph.graph.message import add_messages, RemoveMessage
 from typing import Annotated
 
 from app.rag.models import QueryResult
@@ -18,6 +18,7 @@ from app.domain.models import SourceReference
 from app.infra.context_builder import chunks_to_sources
 from app.infra.context_builder import build_numbered_context
 from app.agent.prompts import TEACHING_SYSTEM_PROMPT
+from app.agent.token_budget import TokenBudget, estimate_tokens
 
 
 class AgentState(dict):
@@ -40,12 +41,76 @@ class AgentState(dict):
     sources: list[SourceReference]
     degraded: bool
     degradation_reason: str | None
+    conversation_summary: str
 
 
 def _route_by_intent(state: AgentState) -> str:
     if state.get("intent") == "textbook":
         return "retrieve"
     return "refuse"
+
+
+def _make_summarize(chat_model):
+    """创建 summarize 节点闭包（可独立测试）
+
+    超阈值 → LLM 摘要 + RemoveMessage 清理旧消息
+    未超阈值 → no-op（return {}）
+    """
+
+    async def _summarize(state):
+        """summarize 节点 — 超阈值时压缩历史消息"""
+        messages = state.get("messages", [])
+        existing_summary = state.get("conversation_summary", "")
+
+        # 1. 估算总 token
+        total_tokens = estimate_tokens(existing_summary)
+        for msg in messages:
+            total_tokens += estimate_tokens(msg.content or "")
+        total_tokens += TokenBudget.RESERVED_FOR_RAG + TokenBudget.RESERVED_FOR_OUTPUT
+
+        # 2. 未超阈值 → no-op
+        threshold = int(TokenBudget.CONTEXT_WINDOW * TokenBudget.SUMMARIZE_THRESHOLD)
+        if total_tokens < threshold:
+            return {}
+
+        # 3. 超阈值 → 分割消息
+        keep_count = TokenBudget.RECENT_MESSAGES_KEEP
+        if len(messages) <= keep_count:
+            return {}  # 消息太少，不摘要
+
+        to_summarize = messages[:-keep_count]
+        to_keep = messages[-keep_count:]
+
+        # 4. 构建 LLM 输入
+        from app.agent.prompts import SUMMARIZE_PROMPT
+
+        messages_text = "\n".join(
+            f"{'用户' if isinstance(m, HumanMessage) else '助手'}：{m.content}"
+            for m in to_summarize
+        )
+        existing_part = f"已有摘要：{existing_summary}" if existing_summary else ""
+
+        prompt = SUMMARIZE_PROMPT.format(
+            existing_summary=existing_part,
+            messages_text=messages_text,
+        )
+
+        # 5. 调用 LLM
+        try:
+            response = await chat_model.ainvoke([HumanMessage(content=prompt)])
+            new_summary = response.content
+        except Exception:
+            return {}  # LLM 失败 → no-op，下轮重试
+
+        # 6. 成功 → 返回新摘要 + RemoveMessage 清理旧消息
+        remove_messages = [RemoveMessage(id=m.id) for m in to_summarize if m.id]
+
+        return {
+            "conversation_summary": new_summary,
+            "messages": remove_messages,
+        }
+
+    return _summarize
 
 
 def create_graph(checkpointer=None, chat_service=None, generator=None):
@@ -64,6 +129,9 @@ def create_graph(checkpointer=None, chat_service=None, generator=None):
 
     # 从 generator 获取 ChatOpenAI 实例（支持原生 streaming）
     chat_model = generator.get_chat_model()
+
+    # summarize 节点闭包（此阶段不注册到图拓扑，BB003 负责）
+    _summarize = _make_summarize(chat_model)
 
     async def _retrieve(state):
         """retrieve 节点 — 调用 ChatService._retrieve 检索管线"""
