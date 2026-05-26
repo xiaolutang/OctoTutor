@@ -1,0 +1,384 @@
+[
+  {
+    "id": "L1-P01",
+    "level": "L1",
+    "category": "simple_pronoun",
+    "negative": false,
+    "turns": [
+      {"role": "user", "content": "什么是函数？"},
+      {"role": "user", "content": "它的定义域怎么求？"}
+    ],
+    "expected": {
+      "intent": "textbook",
+      "rewrite_should_trigger": true,
+      "rewrite_contains": ["函数", "定义域"],
+      "summary_triggered": false,
+      "respond_has_context": true
+    }
+  },
+  {
+    "id": "L1-P02",
+    "level": "L1",
+    "category": "simple_pronoun",
+    "negative": false,
+    "turns": [
+      {"role": "user", "content": "什么是集合？"},
+      {"role": "user", "content": "它们有什么运算？"}
+    ],
+    "expected": {
+      "intent": "textbook",
+      "rewrite_should_trigger": true,
+      "rewrite_contains": ["集合", "运算"],
+      "summary_triggered": false,
+      "respond_has_context": true
+    }
+  },
+  {
+    "id": "L1-P03",
+    "level": "L1",
+    "category": "simple_pronoun",
+    "negative": false,
+    "turns": [
+      {"role": "user", "content": "什么是向量？"},
+      {"role": "user", "content": "它的模怎么计算？"}
+    ],
+    "expected": {
+      "intent": "textbook",
+      "rewrite_should_trigger": true,
+      "rewrite_contains": ["向量", "模"],
+      "summary_triggered": false,
+      "respond_has_context": true
+    }
+  },
+  {
+    "id": "L1-P04",
+    "level": "L1",
+    "category": "simple_pronoun",
+    "negative": false,
+    "turns": [
+      {"role": "user", "content": "什么是等差数列？"},
+      {"role": "user", "content": "它的通项公式是什么？"}
+    ],
+    "expected": {
+      "intent": "textbook",
+      "rewrite_should_trigger": true,
+      "rewrite_contains": ["等差数列", "通项公式"],
+      "summary_triggered": false,
+      "respond_has_context": true
+    }
+  },
+  {
+    "id": "L1-P05",
+    "level": "L1",
+    "category": "simple_pronoun",
+    "negative": false,
+    "turns": [
+      {"role": "user", "content": "什么是对数？"},
+      {"role": "user", "content": "它的运算法则有哪些？"}
+    ],
+    "expected": {
+      "intent": "textbook",
+      "rewrite_should_trigger": true,
+      "rewrite_contains": ["对数", "运算"],
+      "summary_triggered": false,
+      "respond_has_context": true
+    }
+  },
+  {
+    "id": "L1-N01",
+    "level": "L1",
+    "category": "no_followup",
+    "negative": true,
+    "turns": [
+      {"role": "user", "content": "什么是函数？"}
+    ],
+    "expected": {
+      "intent": "textbook",
+      "rewrite_should_not_trigger": true,
+      "summary_triggered": false
+    }
+  },
+  {
+    "id": "L1-N02",
+    "level": "L1",
+    "category": "already_complete",
+    "negative": true,
+    "turns": [
+      {"role": "user", "content": "什么是函数？它的定义域怎么求？"}
+    ],
+    "expected": {
+      "intent": "textbook",
+      "rewrite_should_not_trigger": true,
+      "summary_triggered": false
+    }
+  },
+
+  {
+    "id": "L2-P01",
+    "level": "L2",
+    "category": "ellipsis_completion",
+    "negative": false,
+    "turns": [
+      {"role": "user", "content": "什么是函数？"},
+      {"role": "user", "content": "能举个例子吗？"}
+    ],
+    "expected": {
+      "intent": "textbook",
+      "rewrite_should_trigger": true,
+      "rewrite_contains": ["函数", "例子"],
+      "summary_triggered": false,
+      "respond_has_context": true
+    }
+  },
+  {
+    "id": "L2-P02",
+    "level": "L2",
+    "category": "ellipsis_completion",
+    "negative": false,
+    "turns": [
+      {"role": "user", "content": "什么是三角函数？"},
+      {"role": "user", "content": "和单位圆有什么关系？"}
+    ],
+    "expected": {
+      "intent": "textbook",
+      "rewrite_should_trigger": true,
+      "rewrite_contains": ["三角函数", "单位圆"],
+      "summary_triggered": false,
+      "respond_has_context": true
+    }
+  },
+  {
+    "id": "L2-P03",
+    "level": "L2",
+    "category": "ellipsis_completion",
+    "negative": false,
+    "turns": [
+      {"role": "user", "content": "什么是概率？"},
+      {"role": "user", "content": "怎么计算它的值？"}
+    ],
+    "expected": {
+      "intent": "textbook",
+      "rewrite_should_trigger": true,
+      "rewrite_contains": ["概率"],
+      "summary_triggered": false,
+      "respond_has_context": true
+    }
+  },
+  {
+    "id": "L2-P04",
+    "level": "L2",
+    "category": "ellipsis_completion",
+    "negative": false,
+    "turns": [
+      {"role": "user", "content": "什么是对数函数？"},
+      {"role": "user", "content": "图像是什么样的？"}
+    ],
+    "expected": {
+      "intent": "textbook",
+      "rewrite_should_trigger": true,
+      "rewrite_contains": ["对数函数", "图像"],
+      "summary_triggered": false,
+      "respond_has_context": true
+    }
+  },
+  {
+    "id": "L2-P05",
+    "level": "L2",
+    "category": "ellipsis_completion",
+    "negative": false,
+    "turns": [
+      {"role": "user", "content": "什么是等比数列？"},
+      {"role": "user", "content": "求和公式是什么？"}
+    ],
+    "expected": {
+      "intent": "textbook",
+      "rewrite_should_trigger": true,
+      "rewrite_contains": ["等比数列", "求和"],
+      "summary_triggered": false,
+      "respond_has_context": true
+    }
+  },
+  {
+    "id": "L2-N01",
+    "level": "L2",
+    "category": "topic_switch_greeting",
+    "negative": true,
+    "turns": [
+      {"role": "user", "content": "什么是函数？"},
+      {"role": "user", "content": "你好"}
+    ],
+    "expected": {
+      "intent": "unrelated",
+      "rewrite_should_not_trigger": true,
+      "summary_triggered": false
+    }
+  },
+  {
+    "id": "L2-N02",
+    "level": "L2",
+    "category": "topic_switch_unrelated",
+    "negative": true,
+    "turns": [
+      {"role": "user", "content": "什么是函数？"},
+      {"role": "user", "content": "谢谢"}
+    ],
+    "expected": {
+      "intent": "unrelated",
+      "rewrite_should_not_trigger": true,
+      "summary_triggered": false
+    }
+  },
+
+  {
+    "id": "L3-P01",
+    "level": "L3",
+    "category": "chain_followup",
+    "negative": false,
+    "turns": [
+      {"role": "user", "content": "什么是三角函数？"},
+      {"role": "user", "content": "它的图像？"},
+      {"role": "user", "content": "和余弦有什么关系？"}
+    ],
+    "expected": {
+      "intent": "textbook",
+      "rewrite_should_trigger": true,
+      "rewrite_contains": ["三角函数", "余弦"],
+      "summary_triggered": false,
+      "respond_has_context": true
+    }
+  },
+  {
+    "id": "L3-P02",
+    "level": "L3",
+    "category": "chain_followup",
+    "negative": false,
+    "turns": [
+      {"role": "user", "content": "什么是导数？"},
+      {"role": "user", "content": "它的几何意义？"},
+      {"role": "user", "content": "怎么求导？"}
+    ],
+    "expected": {
+      "intent": "textbook",
+      "rewrite_should_trigger": true,
+      "rewrite_contains": ["导数", "求导"],
+      "summary_triggered": false,
+      "respond_has_context": true
+    }
+  },
+  {
+    "id": "L3-P03",
+    "level": "L3",
+    "category": "chain_followup",
+    "negative": false,
+    "turns": [
+      {"role": "user", "content": "什么是概率？"},
+      {"role": "user", "content": "条件概率呢？"},
+      {"role": "user", "content": "贝叶斯公式怎么推导？"}
+    ],
+    "expected": {
+      "intent": "textbook",
+      "rewrite_should_trigger": true,
+      "rewrite_contains": ["概率", "贝叶斯"],
+      "summary_triggered": false,
+      "respond_has_context": true
+    }
+  },
+  {
+    "id": "L3-N01",
+    "level": "L3",
+    "category": "chain_then_greeting",
+    "negative": true,
+    "turns": [
+      {"role": "user", "content": "什么是函数？"},
+      {"role": "user", "content": "定义域怎么求？"},
+      {"role": "user", "content": "你是谁"}
+    ],
+    "expected": {
+      "intent": "unrelated",
+      "rewrite_should_not_trigger": true,
+      "summary_triggered": false
+    }
+  },
+
+  {
+    "id": "L4-P01",
+    "level": "L4",
+    "category": "explicit_topic_switch",
+    "negative": false,
+    "turns": [
+      {"role": "user", "content": "什么是函数？"},
+      {"role": "user", "content": "那什么是集合？"}
+    ],
+    "expected": {
+      "intent": "textbook",
+      "rewrite_should_trigger": true,
+      "rewrite_contains": ["集合"],
+      "rewrite_should_not_contain": ["函数"],
+      "summary_triggered": false,
+      "respond_has_context": true
+    }
+  },
+  {
+    "id": "L4-P02",
+    "level": "L4",
+    "category": "explicit_topic_switch",
+    "negative": false,
+    "turns": [
+      {"role": "user", "content": "什么是概率？"},
+      {"role": "user", "content": "那等差数列呢？"}
+    ],
+    "expected": {
+      "intent": "textbook",
+      "rewrite_should_trigger": true,
+      "rewrite_contains": ["等差数列"],
+      "summary_triggered": false,
+      "respond_has_context": true
+    }
+  },
+  {
+    "id": "L4-P03",
+    "level": "L4",
+    "category": "explicit_topic_switch",
+    "negative": false,
+    "turns": [
+      {"role": "user", "content": "什么是对数？"},
+      {"role": "user", "content": "那三角函数呢？"}
+    ],
+    "expected": {
+      "intent": "textbook",
+      "rewrite_should_trigger": true,
+      "rewrite_contains": ["三角函数"],
+      "summary_triggered": false,
+      "respond_has_context": true
+    }
+  },
+  {
+    "id": "L4-N01",
+    "level": "L4",
+    "category": "topic_switch_no_merge",
+    "negative": true,
+    "turns": [
+      {"role": "user", "content": "什么是函数？"},
+      {"role": "user", "content": "那向量呢？"}
+    ],
+    "expected": {
+      "intent": "textbook",
+      "rewrite_should_not_contain": ["函数和向量", "函数与向量", "函数以及向量"]
+    }
+  },
+  {
+    "id": "L4-N02",
+    "level": "L4",
+    "category": "topic_switch_to_greeting",
+    "negative": true,
+    "turns": [
+      {"role": "user", "content": "什么是概率？"},
+      {"role": "user", "content": "再见"}
+    ],
+    "expected": {
+      "intent": "unrelated",
+      "rewrite_should_not_trigger": true,
+      "summary_triggered": false
+    }
+  }
+]
