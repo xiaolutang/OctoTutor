@@ -47,7 +47,7 @@ class AgentState(dict):
 
 def _route_by_intent(state: AgentState) -> str:
     if state.get("intent") == "textbook":
-        return "retrieve"
+        return "rewrite"
     return "refuse"
 
 
@@ -173,15 +173,13 @@ def create_graph(checkpointer=None, chat_service=None, generator=None):
     # 从 generator 获取 ChatOpenAI 实例（支持原生 streaming）
     chat_model = generator.get_chat_model()
 
-    # summarize 节点闭包（此阶段不注册到图拓扑，BB003 负责）
     _summarize = _make_summarize(chat_model)
-
-    # rewrite 节点闭包（此阶段不注册到图拓扑，BB003 负责）
     _rewrite = _make_rewrite(chat_model)
 
     async def _retrieve(state):
         """retrieve 节点 — 调用 ChatService._retrieve 检索管线"""
-        question = state.get("question", "")
+        # 优先使用 rewritten_question，无则 fallback 到 question
+        question = state.get("rewritten_question") or state.get("question", "")
         top_k = 10
 
         result = await asyncio.to_thread(chat_service._retrieve, question, top_k)
@@ -197,42 +195,50 @@ def create_graph(checkpointer=None, chat_service=None, generator=None):
         }
 
     async def _respond(state):
-        """respond 节点 — 调用 ChatOpenAI 流式生成回答
+        """respond 节点 — 构建完整消息列表并调用 LLM
 
-        LLM 在 graph 节点内调用，LangGraph 自动拦截 token 流推给 stream_mode="messages"。
-        节点完成后 PostgresSaver 自动保存 AIMessage 到 checkpoint。
+        消息结构：
+        1. SystemMessage：教学策略 + RAG context（动态注入）
+        2. SystemMessage（可选）：对话摘要（如存在）
+        3. 历史消息（summarize 已清理旧消息，只剩近期）
+        4. LLM 调用
         """
-        question = state.get("question", "")
         chunks = state.get("context_chunks", [])
+        summary = state.get("conversation_summary")
+        history = state.get("messages", [])
 
-        # 构建 messages
+        # 1. 构建 SystemMessage
+        system_content = TEACHING_SYSTEM_PROMPT
         if chunks:
             context_text = build_numbered_context(chunks)
-            user_content = f"参考教材内容：\n{context_text}\n\n学生问题：{question}"
-            messages = [
-                SystemMessage(content=TEACHING_SYSTEM_PROMPT),
-                HumanMessage(content=user_content),
-            ]
-        else:
-            # 无检索结果时使用简化 prompt
-            messages = [
-                SystemMessage(content=TEACHING_SYSTEM_PROMPT),
-                HumanMessage(content=question),
-            ]
+            system_content += f"\n\n以下是检索到的教材内容：\n{context_text}\n请基于以上教材内容回答学生的问题。"
 
-        # 调用 ChatOpenAI（streaming=True），LangGraph 拦截 token 流
+        messages = [SystemMessage(content=system_content)]
+
+        # 2. 摘要 SystemMessage（如存在）
+        if summary:
+            messages.append(SystemMessage(content=f"以下是之前对话的要点总结：\n{summary}"))
+
+        # 3. 历史消息原样透传（summarize 已清理旧消息，只剩近期）
+        messages.extend(history)
+
+        # 4. 调用 LLM
         response = await chat_model.ainvoke(messages)
-
-        # 返回 AIMessage 写入 state.messages，PostgresSaver 自动 checkpoint
         return {"messages": [response]}
 
+    # 新拓扑：START → summarize → classify → [rewrite → retrieve → respond | refuse] → END
     graph = StateGraph(AgentState)
+    graph.add_node("summarize", _summarize)
     graph.add_node("classify", classify_node)
+    graph.add_node("rewrite", _rewrite)
     graph.add_node("retrieve", _retrieve)
     graph.add_node("respond", _respond)
     graph.add_node("refuse", refuse_node)
-    graph.add_edge(START, "classify")
+
+    graph.add_edge(START, "summarize")
+    graph.add_edge("summarize", "classify")
     graph.add_conditional_edges("classify", _route_by_intent)
+    graph.add_edge("rewrite", "retrieve")
     graph.add_edge("retrieve", "respond")
     graph.add_edge("respond", END)
     graph.add_edge("refuse", END)

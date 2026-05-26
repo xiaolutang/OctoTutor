@@ -165,6 +165,16 @@ async def _map_node_update_to_sse(node_name: str, node_output: dict):
             {"text": f"意图分类: {intent}", "index": 0},
         )
 
+    elif node_name == "summarize":
+        summary = node_output.get("conversation_summary")
+        if summary:
+            yield _sse_frame("thinking", {"text": "上下文已压缩", "index": 0})
+
+    elif node_name == "rewrite":
+        rewritten = node_output.get("rewritten_question")
+        if rewritten:
+            yield _sse_frame("thinking", {"text": f"查询改写: {rewritten}", "index": 1})
+
     elif node_name == "retrieve":
         yield _sse_frame(
             "status",

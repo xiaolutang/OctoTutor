@@ -92,10 +92,10 @@ class TestGraphCompilation:
     """验证 graph 可编译"""
 
     def test_compile_without_checkpointer(self):
-        """compile 不抛异常，graph.nodes 包含 classify/retrieve/respond/refuse"""
+        """compile 不抛异常，graph.nodes 包含 summarize/classify/rewrite/retrieve/respond/refuse"""
         graph = create_graph(generator=_mock_generator())
         node_names = set(graph.nodes.keys())
-        for expected in ("classify", "retrieve", "respond", "refuse"):
+        for expected in ("summarize", "classify", "rewrite", "retrieve", "respond", "refuse"):
             assert expected in node_names, f"missing node: {expected}"
 
     def test_compile_with_memory_saver(self):
@@ -109,10 +109,10 @@ class TestGraphCompilation:
         assert "respond" in node_names
 
     def test_route_by_intent_textbook(self):
-        """_route_by_intent textbook -> retrieve"""
+        """_route_by_intent textbook -> rewrite"""
         from app.agent.graph import _route_by_intent
 
-        assert _route_by_intent({"intent": "textbook"}) == "retrieve"
+        assert _route_by_intent({"intent": "textbook"}) == "rewrite"
 
     def test_route_by_intent_unrelated(self):
         """_route_by_intent unrelated -> refuse"""
