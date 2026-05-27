@@ -53,14 +53,19 @@ class LLMJudgeCaseResult:
 
 
 def _get_llm_config() -> dict[str, str]:
-    """从 .env 读取 LLM 配置（GLM-5.1）"""
+    """从 .env / 环境变量读取 LLM 配置（GLM-5.1）"""
+    import os
     from dotenv import dotenv_values
 
     env = dotenv_values(".env")
+
+    def _conf(key: str, default: str = "") -> str:
+        return env.get(key, "") or os.environ.get(key, default)
+
     return {
-        "api_key": env.get("NEWAPI_API_KEY", ""),
-        "base_url": env.get("NEWAPI_BASE_URL", "http://localhost:13000/v1"),
-        "model": env.get("LLM_MODEL", "glm-5.1"),
+        "api_key": _conf("NEWAPI_API_KEY"),
+        "base_url": _conf("NEWAPI_BASE_URL", "http://localhost:13000/v1"),
+        "model": _conf("LLM_MODEL", "glm-5.1"),
     }
 
 
@@ -120,6 +125,7 @@ async def _run_llm_judge_for_case(
     """对单个用例运行 LLM Judge（GLM-5.1）"""
     from eval.judge_prompts import (
         REWRITE_QUALITY_PROMPT,
+        RETRIEVAL_RELEVANCE_PROMPT,
         CONTEXT_COHERENCE_PROMPT,
         SUMMARY_FIDELITY_PROMPT,
     )
@@ -159,16 +165,43 @@ async def _run_llm_judge_for_case(
             )
         )
 
-    # 维度 2: 检索相关性 — 跳过（mock retrieve 无真实 chunks，无法公平评估）
-    # 仅在有真实检索结果时启用
+    # 维度 2: 检索相关性（正面用例 & textbook intent）
+    if not result.negative and expected.get("intent") == "textbook":
+        chunks_raw = final_state.get("context_chunks", [])
+        chunks_summary = ""
+        if chunks_raw:
+            chunk_texts = []
+            for i, c in enumerate(chunks_raw[:5]):
+                text = c.text if hasattr(c, "text") else str(c)
+                chunk_texts.append(f"[{i+1}] {text[:200]}")
+            chunks_summary = "\n".join(chunk_texts)
+        prompt = RETRIEVAL_RELEVANCE_PROMPT.format(
+            question=turns[-1]["content"],
+            num_chunks=len(chunks_raw),
+            chunks_summary=chunks_summary or "(无检索结果)",
+        )
+        judge_output = _call_llm_judge(prompt, llm_config)
+        result.judge_results.append(
+            JudgeResult(
+                dimension="retrieval_relevance",
+                score=judge_output.get("score", 0),
+                assertions=judge_output.get("assertions", [False, False, False]),
+                reasoning=judge_output.get("reasoning", ""),
+                error=judge_output.get("error"),
+            )
+        )
 
     # 维度 3: 上下文连贯性（多轮正面用例）
     if len(turns) > 1 and not result.negative:
         history = "\n".join(t["content"] for t in turns[:-1])
+        ai_answer = final_state.get("last_ai_answer", "")
+        answer_summary = ai_answer[:500] if ai_answer else (
+            f"rewrite: {rewritten_question}" if rewritten_question else "首轮无 rewrite"
+        )
         prompt = CONTEXT_COHERENCE_PROMPT.format(
             history=history,
             question=turns[-1]["content"],
-            answer_summary=f"rewrite: {rewritten_question}" if rewritten_question else "首轮无 rewrite",
+            answer_summary=answer_summary,
         )
         judge_output = _call_llm_judge(prompt, llm_config)
         result.judge_results.append(

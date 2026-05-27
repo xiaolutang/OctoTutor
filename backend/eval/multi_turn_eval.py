@@ -26,43 +26,87 @@ from eval.graders import (
 
 
 def _build_graph():
-    """构建 graph：真实 LLM（GLM-5.1）+ mock ChatService._retrieve"""
-    from unittest.mock import MagicMock
+    """构建 graph：真实 LLM（GLM-5.1）+ 真实检索管线"""
+    import os
+    from dataclasses import dataclass
     from dotenv import dotenv_values
 
     from app.agent.graph import create_graph
     from app.infra.llm import LLMGenerator
+    from app.rag.vector_store import ChromaDBStore
+    from app.rag.embeddings import DashScopeEmbedding
+    from app.infra.bm25 import BM25Retriever
+    from app.infra.reranker import DashScopeReranker
+    from app.chat.service import ChatService
 
-    # 直接从 .env 读取 LLM 配置（避免依赖完整 Settings）
     env = dotenv_values(".env")
-    api_key = env.get("NEWAPI_API_KEY", "")
-    base_url = env.get("NEWAPI_BASE_URL", "http://localhost:13000/v1")
-    model = env.get("LLM_MODEL", "glm-5.1")
 
+    def _conf(key: str, default: str = "") -> str:
+        """优先 .env，其次环境变量"""
+        return env.get(key, "") or os.environ.get(key, default)
+
+    # LLM 配置
+    api_key = _conf("NEWAPI_API_KEY")
+    base_url = _conf("NEWAPI_BASE_URL", "http://localhost:13000/v1")
+    model = _conf("LLM_MODEL", "glm-5.1")
     print(f"[eval] LLM: {model} @ {base_url}")
 
-    # 真实 LLMGenerator
     generator = LLMGenerator(
         api_key=api_key,
         base_url=base_url,
         model=model,
     )
 
-    # mock ChatService（不依赖向量数据库）
-    mock_chat_service = MagicMock()
-    mock_result = MagicMock()
-    mock_result.chunks = []
-    mock_result.degraded = False
-    mock_result.degradation_reason = None
-    mock_chat_service._retrieve.return_value = mock_result
+    # 真实检索管线
+    dashscope_key = _conf("DASHSCOPE_API_KEY")
+    print("[eval] 真实检索管线: ChromaDB + DashScope Embedding + BM25 + Reranker")
+
+    vector_store = ChromaDBStore(
+        persist_directory="data/chroma_db",
+        collection_name="octotutor_chunks",
+    )
+    embedding = DashScopeEmbedding(
+        api_key=dashscope_key,
+        model="text-embedding-v4",
+        dimension=1024,
+    )
+    bm25 = BM25Retriever()
+    all_chunks = vector_store.get_all_chunks()
+    if all_chunks:
+        bm25.build_index(all_chunks)
+    print(f"[eval] ChromaDB chunks: {len(all_chunks)}")
+
+    reranker = DashScopeReranker(
+        api_key=dashscope_key,
+        model="gte-rerank",
+    )
+
+    # 简化 settings（只包含检索相关配置）
+    @dataclass
+    class _SimpleSettings:
+        retrieval_top_k: int = 20
+        similarity_threshold: float = 0.70
+        bm25_enabled: bool = True
+        rrf_k: int = 60
+        rerank_top_n: int = 3
+        chat_max_context_tokens: int = 3000
+
+    chat_service = ChatService(
+        embedding=embedding,
+        vector_store=vector_store,
+        bm25=bm25,
+        reranker=reranker,
+        generator=generator,
+        settings=_SimpleSettings(),
+    )
 
     graph = create_graph(
         checkpointer=MemorySaver(),
-        chat_service=mock_chat_service,
+        chat_service=chat_service,
         generator=generator,
     )
 
-    return graph, mock_chat_service, generator
+    return graph, chat_service, generator
 
 
 def _merge_state_from_events(events: list[dict]) -> dict:
@@ -72,7 +116,13 @@ def _merge_state_from_events(events: list[dict]) -> dict:
         for _node_name, node_output in evt.items():
             if isinstance(node_output, dict):
                 for k, v in node_output.items():
-                    if k != "messages":
+                    if k == "messages":
+                        # 保留最后的 AI 消息内容
+                        for msg in reversed(v):
+                            if hasattr(msg, "type") and msg.type == "ai":
+                                merged["last_ai_answer"] = str(msg.content)
+                                break
+                    else:
                         merged[k] = v
     return merged
 

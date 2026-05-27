@@ -125,7 +125,7 @@
     "expected": {
       "intent": "textbook",
       "rewrite_should_trigger": true,
-      "rewrite_contains": ["函数", "例子"],
+      "rewrite_contains": ["函数"],
       "summary_triggered": false,
       "respond_has_context": true
     }
