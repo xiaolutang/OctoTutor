@@ -1,6 +1,6 @@
 # OctoTutor 架构宪法
 
-> version: 5.2 | updated: 2026-05-25 | R009 conversation-management
+> version: 6.2 | updated: 2026-05-28 | R010 grounding-faithfulness
 
 ## 系统拓扑
 
@@ -39,6 +39,12 @@ SSE 流式连接：Browser → Traefik → Backend SSE Endpoint (/api/chat/strea
 - **MMPPN 错误码体系**: 五位数字编码 MM=模块 PP=阶段 N=序号，结构化错误码替代字符串匹配
 - **JWT 共享密钥鉴权**: auth-center 签发 HS256 JWT，后端本地解码验证，不查 Redis 黑名单（DEC-auth-001）
 - **apiClient 统一网络层**: 前端所有 API 请求经 apiClient，自动附加 Bearer token + 刷新锁 + 401 重试（DEC-auth-003）
+- **Token 预算管理 + LLM 摘要压缩**: 字符估算 × 1.5 保守系数 + 65% 阈值触发摘要 + RemoveMessage 清理旧消息（DEC-rag-010）
+- **Query Rewriting**: 多轮时 LLM 改写追问为独立问题 + 首轮透传 + 失败 fallback 原始 question（DEC-rag-011）
+- **动态 System Prompt**: respond 节点动态注入 RAG context 到 SystemMessage，对话历史原样透传
+- **线性 StateGraph 拓扑（无分类器）**: START → summarize → rewrite → retrieve → respond → END，所有问题统一走完整路径，由 LLM + 系统提示词自然处理路由（DEC-rag-012-rev1，移除分类器）
+- **Context 分级注入策略**: respond 节点按检索结果相关性分级注入系统指令（相关→强约束/不相关→弱参考/降级→弱参考/空→不注入），避免 LLM 基于不相关内容产生幻觉（DEC-rag-014）
+- **忠实性约束最高优先级**: TEACHING_SYSTEM_PROMPT 新增"忠实性约束"章节标记为最高优先级，要求 LLM 只说教材中明确存在的内容（DEC-rag-015）
 
 ## 权威边界
 
@@ -46,8 +52,10 @@ SSE 流式连接：Browser → Traefik → Backend SSE Endpoint (/api/chat/strea
 - Backend API 是检索和对话的唯一入口（/api/retrieve + /api/chat + /api/chat/stream）
 - Backend API 是对话管理的唯一入口（/api/conversations 列表/更新/删除）
 - SSE 端点 /api/chat/stream 是唯一的流式对话入口，前端不缓存 LLM 回答用于复用
+- Agent StateGraph 拓扑固定为线性 4 节点：summarize → rewrite → retrieve → respond，无分支/条件路由
 - DashScope API 调用统一在 Backend 内（Embedding + OCR + Reranker），Frontend 不持有 DashScope Key
 - LLM 调用统一在 Backend 内（infra/llm.py），Frontend 不持有 LLM Key
+- respond 节点使用分级 context 注入：高相关性（degraded=False, score>=threshold）强约束；低相关性和降级（degraded=True）弱参考；无结果不注入
 - OCR 缓存是唯一权威数据源（parsed/ 目录），入库脚本按缓存状态决定是否调 OCR
 
 ## 不变量
@@ -67,7 +75,6 @@ SSE 流式连接：Browser → Traefik → Backend SSE Endpoint (/api/chat/strea
 
 - Frontend 不直接调 DashScope API
 - 不在主分支直接开发功能（使用 feat/ 分支）
-- R004 不做多轮对话状态管理（DEC-rag-007，留给 R005+ 跟 UI 一起做）
 - R004 不做前端 Chat UI（留给 R005）
 - 不做 WebSocket：SSE 已满足单向流式推送需求，WebSocket 的双向能力不需要
 - 不做前端 LLM 回答缓存：每次对话都是独立请求，避免缓存一致性难题（R007-PATCH01 已移除 localStorage 消息缓存）

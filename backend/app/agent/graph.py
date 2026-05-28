@@ -1,14 +1,13 @@
-"""AgentState TypedDict + StateGraph 条件路由编排
+"""AgentState TypedDict + StateGraph 线性拓扑编排
 
 graph.compile(checkpointer=...) 返回 CompiledStateGraph.
-节点函数来自 nodes.py (classify, refuse) 和闭包 (retrieve, respond).
+拓扑：START → summarize → rewrite → retrieve → respond → END（纯线性，无分支）
 respond 节点内调用 ChatOpenAI，LangGraph 自动拦截 token 流推给 stream_mode="messages"。
 """
 
 import asyncio
-from typing import Literal
 
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages, RemoveMessage
 from typing import Annotated
@@ -17,8 +16,9 @@ from app.rag.models import QueryResult
 from app.domain.models import SourceReference
 from app.infra.context_builder import chunks_to_sources
 from app.infra.context_builder import build_numbered_context
-from app.agent.prompts import TEACHING_SYSTEM_PROMPT
+from app.agent.prompts import TEACHING_SYSTEM_PROMPT, SUMMARIZE_PROMPT, REWRITE_PROMPT
 from app.agent.token_budget import TokenBudget, estimate_tokens
+from app.config import settings
 
 
 class AgentState(dict):
@@ -27,16 +27,18 @@ class AgentState(dict):
     Attributes:
         messages: 对话消息列表（add_messages reducer）
         question: 当前用户问题
-        intent: 分类结果 "textbook" | "unrelated"
+        intent: deprecated — 保留字段用于向后兼容旧 checkpoint，新流程不再设置
         context_chunks: RAG 检索到的 chunk 列表
         sources: 引用来源列表
         degraded: 是否处于降级模式
         degradation_reason: 降级原因
+        conversation_summary: 对话摘要
+        rewritten_question: 改写后的问题
     """
 
     messages: Annotated[list[BaseMessage], add_messages]
     question: str
-    intent: Literal["textbook", "unrelated"]
+    intent: str  # deprecated: 保留向后兼容旧 checkpoint
     context_chunks: list[QueryResult]
     sources: list[SourceReference]
     degraded: bool
@@ -45,10 +47,10 @@ class AgentState(dict):
     rewritten_question: str
 
 
-def _route_by_intent(state: AgentState) -> str:
-    if state.get("intent") == "textbook":
-        return "rewrite"
-    return "refuse"
+def _format_msg_line(msg: BaseMessage) -> str:
+    """将消息格式化为 '角色：内容' 行"""
+    role = "用户" if isinstance(msg, HumanMessage) else "助手"
+    return f"{role}：{msg.content}"
 
 
 def _make_summarize(chat_model):
@@ -80,15 +82,9 @@ def _make_summarize(chat_model):
             return {}  # 消息太少，不摘要
 
         to_summarize = messages[:-keep_count]
-        to_keep = messages[-keep_count:]
 
         # 4. 构建 LLM 输入
-        from app.agent.prompts import SUMMARIZE_PROMPT
-
-        messages_text = "\n".join(
-            f"{'用户' if isinstance(m, HumanMessage) else '助手'}：{m.content}"
-            for m in to_summarize
-        )
+        messages_text = "\n".join(_format_msg_line(m) for m in to_summarize)
         existing_part = f"已有摘要：{existing_summary}" if existing_summary else ""
 
         prompt = SUMMARIZE_PROMPT.format(
@@ -133,14 +129,9 @@ def _make_rewrite(chat_model):
         # 2. 多轮 → 取最近几轮构建 history
         # 只取最近 6 条消息（3 轮对话）作为 history
         recent = messages[-6:] if len(messages) > 6 else messages[:-1]
-        history_lines = []
-        for msg in recent:
-            role = "用户" if isinstance(msg, HumanMessage) else "助手"
-            history_lines.append(f"{role}：{msg.content}")
-        history = "\n".join(history_lines)
+        history = "\n".join(_format_msg_line(msg) for msg in recent)
 
         # 3. 调用 LLM 改写
-        from app.agent.prompts import REWRITE_PROMPT
         prompt = REWRITE_PROMPT.format(history=history, question=question)
 
         try:
@@ -151,7 +142,7 @@ def _make_rewrite(chat_model):
         except Exception:
             pass  # LLM 失败 → fallback 原始 question
 
-        return {}  # fallback：不设 rewritten_question，_retrieve 会用 question
+        return {}  # fallback：不设 rewritten_question，retrieve 节点会用 question
 
     return _rewrite
 
@@ -168,8 +159,6 @@ def create_graph(checkpointer=None, chat_service=None, generator=None):
     Returns:
         CompiledStateGraph: 编译后的可执行图
     """
-    from app.agent.nodes import classify_node, refuse_node
-
     # 从 generator 获取 ChatOpenAI 实例（支持原生 streaming）
     chat_model = generator.get_chat_model()
 
@@ -177,15 +166,15 @@ def create_graph(checkpointer=None, chat_service=None, generator=None):
     _rewrite = _make_rewrite(chat_model)
 
     async def _retrieve(state):
-        """retrieve 节点 — 调用 ChatService._retrieve 检索管线"""
+        """retrieve 节点 — 调用 ChatService.retrieve 检索管线"""
         # 优先使用 rewritten_question，无则 fallback 到 question
         question = state.get("rewritten_question") or state.get("question", "")
         top_k = 10
 
-        result = await asyncio.to_thread(chat_service._retrieve, question, top_k)
+        result = await asyncio.to_thread(chat_service.retrieve, question, top_k)
 
         chunks = result.chunks
-        sources = chunks_to_sources(chunks) if chunks else []
+        sources = chunks_to_sources(chunks)
 
         return {
             "context_chunks": chunks,
@@ -207,11 +196,32 @@ def create_graph(checkpointer=None, chat_service=None, generator=None):
         summary = state.get("conversation_summary")
         history = state.get("messages", [])
 
-        # 1. 构建 SystemMessage
+        # 1. 构建 SystemMessage（分级 context 注入）
         system_content = TEACHING_SYSTEM_PROMPT
         if chunks:
             context_text = build_numbered_context(chunks)
-            system_content += f"\n\n以下是检索到的教材内容：\n{context_text}\n请基于以上教材内容回答学生的问题。"
+            degraded = state.get("degraded", False)
+
+            if not degraded:
+                best_score = max(c.score for c in chunks)
+                if best_score >= settings.relevance_threshold:
+                    # 高相关性 — 强约束
+                    system_content += (
+                        f"\n\n以下是检索到的教材内容：\n{context_text}\n"
+                        "请严格基于以上教材内容回答。只使用教材中明确出现的信息，不要编造教材中没有的内容。"
+                    )
+                else:
+                    # 低相关性 — 弱参考
+                    system_content += (
+                        f"\n\n以下是一些可能相关的参考内容：\n{context_text}\n"
+                        "如果这些内容与学生的问题相关，可以参考使用；如果不相关，基于你的知识回答并标注'教材中未直接涉及'。"
+                    )
+            else:
+                # 降级 — 弱参考（reranker 分数不可信）
+                system_content += (
+                    f"\n\n以下是一些可能相关的参考内容：\n{context_text}\n"
+                    "如果这些内容与学生的问题相关，可以参考使用；如果不相关，基于你的知识回答并标注'教材中未直接涉及'。"
+                )
 
         messages = [SystemMessage(content=system_content)]
 
@@ -226,20 +236,16 @@ def create_graph(checkpointer=None, chat_service=None, generator=None):
         response = await chat_model.ainvoke(messages)
         return {"messages": [response]}
 
-    # 新拓扑：START → summarize → classify → [rewrite → retrieve → respond | refuse] → END
+    # 线性拓扑：START → summarize → rewrite → retrieve → respond → END
     graph = StateGraph(AgentState)
     graph.add_node("summarize", _summarize)
-    graph.add_node("classify", classify_node)
     graph.add_node("rewrite", _rewrite)
     graph.add_node("retrieve", _retrieve)
     graph.add_node("respond", _respond)
-    graph.add_node("refuse", refuse_node)
 
     graph.add_edge(START, "summarize")
-    graph.add_edge("summarize", "classify")
-    graph.add_conditional_edges("classify", _route_by_intent)
+    graph.add_edge("summarize", "rewrite")
     graph.add_edge("rewrite", "retrieve")
     graph.add_edge("retrieve", "respond")
     graph.add_edge("respond", END)
-    graph.add_edge("refuse", END)
     return graph.compile(checkpointer=checkpointer)

@@ -1,63 +1,18 @@
-"""R007-BB003+BB004 单元测试 — refuse / respond / prompts"""
+"""R007-BB003+BB004 单元测试 — respond / prompts / summarize / rewrite"""
 
-import asyncio
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.graph.message import RemoveMessage
 
-from app.agent.nodes import refuse_node, _REFUSE_MESSAGE
 from app.agent.prompts import TEACHING_SYSTEM_PROMPT
 from app.agent.graph import _make_summarize
-from app.agent.token_budget import TokenBudget
 from app.chat.errors import ChatErrorCode
 
 
 # ===================================================================
-# 1. refuse_node 测试
-# ===================================================================
-
-
-class TestRefuseNode:
-    """refuse_node 返回静态 AIMessage，不调 LLM"""
-
-    def test_returns_static_aimessage(self):
-        """输入任意 state → 返回含静态拒绝文本的 dict"""
-        state = {
-            "messages": [HumanMessage(content="今天天气怎么样？")],
-            "question": "今天天气怎么样？",
-            "intent": "unrelated",
-        }
-        result = refuse_node(state)
-
-        assert "messages" in result
-        assert len(result["messages"]) == 1
-        msg = result["messages"][0]
-        assert isinstance(msg, AIMessage)
-        assert msg.content == _REFUSE_MESSAGE
-
-    def test_refuse_message_contains_key_phrases(self):
-        """拒绝消息包含关键语义"""
-        assert "课程学习助手" in _REFUSE_MESSAGE
-        assert "教材内容" in _REFUSE_MESSAGE
-
-    def test_refuse_node_ignores_input_state(self):
-        """refuse_node 不依赖输入 state 的内容"""
-        empty_state = {}
-        result = refuse_node(empty_state)
-
-        assert result["messages"][0].content == _REFUSE_MESSAGE
-
-    def test_refuse_node_is_sync(self):
-        """refuse_node 是同步函数，不返回 coroutine"""
-        import inspect
-
-        assert not inspect.iscoroutinefunction(refuse_node)
-
-
-# ===================================================================
-# 2. TEACHING_SYSTEM_PROMPT 内容验证
+# 1. TEACHING_SYSTEM_PROMPT 内容验证
 # ===================================================================
 
 # 模拟未来 respond_node 的完整行为（闭包注入 LLM 后）
@@ -95,9 +50,21 @@ class TestTeachingSystemPrompt:
         """prompt 已替换，不是占位符"""
         assert len(TEACHING_SYSTEM_PROMPT) > 100
 
+    def test_prompt_contains_faithfulness_constraint(self):
+        """忠实性约束章节存在"""
+        assert "忠实性约束" in TEACHING_SYSTEM_PROMPT
+
+    def test_prompt_contains_highest_priority(self):
+        """忠实性约束标记为最高优先级"""
+        assert "最高优先级" in TEACHING_SYSTEM_PROMPT
+
+    def test_prompt_contains_no_fabrication(self):
+        """绝不编造措辞"""
+        assert "绝不编造" in TEACHING_SYSTEM_PROMPT
+
 
 # ===================================================================
-# 3. 错误码映射验证
+# 2. 错误码映射验证
 # ===================================================================
 
 
@@ -118,7 +85,7 @@ class TestErrorCodeMapping:
 
 
 # ===================================================================
-# 4. _summarize 闭包测试
+# 3. _summarize 闭包测试
 # ===================================================================
 
 
@@ -255,14 +222,15 @@ class TestSummarizeNode:
 
 
 # ===================================================================
-# 5. _rewrite 闭包测试
+# 4. _rewrite 闭包测试
 # ===================================================================
 
 
 class TestRewriteNode:
     """_make_rewrite 工厂函数单元测试"""
 
-    def test_first_turn_passthrough(self):
+    @pytest.mark.asyncio
+    async def test_first_turn_passthrough(self):
         """首轮（messages <= 1）→ return {}"""
         from app.agent.graph import _make_rewrite
         mock_chat_model = AsyncMock()
@@ -272,11 +240,12 @@ class TestRewriteNode:
             "messages": [HumanMessage(content="什么是函数？")],
             "question": "什么是函数？",
         }
-        result = asyncio.get_event_loop().run_until_complete(_rewrite(state))
+        result = await _rewrite(state)
         assert result == {}
         mock_chat_model.ainvoke.assert_not_called()
 
-    def test_multi_turn_rewrite(self):
+    @pytest.mark.asyncio
+    async def test_multi_turn_rewrite(self):
         """多轮 → LLM 改写 → 返回 rewritten_question"""
         from app.agent.graph import _make_rewrite
         mock_chat_model = AsyncMock()
@@ -291,13 +260,14 @@ class TestRewriteNode:
             ],
             "question": "它的定义域怎么求？",
         }
-        result = asyncio.get_event_loop().run_until_complete(_rewrite(state))
+        result = await _rewrite(state)
         assert "rewritten_question" in result
         assert "函数" in result["rewritten_question"]
         assert "定义域" in result["rewritten_question"]
         mock_chat_model.ainvoke.assert_called_once()
 
-    def test_llm_failure_fallback(self):
+    @pytest.mark.asyncio
+    async def test_llm_failure_fallback(self):
         """LLM 失败 → return {}"""
         from app.agent.graph import _make_rewrite
         mock_chat_model = AsyncMock()
@@ -312,5 +282,5 @@ class TestRewriteNode:
             ],
             "question": "它的定义域怎么求？",
         }
-        result = asyncio.get_event_loop().run_until_complete(_rewrite(state))
+        result = await _rewrite(state)
         assert result == {}

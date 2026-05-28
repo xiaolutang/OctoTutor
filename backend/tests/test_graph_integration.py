@@ -1,72 +1,22 @@
-"""R007-BB001 集成测试 — StateGraph 条件路由编排
+"""R007-BB001 集成测试 — StateGraph 线性拓扑编排
 
 验证：
-- textbook 问题走 classify→retrieve→respond 路径
-- unrelated 问题走 classify→refuse 路径
+- 所有问题统一走 summarize → rewrite → retrieve → respond 路径
 - graph.stream() 可执行并产出 events
+- 无 classify/refuse 节点
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 from langchain_core.messages import AIMessage, HumanMessage
 
-from app.agent.graph import AgentState, create_graph, _route_by_intent
+from app.agent.graph import create_graph
 from app.rag.models import QueryResult, ChunkMetadata
-from app.domain.models import SourceReference
 
-
-# ---------------------------------------------------------------------------
-# 辅助：构造 mock ChatService
-# ---------------------------------------------------------------------------
-
-
-def _make_mock_chat_service(chunks=None, degraded=False, degradation_reason=None):
-    """构造 mock ChatService，_retrieve 返回指定 chunks"""
-    svc = MagicMock()
-
-    result_chunks = chunks or []
-    result = MagicMock()
-    result.chunks = result_chunks
-    result.degraded = degraded
-    result.degradation_reason = degradation_reason
-
-    svc._retrieve.return_value = result
-    return svc
-
-
-def _make_mock_generator(tokens=None):
-    """构造 mock LLMGenerator，generate_stream 返回指定 tokens"""
-    gen = MagicMock()
-
-    async def _stream(*args, **kwargs):
-        for t in (tokens or ["mock", " answer"]):
-            yield t
-
-    gen.generate_stream = _stream
-
-    # get_chat_model 返回一个 mock ChatOpenAI，ainvoke 是异步的
-    mock_chat_model = MagicMock()
-    mock_chat_model.ainvoke = AsyncMock(return_value=AIMessage(content="mock answer"))
-    gen.get_chat_model.return_value = mock_chat_model
-    return gen
-
-
-def _make_query_result(text="test chunk", score=0.95):
-    return QueryResult(
-        chunk_id="test::chunk::1",
-        text=text,
-        score=score,
-        metadata=ChunkMetadata(
-            book="必修第一册",
-            chapter="第一章",
-            section="1.1 集合",
-            section_id="必修第一册::1.1",
-            page=1,
-            page_start=1,
-            page_end=2,
-        ),
-    )
+# 共享辅助函数
+from tests._helpers import make_mock_chat_service, make_mock_generator
+from tests.conftest import make_query_result
 
 
 # ---------------------------------------------------------------------------
@@ -75,93 +25,35 @@ def _make_query_result(text="test chunk", score=0.95):
 
 
 class TestGraphNodeStructure:
-    """graph.nodes 包含 classify, summarize, rewrite, retrieve, respond, refuse 六个节点"""
+    """graph.nodes 包含 summarize, rewrite, retrieve, respond 四个节点"""
 
     def test_graph_contains_four_nodes(self):
-        """无参数调用时包含六个节点"""
+        """无参数调用时包含四个节点"""
         graph = create_graph(
-            chat_service=_make_mock_chat_service(),
-            generator=_make_mock_generator(),
+            chat_service=make_mock_chat_service(),
+            generator=make_mock_generator(),
         )
         node_names = set(graph.nodes.keys())
-        expected = {"classify", "summarize", "rewrite", "retrieve", "respond", "refuse"}
+        expected = {"summarize", "rewrite", "retrieve", "respond"}
         assert expected.issubset(node_names), f"missing nodes: {expected - node_names}"
-
-    def test_graph_contains_classify_node(self):
-        graph = create_graph(
-            chat_service=_make_mock_chat_service(),
-            generator=_make_mock_generator(),
-        )
-        assert "classify" in graph.nodes
-
-    def test_graph_contains_summarize_node(self):
-        graph = create_graph(
-            chat_service=_make_mock_chat_service(),
-            generator=_make_mock_generator(),
-        )
-        assert "summarize" in graph.nodes
-
-    def test_graph_contains_rewrite_node(self):
-        graph = create_graph(
-            chat_service=_make_mock_chat_service(),
-            generator=_make_mock_generator(),
-        )
-        assert "rewrite" in graph.nodes
-
-    def test_graph_contains_retrieve_node(self):
-        graph = create_graph(
-            chat_service=_make_mock_chat_service(),
-            generator=_make_mock_generator(),
-        )
-        assert "retrieve" in graph.nodes
-
-    def test_graph_contains_respond_node(self):
-        graph = create_graph(
-            chat_service=_make_mock_chat_service(),
-            generator=_make_mock_generator(),
-        )
-        assert "respond" in graph.nodes
-
-    def test_graph_contains_refuse_node(self):
-        graph = create_graph(
-            chat_service=_make_mock_chat_service(),
-            generator=_make_mock_generator(),
-        )
-        assert "refuse" in graph.nodes
+        assert "classify" not in node_names
+        assert "refuse" not in node_names
 
 
 # ---------------------------------------------------------------------------
-# 2. 条件路由验证
+# 2. 端到端路径测试 — 数学问题
 # ---------------------------------------------------------------------------
 
 
-class TestRouteByIntent:
-    """_route_by_intent 条件路由"""
-
-    def test_textbook_routes_to_rewrite(self):
-        assert _route_by_intent({"intent": "textbook"}) == "rewrite"
-
-    def test_unrelated_routes_to_refuse(self):
-        assert _route_by_intent({"intent": "unrelated"}) == "refuse"
-
-    def test_unknown_defaults_to_refuse(self):
-        assert _route_by_intent({"intent": "other"}) == "refuse"
-
-
-# ---------------------------------------------------------------------------
-# 3. 端到端路径测试 — textbook 问题
-# ---------------------------------------------------------------------------
-
-
-class TestTextbookPath:
-    """textbook 意图走 summarize→classify→rewrite→retrieve→respond 路径"""
+class TestLinearPath:
+    """所有问题统一走 summarize → rewrite → retrieve → respond 路径"""
 
     @pytest.mark.asyncio
-    async def test_textbook_question_visits_retrieve_and_respond(self):
-        """数学问题经过 summarize→classify→rewrite→retrieve→respond"""
-        chunk = _make_query_result("集合的概念...")
-        chat_svc = _make_mock_chat_service(chunks=[chunk])
-        gen = _make_mock_generator(tokens=["这是", "回答"])
+    async def test_math_question_visits_all_nodes(self):
+        """数学问题经过 summarize → rewrite → retrieve → respond"""
+        chunk = make_query_result(text="集合的概念...")
+        chat_svc = make_mock_chat_service(chunks=[chunk])
+        gen = make_mock_generator(tokens=["这是", "回答"])
 
         graph = create_graph(chat_service=chat_svc, generator=gen)
 
@@ -174,8 +66,8 @@ class TestTextbookPath:
         async for event in graph.astream(initial_state):
             events.append(event)
 
-        # 验证经过 retrieve 节点 — _retrieve 被调用
-        chat_svc._retrieve.assert_called_once_with("什么是集合？", 10)
+        # 验证经过 retrieve 节点 — retrieve 被调用
+        chat_svc.retrieve.assert_called_once_with("什么是集合？", 10)
 
         # 验证经过 respond 节点 — 返回 AIMessage
         last_event = events[-1]
@@ -184,9 +76,9 @@ class TestTextbookPath:
         assert len(respond_output["messages"]) == 1
         assert isinstance(respond_output["messages"][0], AIMessage)
 
-        # 验证 event_keys 按序包含新拓扑节点
+        # 验证 event_keys 按序包含线性拓扑节点
         event_keys = [list(e.keys())[0] for e in events]
-        assert event_keys == ["summarize", "classify", "rewrite", "retrieve", "respond"]
+        assert event_keys == ["summarize", "rewrite", "retrieve", "respond"]
 
         # 验证 context_chunks 在 state 中
         retrieve_event = None
@@ -200,11 +92,11 @@ class TestTextbookPath:
         assert retrieve_output["context_chunks"][0].text == "集合的概念..."
 
     @pytest.mark.asyncio
-    async def test_textbook_path_populates_sources(self):
+    async def test_linear_path_populates_sources(self):
         """retrieve 节点正确构建 sources"""
-        chunk = _make_query_result()
-        chat_svc = _make_mock_chat_service(chunks=[chunk])
-        gen = _make_mock_generator(tokens=["answer"])
+        chunk = make_query_result()
+        chat_svc = make_mock_chat_service(chunks=[chunk])
+        gen = make_mock_generator(tokens=["answer"])
 
         graph = create_graph(chat_service=chat_svc, generator=gen)
 
@@ -218,7 +110,7 @@ class TestTextbookPath:
             events.append(event)
 
         event_keys = [list(e.keys())[0] for e in events]
-        assert event_keys == ["summarize", "classify", "rewrite", "retrieve", "respond"]
+        assert event_keys == ["summarize", "rewrite", "retrieve", "respond"]
 
         retrieve_event = next(e for e in events if "retrieve" in e)
         sources = retrieve_event["retrieve"]["sources"]
@@ -227,14 +119,14 @@ class TestTextbookPath:
         assert sources[0].section == "1.1 集合"
 
     @pytest.mark.asyncio
-    async def test_textbook_path_carries_degradation_info(self):
+    async def test_linear_path_carries_degradation_info(self):
         """retrieve 节点传递降级信息"""
-        chat_svc = _make_mock_chat_service(
-            chunks=[_make_query_result()],
+        chat_svc = make_mock_chat_service(
+            chunks=[make_query_result()],
             degraded=True,
             degradation_reason="rerank_failed",
         )
-        gen = _make_mock_generator(tokens=["answer"])
+        gen = make_mock_generator(tokens=["answer"])
 
         graph = create_graph(chat_service=chat_svc, generator=gen)
 
@@ -248,7 +140,7 @@ class TestTextbookPath:
             events.append(event)
 
         event_keys = [list(e.keys())[0] for e in events]
-        assert event_keys == ["summarize", "classify", "rewrite", "retrieve", "respond"]
+        assert event_keys == ["summarize", "rewrite", "retrieve", "respond"]
 
         retrieve_event = next(e for e in events if "retrieve" in e)
         assert retrieve_event["retrieve"]["degraded"] is True
@@ -256,18 +148,18 @@ class TestTextbookPath:
 
 
 # ---------------------------------------------------------------------------
-# 4. 端到端路径测试 — unrelated 问题
+# 3. 端到端路径测试 — 问候/非课程问题（新架构下也走完整路径）
 # ---------------------------------------------------------------------------
 
 
-class TestUnrelatedPath:
-    """unrelated 意图走 classify→refuse 路径"""
+class TestGreetingPath:
+    """问候/非课程问题也走 summarize → rewrite → retrieve → respond（由 LLM 自然拒绝）"""
 
     @pytest.mark.asyncio
-    async def test_unrelated_question_goes_to_refuse(self):
-        """问候问题经过 classify→refuse"""
-        chat_svc = _make_mock_chat_service()
-        gen = _make_mock_generator()
+    async def test_greeting_goes_through_full_path(self):
+        """问候问题经过完整线性路径，retrieve 可能返回空"""
+        chat_svc = make_mock_chat_service(chunks=[])
+        gen = make_mock_generator()
 
         graph = create_graph(chat_service=chat_svc, generator=gen)
 
@@ -280,45 +172,18 @@ class TestUnrelatedPath:
         async for event in graph.astream(initial_state):
             events.append(event)
 
-        # 验证 _retrieve 未被调用
-        chat_svc._retrieve.assert_not_called()
+        # 验证 retrieve 被调用（即使返回空结果）
+        chat_svc.retrieve.assert_called_once()
 
-        # 验证经过 refuse 节点
-        refuse_event = next((e for e in events if "refuse" in e), None)
-        assert refuse_event is not None
-
-        refuse_output = refuse_event["refuse"]
-        messages = refuse_output.get("messages", [])
-        assert len(messages) == 1
-        assert isinstance(messages[0], AIMessage)
-        assert "课程学习助手" in messages[0].content
+        # 验证走完整路径
+        event_keys = [list(e.keys())[0] for e in events]
+        assert event_keys == ["summarize", "rewrite", "retrieve", "respond"]
 
     @pytest.mark.asyncio
-    async def test_short_question_goes_to_refuse(self):
-        """短问题（<=3字）走 refuse"""
-        chat_svc = _make_mock_chat_service()
-        gen = _make_mock_generator()
-
-        graph = create_graph(chat_service=chat_svc, generator=gen)
-
-        initial_state = {
-            "messages": [],
-            "question": "嗨",
-        }
-
-        events = []
-        async for event in graph.astream(initial_state):
-            events.append(event)
-
-        chat_svc._retrieve.assert_not_called()
-        refuse_event = next((e for e in events if "refuse" in e), None)
-        assert refuse_event is not None
-
-    @pytest.mark.asyncio
-    async def test_greeting_goes_to_refuse(self):
-        """常见问候走 refuse"""
-        chat_svc = _make_mock_chat_service()
-        gen = _make_mock_generator()
+    async def test_thanks_goes_through_full_path(self):
+        """谢谢经过完整线性路径"""
+        chat_svc = make_mock_chat_service(chunks=[])
+        gen = make_mock_generator()
 
         graph = create_graph(chat_service=chat_svc, generator=gen)
 
@@ -331,13 +196,13 @@ class TestUnrelatedPath:
         async for event in graph.astream(initial_state):
             events.append(event)
 
-        chat_svc._retrieve.assert_not_called()
-        refuse_event = next((e for e in events if "refuse" in e), None)
-        assert refuse_event is not None
+        chat_svc.retrieve.assert_called_once()
+        event_keys = [list(e.keys())[0] for e in events]
+        assert event_keys == ["summarize", "rewrite", "retrieve", "respond"]
 
 
 # ---------------------------------------------------------------------------
-# 5. graph.stream() / astream() 可执行并产出 events
+# 4. graph.stream() / astream() 可执行并产出 events
 # ---------------------------------------------------------------------------
 
 
@@ -347,8 +212,8 @@ class TestGraphStreaming:
     @pytest.mark.asyncio
     async def test_astream_produces_events(self):
         """astream 产出多个 event"""
-        chat_svc = _make_mock_chat_service(chunks=[_make_query_result()])
-        gen = _make_mock_generator(tokens=["回答"])
+        chat_svc = make_mock_chat_service(chunks=[make_query_result()])
+        gen = make_mock_generator(tokens=["回答"])
 
         graph = create_graph(chat_service=chat_svc, generator=gen)
 
@@ -361,16 +226,16 @@ class TestGraphStreaming:
         async for event in graph.astream(initial_state):
             events.append(event)
 
-        # textbook 路径至少产出 summarize + classify + rewrite + retrieve + respond 五个事件
-        assert len(events) >= 5
+        # 线性路径产出 summarize + rewrite + retrieve + respond 四个事件
+        assert len(events) >= 4
         event_keys = [list(e.keys())[0] for e in events]
-        assert event_keys == ["summarize", "classify", "rewrite", "retrieve", "respond"]
+        assert event_keys == ["summarize", "rewrite", "retrieve", "respond"]
 
     @pytest.mark.asyncio
-    async def test_astream_unrelated_produces_classify_refuse(self):
-        """unrelated 路径产出 summarize + classify + refuse 三个事件"""
-        chat_svc = _make_mock_chat_service()
-        gen = _make_mock_generator()
+    async def test_astream_greeting_produces_full_path(self):
+        """问候问题也产出完整路径事件"""
+        chat_svc = make_mock_chat_service(chunks=[])
+        gen = make_mock_generator()
 
         graph = create_graph(chat_service=chat_svc, generator=gen)
 
@@ -383,13 +248,13 @@ class TestGraphStreaming:
         async for event in graph.astream(initial_state):
             events.append(event)
 
-        assert len(events) == 3
+        assert len(events) == 4
         event_keys = [list(e.keys())[0] for e in events]
-        assert event_keys == ["summarize", "classify", "refuse"]
+        assert event_keys == ["summarize", "rewrite", "retrieve", "respond"]
 
 
 # ---------------------------------------------------------------------------
-# 6. 向后兼容 — 无 chat_service/generator 仍可编译
+# 5. 向后兼容 — 无 chat_service/generator 仍可编译
 # ---------------------------------------------------------------------------
 
 
@@ -398,12 +263,136 @@ class TestBackwardCompatibility:
 
     def test_create_graph_minimal_args(self):
         """只传 generator 时仍可编译"""
-        graph = create_graph(generator=_make_mock_generator())
-        assert "classify" in graph.nodes
-        assert "refuse" in graph.nodes
+        graph = create_graph(generator=make_mock_generator())
+        node_names = set(graph.nodes.keys())
+        assert "respond" in node_names
+        assert "classify" not in node_names
+        assert "refuse" not in node_names
 
-    def test_create_graph_only_checkpointer(self):
+    def test_create_graph_with_checkpointer(self):
         from langgraph.checkpoint.memory import MemorySaver
 
-        graph = create_graph(checkpointer=MemorySaver(), generator=_make_mock_generator())
-        assert "classify" in graph.nodes
+        graph = create_graph(checkpointer=MemorySaver(), generator=make_mock_generator())
+        node_names = set(graph.nodes.keys())
+        assert "respond" in node_names
+        assert "refuse" not in node_names
+
+
+# ---------------------------------------------------------------------------
+# 6. R010 respond 分级注入测试
+# ---------------------------------------------------------------------------
+
+
+def _make_chat_model_capture():
+    """创建 mock chat_model，捕获 system_content"""
+    captured = {}
+
+    async def _ainvoke(messages, **kwargs):
+        captured["system_content"] = messages[0].content
+        return AIMessage(content="mock answer")
+
+    model = MagicMock()
+    model.ainvoke = _ainvoke
+    return model, captured
+
+
+def _make_generator_with_model(model):
+    """创建 mock generator，使用指定 chat_model"""
+    gen = MagicMock()
+    gen.get_chat_model.return_value = model
+    gen.generate_stream = AsyncMock()
+    gen.generate_title = AsyncMock()
+    return gen
+
+
+class TestRespondGradedInjection:
+    """R010: respond 节点分级 context 注入集成测试"""
+
+    @pytest.mark.asyncio
+    async def test_high_score_strict_context(self):
+        """高相关性（score=0.9, degraded=False）→ 强约束注入"""
+        from app.config import settings
+
+        chunk = make_query_result(text="集合的概念...", score=0.9)
+        assert 0.9 >= settings.relevance_threshold
+
+        chat_svc = make_mock_chat_service(chunks=[chunk], degraded=False)
+        model, captured = _make_chat_model_capture()
+        gen = _make_generator_with_model(model)
+
+        graph = create_graph(chat_service=chat_svc, generator=gen)
+        events = []
+        async for event in graph.astream({
+            "messages": [HumanMessage(content="什么是集合？")],
+            "question": "什么是集合？",
+        }):
+            events.append(event)
+
+        system_content = captured["system_content"]
+        assert "严格基于以上教材内容回答" in system_content
+        assert "可能相关的参考内容" not in system_content
+
+    @pytest.mark.asyncio
+    async def test_low_score_weak_reference(self):
+        """低相关性（score=0.2, degraded=False）→ 弱参考注入"""
+        from app.config import settings
+
+        chunk = make_query_result(text="不相关内容...", score=0.2)
+        assert 0.2 < settings.relevance_threshold
+
+        chat_svc = make_mock_chat_service(chunks=[chunk], degraded=False)
+        model, captured = _make_chat_model_capture()
+        gen = _make_generator_with_model(model)
+
+        graph = create_graph(chat_service=chat_svc, generator=gen)
+        events = []
+        async for event in graph.astream({
+            "messages": [HumanMessage(content="今天天气怎么样")],
+            "question": "今天天气怎么样",
+        }):
+            events.append(event)
+
+        system_content = captured["system_content"]
+        assert "可能相关的参考内容" in system_content
+        assert "严格基于以上教材内容回答" not in system_content
+
+    @pytest.mark.asyncio
+    async def test_no_chunks_no_injection(self):
+        """无 chunks → 不注入 context"""
+        chat_svc = make_mock_chat_service(chunks=[])
+        model, captured = _make_chat_model_capture()
+        gen = _make_generator_with_model(model)
+
+        graph = create_graph(chat_service=chat_svc, generator=gen)
+        events = []
+        async for event in graph.astream({
+            "messages": [HumanMessage(content="你好")],
+            "question": "你好",
+        }):
+            events.append(event)
+
+        system_content = captured["system_content"]
+        assert "以下是检索到的教材内容" not in system_content
+        assert "可能相关的参考内容" not in system_content
+
+    @pytest.mark.asyncio
+    async def test_degraded_weak_reference(self):
+        """降级（degraded=True）→ 即使 score 高也走弱参考路径"""
+        chunk = make_query_result(text="集合的概念...", score=0.9)
+        chat_svc = make_mock_chat_service(
+            chunks=[chunk], degraded=True, degradation_reason="rerank_failed"
+        )
+        model, captured = _make_chat_model_capture()
+        gen = _make_generator_with_model(model)
+
+        graph = create_graph(chat_service=chat_svc, generator=gen)
+        events = []
+        async for event in graph.astream({
+            "messages": [HumanMessage(content="什么是集合？")],
+            "question": "什么是集合？",
+        }):
+            events.append(event)
+
+        system_content = captured["system_content"]
+        assert "可能相关的参考内容" in system_content
+        assert "严格基于以上教材内容回答" not in system_content

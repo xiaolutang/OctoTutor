@@ -64,6 +64,9 @@ class Settings(BaseSettings):
     rerank_model: str = "gte-rerank"
     chat_max_context_tokens: int = 3000
 
+    # R010: Context 相关性阈值（reranker score）
+    relevance_threshold: float = 0.50
+
     # R004: BM25 + RRF 配置
     bm25_enabled: bool = True
     rrf_k: int = 60

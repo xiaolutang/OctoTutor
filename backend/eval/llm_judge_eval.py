@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from eval.graders import TestCaseResult
+from eval._helpers import get_llm_config, call_llm_json
 
 
 # ---------------------------------------------------------------------------
@@ -48,67 +49,19 @@ class LLMJudgeCaseResult:
 
 
 # ---------------------------------------------------------------------------
-# LLM Judge 调用 — 使用 GLM-5.1
+# LLM Judge 工具
 # ---------------------------------------------------------------------------
 
 
-def _get_llm_config() -> dict[str, str]:
-    """从 .env / 环境变量读取 LLM 配置（GLM-5.1）"""
-    import os
-    from dotenv import dotenv_values
-
-    env = dotenv_values(".env")
-
-    def _conf(key: str, default: str = "") -> str:
-        return env.get(key, "") or os.environ.get(key, default)
-
-    return {
-        "api_key": _conf("NEWAPI_API_KEY"),
-        "base_url": _conf("NEWAPI_BASE_URL", "http://localhost:13000/v1"),
-        "model": _conf("LLM_MODEL", "glm-5.1"),
-    }
-
-
-def _call_llm_judge(prompt: str, llm_config: dict[str, str]) -> dict[str, Any]:
-    """调用 GLM-5.1 作为 Judge，解析 JSON 输出"""
-    import httpx
-
-    api_key = llm_config["api_key"]
-    base_url = llm_config["base_url"]
-    model = llm_config["model"]
-
-    try:
-        resp = httpx.post(
-            f"{base_url}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": model,
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0,
-                "max_tokens": 500,
-            },
-            timeout=60,
-        )
-        resp.raise_for_status()
-        content = resp.json()["choices"][0]["message"]["content"]
-
-        # 提取 JSON（可能被 markdown 代码块包裹）
-        if "```json" in content:
-            content = content.split("```json")[1].split("```")[0].strip()
-        elif "```" in content:
-            content = content.split("```")[1].split("```")[0].strip()
-
-        return json.loads(content)
-    except Exception as e:
-        return {
-            "score": 0,
-            "assertions": [False, False, False],
-            "reasoning": f"LLM error: {e}",
-            "error": str(e),
-        }
+def _make_judge_result(dimension: str, judge_output: dict[str, Any]) -> JudgeResult:
+    """从 LLM Judge 输出构建 JudgeResult"""
+    return JudgeResult(
+        dimension=dimension,
+        score=judge_output.get("score", 0),
+        assertions=judge_output.get("assertions", [False, False, False]),
+        reasoning=judge_output.get("reasoning", ""),
+        error=judge_output.get("error"),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -128,6 +81,7 @@ async def _run_llm_judge_for_case(
         RETRIEVAL_RELEVANCE_PROMPT,
         CONTEXT_COHERENCE_PROMPT,
         SUMMARY_FIDELITY_PROMPT,
+        GROUNDING_PROMPT,
     )
 
     result = LLMJudgeCaseResult(
@@ -154,19 +108,13 @@ async def _run_llm_judge_for_case(
             question=question,
             rewritten_question=rewritten_question or "(未改写)",
         )
-        judge_output = _call_llm_judge(prompt, llm_config)
+        judge_output = call_llm_json(prompt, llm_config)
         result.judge_results.append(
-            JudgeResult(
-                dimension="rewrite_quality",
-                score=judge_output.get("score", 0),
-                assertions=judge_output.get("assertions", [False, False, False]),
-                reasoning=judge_output.get("reasoning", ""),
-                error=judge_output.get("error"),
-            )
+            _make_judge_result("rewrite_quality", judge_output)
         )
 
-    # 维度 2: 检索相关性（正面用例 & textbook intent）
-    if not result.negative and expected.get("intent") == "textbook":
+    # 维度 2: 检索相关性（正面用例，所有输入都走 retrieve 路径）
+    if not result.negative:
         chunks_raw = final_state.get("context_chunks", [])
         chunks_summary = ""
         if chunks_raw:
@@ -180,15 +128,9 @@ async def _run_llm_judge_for_case(
             num_chunks=len(chunks_raw),
             chunks_summary=chunks_summary or "(无检索结果)",
         )
-        judge_output = _call_llm_judge(prompt, llm_config)
+        judge_output = call_llm_json(prompt, llm_config)
         result.judge_results.append(
-            JudgeResult(
-                dimension="retrieval_relevance",
-                score=judge_output.get("score", 0),
-                assertions=judge_output.get("assertions", [False, False, False]),
-                reasoning=judge_output.get("reasoning", ""),
-                error=judge_output.get("error"),
-            )
+            _make_judge_result("retrieval_relevance", judge_output)
         )
 
     # 维度 3: 上下文连贯性（多轮正面用例）
@@ -203,15 +145,9 @@ async def _run_llm_judge_for_case(
             question=turns[-1]["content"],
             answer_summary=answer_summary,
         )
-        judge_output = _call_llm_judge(prompt, llm_config)
+        judge_output = call_llm_json(prompt, llm_config)
         result.judge_results.append(
-            JudgeResult(
-                dimension="context_coherence",
-                score=judge_output.get("score", 0),
-                assertions=judge_output.get("assertions", [False, False, False]),
-                reasoning=judge_output.get("reasoning", ""),
-                error=judge_output.get("error"),
-            )
+            _make_judge_result("context_coherence", judge_output)
         )
 
     # 维度 4: 摘要保真度（仅 summarize 触发时评估）
@@ -221,15 +157,30 @@ async def _run_llm_judge_for_case(
             original_messages=original_messages,
             summary=conversation_summary,
         )
-        judge_output = _call_llm_judge(prompt, llm_config)
+        judge_output = call_llm_json(prompt, llm_config)
         result.judge_results.append(
-            JudgeResult(
-                dimension="summary_fidelity",
-                score=judge_output.get("score", 0),
-                assertions=judge_output.get("assertions", [False, False, False]),
-                reasoning=judge_output.get("reasoning", ""),
-                error=judge_output.get("error"),
-            )
+            _make_judge_result("summary_fidelity", judge_output)
+        )
+
+    # 维度 5: 接地性（irrelevant_context / L7 用例）
+    if case.get("category") == "irrelevant_context":
+        chunks_raw = final_state.get("context_chunks", [])
+        context_summary = ""
+        if chunks_raw:
+            chunk_texts = []
+            for i, c in enumerate(chunks_raw[:5]):
+                text = c.text if hasattr(c, "text") else str(c)
+                chunk_texts.append(f"[{i+1}] {text[:200]}")
+            context_summary = "\n".join(chunk_texts)
+        ai_answer = final_state.get("last_ai_answer", "")
+        prompt = GROUNDING_PROMPT.format(
+            context=context_summary or "(无检索结果)",
+            question=turns[-1]["content"],
+            answer=ai_answer or "(无回答)",
+        )
+        judge_output = call_llm_json(prompt, llm_config)
+        result.judge_results.append(
+            _make_judge_result("grounding", judge_output)
         )
 
     # 计算汇总
@@ -268,7 +219,7 @@ async def run_llm_judge_eval(
         cases = json.load(f)
 
     # 获取 LLM 配置
-    llm_config = _get_llm_config()
+    llm_config = get_llm_config()
     print(f"\n[LLM Judge] 模型: {llm_config['model']}, 基地址: {llm_config['base_url']}")
 
     results = []
