@@ -7,9 +7,10 @@
 分类依据（按优先级）：
 1. 长度过短（<=3 字）→ unrelated
 2. 常见问候/闲聊模式 → unrelated
+2b. 社交噪音（去问候后残余为空）→ unrelated
 3. 包含数学符号/公式标记 → textbook
 4. 包含数学关键词 → textbook
-5. 默认 → textbook（宁可多检索，不漏检索）
+5. 默认 → unrelated（宁可拒答，不误答）
 """
 
 from __future__ import annotations
@@ -22,6 +23,8 @@ _GREETING_PATTERNS: set[str] = {
     "谢谢", "感谢", "thanks", "ok", "好的", "嗯", "哦",
     "再见", "拜拜", "bye",
     "你是谁", "你叫什么", "介绍一下你自己",
+    "哈哈", "呵呵", "嘿嘿", "嘻嘻",   # 社交笑声
+    "嗯嗯", "哦哦",                    # 重复语气词
 }
 
 # 数学关键词（出现任意一个即判定为需要检索）
@@ -34,6 +37,8 @@ _MATH_KEYWORDS: set[str] = {
     "排列", "组合", "二项式", "分布",
     "平面", "空间", "坐标", "角度", "距离",
     "公式", "定理", "性质", "定义",
+    "题",   # "这道题"、"做几道题"、"题目"
+    "算",   # "帮我算一下"、"怎么算"、"算出"
 }
 
 # 数学符号正则：$...$, 数字+运算符, 希腊字母, 上下标
@@ -67,14 +72,21 @@ def classify_question(question: str) -> str:
     if normalized in _GREETING_PATTERNS:
         return "unrelated"
 
+    # 2b. 社交噪音检测（去问候后残余为空 → 纯噪音）
+    cleaned = normalized
+    for g in _GREETING_PATTERNS:
+        cleaned = cleaned.replace(g, "")
+    cleaned = cleaned.strip("。！？!?. ")
+    if not cleaned:
+        return "unrelated"
+
     # 3. 数学符号
     if _MATH_SYMBOL_RE.search(text):
         return "textbook"
 
     # 4. 数学关键词
-    for kw in _MATH_KEYWORDS:
-        if kw in text:
-            return "textbook"
+    if any(kw in text for kw in _MATH_KEYWORDS):
+        return "textbook"
 
-    # 5. 默认走检索（宁可多检索）
-    return "textbook"
+    # 5. 默认 unrelated（宁可拒答，不误答）
+    return "unrelated"

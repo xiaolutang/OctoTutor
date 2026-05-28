@@ -42,6 +42,15 @@ class TestUnrelatedIntent:
     def test_introduce_yourself(self):
         assert classify_question("介绍一下你自己") == "unrelated"
 
+    def test_repeated_greeting(self):
+        assert classify_question("你好你好") == "unrelated"
+
+    def test_social_laughter(self):
+        assert classify_question("哈哈哈哈") == "unrelated"
+
+    def test_non_math_poetry(self):
+        assert classify_question("背诵一下将进酒") == "unrelated"
+
 
 class TestTextbookIntent:
     """应判定为 textbook 的输入（需要检索教材）"""
@@ -82,17 +91,23 @@ class TestTextbookIntent:
     def test_math_symbol_inequality(self):
         assert classify_question("解不等式 x≥0") == "textbook"
 
-    def test_default_fallback(self):
-        """不匹配任何模式的中长文本默认走检索"""
+    def test_math_keyword_in_context(self):
+        """含'题'关键词的上下文应命中 textbook"""
         assert classify_question("帮我看看这道题") == "textbook"
+
+    def test_math_exercise_keyword(self):
+        assert classify_question("这道题怎么做") == "textbook"
+
+    def test_calculate_keyword(self):
+        assert classify_question("帮我算一下") == "textbook"
 
 
 class TestEdgeCases:
     """边界情况"""
 
     def test_exactly_4_chars(self):
-        """4 字不匹配问候模式，默认走检索"""
-        assert classify_question("帮我看看") == "textbook"
+        """4 字不匹配任何模式，默认 unrelated"""
+        assert classify_question("帮我看看") == "unrelated"
 
     def test_mixed_case_greeting(self):
         assert classify_question("HI") == "unrelated"
@@ -107,5 +122,5 @@ class TestEdgeCases:
         assert classify_question("老师，请问函数的定义是什么？") == "textbook"
 
     def test_non_math_long_text(self):
-        """非数学但较长，默认走检索"""
-        assert classify_question("今天天气怎么样") == "textbook"
+        """非数学但较长，默认 unrelated（宁可拒答，不误答）"""
+        assert classify_question("今天天气怎么样") == "unrelated"
