@@ -41,7 +41,7 @@ SSE 流式连接：Browser → Traefik → Backend SSE Endpoint (/api/chat/strea
 - **apiClient 统一网络层**: 前端所有 API 请求经 apiClient，自动附加 Bearer token + 刷新锁 + 401 重试（DEC-auth-003）
 - **Token 预算管理 + LLM 摘要压缩**: 字符估算 × 1.5 保守系数 + 65% 阈值触发摘要 + RemoveMessage 清理旧消息（DEC-rag-010）
 - **Query Rewriting**: 多轮时 LLM 改写追问为独立问题 + 首轮透传 + 失败 fallback 原始 question（DEC-rag-011）
-- **动态 System Prompt**: respond 节点动态注入 RAG context 到 SystemMessage，对话历史原样透传
+- **动态 System Prompt**: respond 节点动态注入 RAG context 到 SystemMessage，对话历史原样透传（DEC-rag-014 分级注入）
 - **线性 StateGraph 拓扑（无分类器）**: START → summarize → rewrite → retrieve → respond → END，所有问题统一走完整路径，由 LLM + 系统提示词自然处理路由（DEC-rag-012-rev1，移除分类器）
 - **Context 分级注入策略**: respond 节点按检索结果相关性分级注入系统指令（相关→强约束/不相关→弱参考/降级→弱参考/空→不注入），避免 LLM 基于不相关内容产生幻觉（DEC-rag-014）
 - **忠实性约束最高优先级**: TEACHING_SYSTEM_PROMPT 新增"忠实性约束"章节标记为最高优先级，要求 LLM 只说教材中明确存在的内容（DEC-rag-015）

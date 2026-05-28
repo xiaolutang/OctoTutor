@@ -284,3 +284,43 @@ class TestRewriteNode:
         }
         result = await _rewrite(state)
         assert result == {}
+
+
+# ===================================================================
+# 5. build_context_injection 纯函数测试
+# ===================================================================
+
+
+class TestBuildContextInjection:
+    """build_context_injection 纯函数单元测试（无需跑 graph）"""
+
+    def _make_chunk(self, score: float):
+        """构造带指定 score 的 QueryResult"""
+        from tests.conftest import make_query_result
+        return make_query_result(text="测试内容", score=score)
+
+    def test_no_chunks_returns_empty(self):
+        """空 chunks → 不注入"""
+        from app.agent.graph import build_context_injection
+        assert build_context_injection([], False, 0.5) == ""
+
+    def test_high_score_strict_context(self):
+        """高相关性 → 强约束"""
+        from app.agent.graph import build_context_injection
+        result = build_context_injection([self._make_chunk(0.9)], False, 0.5)
+        assert "严格基于以上教材内容回答" in result
+        assert "可能相关的参考内容" not in result
+
+    def test_low_score_weak_reference(self):
+        """低相关性 → 弱参考"""
+        from app.agent.graph import build_context_injection
+        result = build_context_injection([self._make_chunk(0.2)], False, 0.5)
+        assert "可能相关的参考内容" in result
+        assert "严格基于以上教材内容回答" not in result
+
+    def test_degraded_weak_reference_even_with_high_score(self):
+        """降级 → 即使 score 高也走弱参考"""
+        from app.agent.graph import build_context_injection
+        result = build_context_injection([self._make_chunk(0.9)], True, 0.5)
+        assert "可能相关的参考内容" in result
+        assert "严格基于以上教材内容回答" not in result

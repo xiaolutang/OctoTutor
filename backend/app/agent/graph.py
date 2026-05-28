@@ -21,6 +21,38 @@ from app.agent.token_budget import TokenBudget, estimate_tokens
 from app.config import settings
 
 
+def build_context_injection(
+    chunks: list[QueryResult],
+    degraded: bool,
+    threshold: float,
+) -> str:
+    """根据 chunks 相关性构建 context 注入文本
+
+    4 级分级策略：
+    - 空 chunks → 不注入（返回空串）
+    - 高相关性（degraded=False, best_score >= threshold）→ 强约束
+    - 低相关性 / 降级 → 弱参考
+    """
+    if not chunks:
+        return ""
+
+    context_text = build_numbered_context(chunks)
+    high_relevance = (
+        not degraded
+        and max(c.score for c in chunks) >= threshold
+    )
+
+    if high_relevance:
+        return (
+            f"\n\n以下是检索到的教材内容：\n{context_text}\n"
+            "请严格基于以上教材内容回答。只使用教材中明确出现的信息，不要编造教材中没有的内容。"
+        )
+    return (
+        f"\n\n以下是一些可能相关的参考内容：\n{context_text}\n"
+        "如果这些内容与学生的问题相关，可以参考使用；如果不相关，基于你的知识回答并标注'教材中未直接涉及'。"
+    )
+
+
 class AgentState(dict):
     """LangGraph 图状态
 
@@ -198,30 +230,10 @@ def create_graph(checkpointer=None, chat_service=None, generator=None):
 
         # 1. 构建 SystemMessage（分级 context 注入）
         system_content = TEACHING_SYSTEM_PROMPT
-        if chunks:
-            context_text = build_numbered_context(chunks)
-            degraded = state.get("degraded", False)
-
-            if not degraded:
-                best_score = max(c.score for c in chunks)
-                if best_score >= settings.relevance_threshold:
-                    # 高相关性 — 强约束
-                    system_content += (
-                        f"\n\n以下是检索到的教材内容：\n{context_text}\n"
-                        "请严格基于以上教材内容回答。只使用教材中明确出现的信息，不要编造教材中没有的内容。"
-                    )
-                else:
-                    # 低相关性 — 弱参考
-                    system_content += (
-                        f"\n\n以下是一些可能相关的参考内容：\n{context_text}\n"
-                        "如果这些内容与学生的问题相关，可以参考使用；如果不相关，基于你的知识回答并标注'教材中未直接涉及'。"
-                    )
-            else:
-                # 降级 — 弱参考（reranker 分数不可信）
-                system_content += (
-                    f"\n\n以下是一些可能相关的参考内容：\n{context_text}\n"
-                    "如果这些内容与学生的问题相关，可以参考使用；如果不相关，基于你的知识回答并标注'教材中未直接涉及'。"
-                )
+        degraded = state.get("degraded", False)
+        system_content += build_context_injection(
+            chunks, degraded, settings.relevance_threshold
+        )
 
         messages = [SystemMessage(content=system_content)]
 

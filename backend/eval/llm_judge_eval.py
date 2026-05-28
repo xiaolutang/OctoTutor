@@ -64,6 +64,17 @@ def _make_judge_result(dimension: str, judge_output: dict[str, Any]) -> JudgeRes
     )
 
 
+def _summarize_chunks(chunks_raw: list, limit: int = 5, max_chars: int = 200) -> str:
+    """将 context_chunks 转为带编号的摘要文本"""
+    if not chunks_raw:
+        return ""
+    lines = []
+    for i, c in enumerate(chunks_raw[:limit]):
+        text = c.text if hasattr(c, "text") else str(c)
+        lines.append(f"[{i+1}] {text[:max_chars]}")
+    return "\n".join(lines)
+
+
 # ---------------------------------------------------------------------------
 # 单用例 LLM Judge
 # ---------------------------------------------------------------------------
@@ -116,13 +127,7 @@ async def _run_llm_judge_for_case(
     # 维度 2: 检索相关性（正面用例，所有输入都走 retrieve 路径）
     if not result.negative:
         chunks_raw = final_state.get("context_chunks", [])
-        chunks_summary = ""
-        if chunks_raw:
-            chunk_texts = []
-            for i, c in enumerate(chunks_raw[:5]):
-                text = c.text if hasattr(c, "text") else str(c)
-                chunk_texts.append(f"[{i+1}] {text[:200]}")
-            chunks_summary = "\n".join(chunk_texts)
+        chunks_summary = _summarize_chunks(chunks_raw) or "(无检索结果)"
         prompt = RETRIEVAL_RELEVANCE_PROMPT.format(
             question=turns[-1]["content"],
             num_chunks=len(chunks_raw),
@@ -165,13 +170,7 @@ async def _run_llm_judge_for_case(
     # 维度 5: 接地性（irrelevant_context / L7 用例）
     if case.get("category") == "irrelevant_context":
         chunks_raw = final_state.get("context_chunks", [])
-        context_summary = ""
-        if chunks_raw:
-            chunk_texts = []
-            for i, c in enumerate(chunks_raw[:5]):
-                text = c.text if hasattr(c, "text") else str(c)
-                chunk_texts.append(f"[{i+1}] {text[:200]}")
-            context_summary = "\n".join(chunk_texts)
+        context_summary = _summarize_chunks(chunks_raw) or "(无检索结果)"
         ai_answer = final_state.get("last_ai_answer", "")
         prompt = GROUNDING_PROMPT.format(
             context=context_summary or "(无检索结果)",
