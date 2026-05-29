@@ -3,12 +3,11 @@ from dataclasses import dataclass
 from app.rag.models import QueryResult
 from app.domain.protocols import Reranker, Generator
 from app.chat.schemas import ChatResponse
-from app.domain.classifier import classify_question
 
 
 @dataclass
 class RetrieveResult:
-    """_retrieve() 返回类型：携带检索结果 + 降级状态"""
+    """retrieve() 返回类型：携带检索结果 + 降级状态"""
     chunks: list[QueryResult]
     degraded: bool = False
     degradation_reason: str | None = None
@@ -28,18 +27,7 @@ class ChatService:
     # ------------------------------------------------------------------
 
     def handle_chat(self, question: str, top_k: int) -> ChatResponse | None:
-        # 意图分类：问候/闲聊等走 direct，不检索教材
-        if classify_question(question) == "unrelated":
-            answer, _ = self._generator.generate(question, [])
-            return ChatResponse(
-                answer=answer,
-                sources=[],
-                context_used=0,
-                degraded=False,
-                degradation_reason=None,
-            )
-
-        result = self._retrieve(question, top_k)
+        result = self.retrieve(question, top_k)
         if not result.chunks:
             return None
         answer, sources = self._generator.generate(question, result.chunks)
@@ -52,10 +40,10 @@ class ChatService:
         )
 
     # ------------------------------------------------------------------
-    # 私有方法
+    # 检索管线（graph.py 调用）
     # ------------------------------------------------------------------
 
-    def _retrieve(self, question: str, top_k: int) -> RetrieveResult:
+    def retrieve(self, question: str, top_k: int) -> RetrieveResult:
         """检索管线：Embed -> Vector -> Threshold -> BM25 -> RRF -> Rerank -> Truncate"""
         embedding = self._embedding.embed_query(question)
         vector_results = self._vector_store.query(embedding, self._settings.retrieval_top_k)
@@ -76,21 +64,21 @@ class ChatService:
             return RetrieveResult(chunks=[])
 
         # Rerank 精炼（失败降级）
+        rerank_reason = None
         try:
             reranked = self._reranker.rerank(question, fused, self._settings.rerank_top_n)
             if not reranked:
                 reranked = fused[: self._settings.rerank_top_n]
-                return RetrieveResult(
-                    chunks=self._truncate_by_chars(reranked, self._settings.chat_max_context_tokens),
-                    degraded=True,
-                    degradation_reason="rerank_empty",
-                )
+                rerank_reason = "rerank_empty"
         except Exception:
             reranked = fused[: self._settings.rerank_top_n]
+            rerank_reason = "rerank_failed"
+
+        if rerank_reason:
             return RetrieveResult(
                 chunks=self._truncate_by_chars(reranked, self._settings.chat_max_context_tokens),
                 degraded=True,
-                degradation_reason="rerank_failed",
+                degradation_reason=rerank_reason,
             )
 
         context_chunks = self._truncate_by_chars(reranked, self._settings.chat_max_context_tokens)

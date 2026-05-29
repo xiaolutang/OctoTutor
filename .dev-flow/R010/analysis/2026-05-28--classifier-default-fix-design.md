@@ -4,7 +4,7 @@ version: "1.0"
 date: 2026-05-28
 tags: [bug-fix, classifier, routing]
 type: design_backend
-status: designed
+status: superseded
 requirement_cycle: R010
 source_analysis: 2026-05-26--R010-long-context-dialogue.md
 architecture_md_updates: false

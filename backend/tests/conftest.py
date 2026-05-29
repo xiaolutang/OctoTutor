@@ -1,7 +1,8 @@
 import os
+from unittest.mock import MagicMock
+
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from unittest.mock import MagicMock
 
 # 确保测试环境有必要的配置（避免 Settings 校验失败）
 os.environ.setdefault("DASHSCOPE_API_KEY", "test-api-key-for-testing")

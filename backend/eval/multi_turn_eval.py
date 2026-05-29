@@ -27,9 +27,9 @@ from eval.graders import (
 
 def _build_graph():
     """构建 graph：真实 LLM（GLM-5.1）+ 真实检索管线"""
-    import os
     from dataclasses import dataclass
-    from dotenv import dotenv_values
+
+    from eval._helpers import get_llm_config
 
     from app.agent.graph import create_graph
     from app.infra.llm import LLMGenerator
@@ -39,16 +39,11 @@ def _build_graph():
     from app.infra.reranker import DashScopeReranker
     from app.chat.service import ChatService
 
-    env = dotenv_values(".env")
-
-    def _conf(key: str, default: str = "") -> str:
-        """优先 .env，其次环境变量"""
-        return env.get(key, "") or os.environ.get(key, default)
-
-    # LLM 配置
-    api_key = _conf("NEWAPI_API_KEY")
-    base_url = _conf("NEWAPI_BASE_URL", "http://localhost:13000/v1")
-    model = _conf("LLM_MODEL", "glm-5.1")
+    config = get_llm_config()
+    api_key = config["api_key"]
+    base_url = config["base_url"]
+    model = config["model"]
+    dashscope_key = config["dashscope_key"]
     print(f"[eval] LLM: {model} @ {base_url}")
 
     generator = LLMGenerator(
@@ -56,9 +51,6 @@ def _build_graph():
         base_url=base_url,
         model=model,
     )
-
-    # 真实检索管线
-    dashscope_key = _conf("DASHSCOPE_API_KEY")
     print("[eval] 真实检索管线: ChromaDB + DashScope Embedding + BM25 + Reranker")
 
     vector_store = ChromaDBStore(

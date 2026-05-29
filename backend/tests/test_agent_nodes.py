@@ -324,3 +324,10 @@ class TestBuildContextInjection:
         result = build_context_injection([self._make_chunk(0.9)], True, 0.5)
         assert "可能相关的参考内容" in result
         assert "严格基于以上教材内容回答" not in result
+
+    def test_score_exactly_at_threshold_goes_strict(self):
+        """score 恰好等于 threshold → 走强约束（>= 包含边界）"""
+        from app.agent.graph import build_context_injection
+        result = build_context_injection([self._make_chunk(0.5)], False, 0.5)
+        assert "严格基于以上教材内容回答" in result
+        assert "可能相关的参考内容" not in result

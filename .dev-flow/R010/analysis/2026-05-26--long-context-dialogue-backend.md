@@ -25,13 +25,13 @@ architecture_md_updates: true
 
 | 能力 | 文件 | 状态 |
 |------|------|------|
-| LangGraph StateGraph 编排 | `agent/graph.py` | `START → classify → [retrieve → respond \| refuse] → END` |
+| LangGraph StateGraph 编排 | `agent/graph.py` | `START → summarize → rewrite → retrieve → respond → END`（线性拓扑，无分类器） |
 | AgentState + add_messages reducer | `agent/graph.py` | checkpoint 存储 `[HumanMsg, AIMsg, ...]` |
 | PostgresSaver checkpointer | `chat/dependencies.py` | thread_id = conversation_id |
 | ChatOpenAI streaming | `infra/llm.py:get_chat_model()` | streaming=True |
 | 教学策略 system prompt | `agent/prompts.py` | TEACHING_SYSTEM_PROMPT |
 | RAG context 构建 | `infra/context_builder.py` | build_numbered_context() |
-| 问题分类器 | `domain/classifier.py` | 规则引擎，textbook/unrelated |
+| 问题分类器 | `domain/classifier.py` | 已移除（R009 后线性拓扑，无分类器） |
 | SSE 双流事件映射 | `chat/stream_router.py` | updates + messages |
 | 对话持久化 CRUD | `infra/conversation_repo.py` | SQLAlchemy async ORM |
 
@@ -49,14 +49,14 @@ architecture_md_updates: true
 class AgentState(dict):
     messages: Annotated[list[BaseMessage], add_messages]  # 不变
     question: str                                          # 不变
-    intent: Literal["textbook", "unrelated"]               # 不变
+    # --- R010 新增 ---
+    conversation_summary: str                              # 摘要文本（null 表示未触发）
+    rewritten_question: str                                # 改写后的独立问题（null 表示未改写）
+    # --- 以下不变 ---
     context_chunks: list[QueryResult]                      # 不变
     sources: list[SourceReference]                         # 不变
     degraded: bool                                         # 不变
     degradation_reason: str | None                         # 不变
-    # --- R010 新增 ---
-    conversation_summary: str                              # 摘要文本（null 表示未触发）
-    rewritten_question: str                                # 改写后的独立问题（null 表示未改写）
 ```
 
 | 决策 | 理由 |
@@ -129,19 +129,18 @@ elif node_name == "rewrite":
 ### 4.1 新图拓扑
 
 ```
-START → summarize → classify → [rewrite → retrieve → respond | refuse] → END
+START → summarize → rewrite → retrieve → respond → END
 ```
+
+> 注：R009 后已移除 classify/refuse 节点，所有问题统一走完整线性路径，由 LLM 自然处理非课程问题。
 
 ```mermaid
 flowchart TD
     START --> summarize
-    summarize --> classify
-    classify -->|textbook| rewrite
-    classify -->|unrelated| refuse
+    summarize --> rewrite
     rewrite --> retrieve
     retrieve --> respond
     respond --> END
-    refuse --> END
 ```
 
 ### 4.2 多轮对话完整流程
@@ -152,7 +151,6 @@ sequenceDiagram
     participant G as StateGraph
     participant CP as PostgresSaver
     participant S as summarize
-    participant C as classify
     participant R as rewrite
     participant RT as retrieve
     participant RP as respond
@@ -171,30 +169,23 @@ sequenceDiagram
         S-->>G: {} (no-op)
     end
 
-    G->>C: classify_node(state)
-    C-->>G: {intent: "textbook" | "unrelated"}
-
-    alt intent == "textbook"
-        G->>R: rewrite_node(state)
-        alt len(messages) > 1
-            R->>LLM: 改写 question 为独立问题
-            R-->>G: {rewritten_question: "函数的定义域怎么求？"}
-        else 首轮
-            R-->>G: {} (no-op, 透传原始 question)
-        end
-
-        G->>RT: retrieve_node(state)
-        RT->>RT: 用 rewritten_question 或 question 检索
-        RT-->>G: {context_chunks, sources}
-
-        G->>RP: respond_node(state)
-        RP->>RP: 构建 [SystemMsg(教学策略+RAG), SummaryMsg?, ...History, HumanMsg(当前)]
-        RP->>LLM: ainvoke(messages)
-        LLM-->>RP: AIMessage (streaming)
-        RP-->>G: {messages: [AIMessage]}
-    else intent == "unrelated"
-        G->>G: refuse_node → {messages: [AIMessage(拒绝)]}
+    G->>R: rewrite_node(state)
+    alt len(messages) > 1
+        R->>LLM: 改写 question 为独立问题
+        R-->>G: {rewritten_question: "函数的定义域怎么求？"}
+    else 首轮
+        R-->>G: {} (no-op, 透传原始 question)
     end
+
+    G->>RT: retrieve_node(state)
+    RT->>RT: 用 rewritten_question 或 question 检索
+    RT-->>G: {context_chunks, sources}
+
+    G->>RP: respond_node(state)
+    RP->>RP: 构建 [SystemMsg(教学策略+RAG), SummaryMsg?, ...History, HumanMsg(当前)]
+    RP->>LLM: ainvoke(messages)
+    LLM-->>RP: AIMessage (streaming)
+    RP-->>G: {messages: [AIMessage]}
 
     G->>CP: 自动保存 checkpoint
     G-->>SR: SSE 事件流
@@ -300,8 +291,7 @@ REWRITE_PROMPT = """基于以下对话历史，将用户的追问改写为一个
 ```
 backend/app/agent/
 ├── __init__.py
-├── graph.py              # AgentState + create_graph（改造：新增 summarize/rewrite/retrieve/respond 闭包 + 扩展 state）
-├── nodes.py              # classify_node + refuse_node（不变，无 LLM 调用的节点放这里）
+├── graph.py              # AgentState + create_graph（改造：summarize/rewrite/retrieve/respond 闭包）
 ├── prompts.py            # TEACHING_SYSTEM_PROMPT（不变）+ REWRITE_PROMPT（新增）+ SUMMARIZE_PROMPT（新增）
 ├── token_budget.py       # 新增：TokenBudget 配置 + estimate_tokens 函数
 
@@ -331,12 +321,11 @@ backend/tests/
 stream_router.py          → 构建 input_state, SSE 事件映射（不感知节点内部逻辑）
 graph.py                  → AgentState 定义, 图编排, summarize/rewrite/retrieve/respond 闭包
                            （需要 LLM 或 chat_service 的节点用闭包注入依赖）
-nodes.py                  → classify_node, refuse_node（无 LLM 调用的纯逻辑节点）
 prompts.py                → 所有 prompt 文本常量
 token_budget.py           → TokenBudget 配置 + estimate_tokens 纯函数
 ```
 
-**调用方向**：graph.py → nodes.py, prompts.py, token_budget.py
+**调用方向**：graph.py → prompts.py, token_budget.py
 
 ### 技术决策
 
@@ -370,7 +359,7 @@ token_budget.py           → TokenBudget 配置 + estimate_tokens 纯函数
 | estimate_tokens 纯函数单测通过 | `pytest tests/test_token_budget.py` |
 | summarize 节点编译通过 | `pytest tests/test_agent_graph.py -k "compile"` |
 | rewrite 节点编译通过 | `pytest tests/test_agent_graph.py -k "compile"` |
-| 新图拓扑包含 6 个节点 | `pytest tests/test_agent_graph.py -k "nodes"` |
+| 新图拓扑包含 4 个节点（summarize/rewrite/retrieve/respond） | `pytest tests/test_agent_graph.py -k "nodes"` |
 | 多轮对话 respond 构建正确消息列表 | `pytest tests/test_agent_nodes.py -k "respond"` |
 | rewrite 节点首轮透传、多轮改写 | `pytest tests/test_agent_nodes.py -k "rewrite"` |
 | summarize 节点未超阈值时 no-op | `pytest tests/test_agent_nodes.py -k "summarize"` |
@@ -480,6 +469,6 @@ R010 完成后需更新：
 1. **移除禁止模式**：删除「R004 不做多轮对话状态管理（DEC-rag-007）」— R010 已实现
 2. **新增决策记录 DEC-rag-010**：摘要压缩方案 — token 预算管理 + LLM 摘要 + RemoveMessage 清理旧消息。理由：LangGraph 原生 RemoveMessage 支持 add_messages reducer 删除指定消息，避免 state 无限增长。影响范围：graph.py summarize 节点。
 3. **新增决策记录 DEC-rag-011**：Query Rewriting 方案 — 多轮时 LLM 改写追问为独立问题 + 首轮透传 + 失败 fallback。理由：追问中的代词对 RAG 检索无意义，改写为独立问题后检索精准度提升。影响范围：graph.py rewrite 节点 + retrieve 节点输入来源。
-4. **更新图拓扑描述**：`START → summarize → classify → rewrite → retrieve → respond | refuse → END`
+4. **更新图拓扑描述**：`START → summarize → rewrite → retrieve → respond → END`（线性拓扑，无分类器）
 5. **新增不变量**：respond 节点构建 LLM 输入时使用动态 system prompt 注入 RAG context，对话历史原样透传，不修改用户消息
 6. **更新不变量**：LLM 调用统一在 Backend 内 — 补充 summarize/rewrite 节点的 LLM 调用也走 infra/llm.py 的 get_chat_model()

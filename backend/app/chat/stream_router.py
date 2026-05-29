@@ -45,7 +45,7 @@ async def stream_chat(
     """SSE 流式对话端点
 
     使用 graph.astream(stream_mode=["updates","messages"]) 驱动 Agent StateGraph。
-    - updates：classify/retrieve/respond/refuse 节点完成时推送状态事件
+    - updates：summarize/rewrite/retrieve/respond 节点完成时推送状态事件
     - messages：respond 节点内 LLM 逐 token 流式推送
     - respond 节点完成后 PostgresSaver 自动保存 AIMessage
     """
@@ -158,14 +158,7 @@ async def _map_event_to_sse(event, http_request: Request):
 
 async def _map_node_update_to_sse(node_name: str, node_output: dict):
     """将节点完成事件映射为 SSE 帧"""
-    if node_name == "classify":
-        intent = node_output.get("intent", "") if node_output else ""
-        yield _sse_frame(
-            "thinking",
-            {"text": f"意图分类: {intent}", "index": 0},
-        )
-
-    elif node_name == "summarize":
+    if node_name == "summarize":
         summary = node_output.get("conversation_summary") if node_output else None
         if summary:
             yield _sse_frame("thinking", {"text": "上下文已压缩", "index": 0})
@@ -193,12 +186,6 @@ async def _map_node_update_to_sse(node_name: str, node_output: dict):
         )
         # respond 节点完成后，AIMessage 已由 PostgresSaver 自动保存
         # token 级别的事件已通过 messages 流推送，此处无需额外处理
-
-    elif node_name == "refuse":
-        messages = node_output.get("messages", [])
-        if messages:
-            content = messages[0].content if hasattr(messages[0], "content") else str(messages[0])
-            yield _sse_frame("token", content)
 
 
 def _sse_frame(event_type: str, data: Any) -> str:

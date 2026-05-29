@@ -11,7 +11,6 @@
 
 from __future__ import annotations
 
-import json
 import uuid
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -24,55 +23,19 @@ from app.agent.graph import create_graph
 from app.chat.dependencies import get_chat_service, get_graph, get_checkpointer, get_db
 from app.chat.stream_router import router as stream_router
 from app.middleware.auth import UserContext, get_current_user
-from app.rag.models import QueryResult, ChunkMetadata
+
+# 共享辅助函数
+from tests._helpers import (
+    make_mock_chat_service,
+    make_mock_generator,
+    parse_sse_frames,
+)
+from tests.conftest import make_query_result
 
 
 # ---------------------------------------------------------------------------
-# 测试辅助（复用 test_sse_integration.py 模式）
+# 测试辅助（仅保留本文件特有的 _create_test_app）
 # ---------------------------------------------------------------------------
-
-def _make_mock_chat_service(chunks=None):
-    svc = MagicMock()
-    result = MagicMock()
-    result.chunks = chunks or []
-    result.degraded = False
-    result.degradation_reason = None
-    svc._retrieve.return_value = result
-    return svc
-
-
-def _make_mock_generator(tokens=None, title=None):
-    gen = MagicMock()
-
-    async def _stream(*args, **kwargs):
-        for t in (tokens or ["mock", " answer"]):
-            yield t
-
-    gen.generate_stream = _stream
-    gen.generate_title = AsyncMock(return_value=title)
-
-    from langchain_core.messages import AIMessage
-    mock_chat_model = MagicMock()
-    mock_chat_model.ainvoke = AsyncMock(return_value=AIMessage(content="mock answer"))
-    gen.get_chat_model.return_value = mock_chat_model
-    return gen
-
-
-def _make_query_result(text="test chunk") -> QueryResult:
-    return QueryResult(
-        chunk_id="test::chunk::1",
-        text=text,
-        score=0.95,
-        metadata=ChunkMetadata(
-            book="必修第一册",
-            chapter="第一章",
-            section="1.1 集合",
-            section_id="必修第一册::1.1",
-            page=1,
-            page_start=1,
-            page_end=2,
-        ),
-    )
 
 
 def _create_test_app(title=None, mock_graph=None):
@@ -96,11 +59,11 @@ def _create_test_app(title=None, mock_graph=None):
     app.dependency_overrides[get_current_user] = lambda: test_user
 
     # 构建 generator
-    gen = _make_mock_generator(tokens=["这是", "回答"], title=title)
+    gen = make_mock_generator(tokens=["这是", "回答"], title=title)
 
     # 覆盖 graph
     if mock_graph is None:
-        chat_svc = _make_mock_chat_service(chunks=[_make_query_result()])
+        chat_svc = make_mock_chat_service(chunks=[make_query_result()])
         mock_graph = create_graph(
             checkpointer=MemorySaver(),
             chat_service=chat_svc,
@@ -124,26 +87,6 @@ def _create_test_app(title=None, mock_graph=None):
     app.dependency_overrides[get_db] = _override_get_db
 
     return app, mock_db
-
-
-def _parse_sse_frames(text: str) -> list[dict]:
-    """解析 SSE 文本为 [{type, data}] 列表"""
-    frames = []
-    for part in text.split("\n\n"):
-        part = part.strip()
-        if not part:
-            continue
-        event_type = ""
-        data_str = ""
-        for line in part.split("\n"):
-            if line.startswith("event: "):
-                event_type = line[7:]
-            elif line.startswith("data: "):
-                data_str = line[6:]
-        if event_type:
-            data = json.loads(data_str) if data_str != "null" else None
-            frames.append({"type": event_type, "data": data})
-    return frames
 
 
 # ---------------------------------------------------------------------------
@@ -171,7 +114,7 @@ class TestAutoCreateConversation:
                 )
 
             assert resp.status_code == 200
-            frames = _parse_sse_frames(resp.text)
+            frames = parse_sse_frames(resp.text)
 
             # 1. init 帧包含 conversation_id
             init_frame = frames[0]
@@ -201,7 +144,7 @@ class TestAutoCreateConversation:
                     headers={"Authorization": "Bearer fake"},
                 )
 
-            frames = _parse_sse_frames(resp.text)
+            frames = parse_sse_frames(resp.text)
             init_frame = frames[0]
             conv_id = init_frame["data"]["conversation_id"]
 
@@ -232,7 +175,7 @@ class TestExistingConversation:
                 )
 
             assert resp.status_code == 200
-            frames = _parse_sse_frames(resp.text)
+            frames = parse_sse_frames(resp.text)
 
             # init 帧使用传入的 conversation_id
             init_frame = frames[0]
@@ -259,7 +202,7 @@ class TestExistingConversation:
                     headers={"Authorization": "Bearer fake"},
                 )
 
-            frames = _parse_sse_frames(resp.text)
+            frames = parse_sse_frames(resp.text)
 
             # 没有 title 事件（因为不是新对话）
             title_frames = [f for f in frames if f["type"] == "title"]
@@ -286,7 +229,7 @@ class TestTitleGeneration:
                 )
 
             assert resp.status_code == 200
-            frames = _parse_sse_frames(resp.text)
+            frames = parse_sse_frames(resp.text)
 
             # 验证存在 title 事件
             title_frames = [f for f in frames if f["type"] == "title"]
@@ -318,7 +261,7 @@ class TestTitleGeneration:
                 )
 
             assert resp.status_code == 200
-            frames = _parse_sse_frames(resp.text)
+            frames = parse_sse_frames(resp.text)
 
             # 没有 title 事件
             title_frames = [f for f in frames if f["type"] == "title"]
@@ -345,7 +288,7 @@ class TestTitleGeneration:
                 )
 
             assert resp.status_code == 200
-            frames = _parse_sse_frames(resp.text)
+            frames = parse_sse_frames(resp.text)
 
             # 没有 title 事件，也没有 error 事件（异常被静默处理）
             title_frames = [f for f in frames if f["type"] == "title"]
@@ -445,7 +388,7 @@ class TestSSEEventOrder:
                     headers={"Authorization": "Bearer fake"},
                 )
 
-            frames = _parse_sse_frames(resp.text)
+            frames = parse_sse_frames(resp.text)
             event_types = [f["type"] for f in frames]
 
             # 1. 第一个事件是 init
@@ -476,7 +419,7 @@ class TestSSEEventOrder:
                     headers={"Authorization": "Bearer fake"},
                 )
 
-            frames = _parse_sse_frames(resp.text)
+            frames = parse_sse_frames(resp.text)
             event_types = [f["type"] for f in frames]
 
             # 1. 第一个事件是 init
@@ -503,7 +446,7 @@ class TestSSEEventOrder:
                     headers={"Authorization": "Bearer fake"},
                 )
 
-            frames = _parse_sse_frames(resp.text)
+            frames = parse_sse_frames(resp.text)
             event_types = [f["type"] for f in frames]
 
             # 1. 第一个事件是 init，使用传入的 conversation_id
@@ -531,6 +474,6 @@ class TestSSEEventOrder:
                     headers={"Authorization": "Bearer fake"},
                 )
 
-            frames = _parse_sse_frames(resp.text)
+            frames = parse_sse_frames(resp.text)
             assert frames[0]["type"] == "init"
             assert "conversation_id" in frames[0]["data"]

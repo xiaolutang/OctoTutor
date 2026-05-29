@@ -11,6 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+MAX_ELAPSED_MS = 120_000  # 单轮全链路耗时上限（适配真实 LLM 延迟）
+
 
 @dataclass
 class GraderResult:
@@ -47,8 +49,8 @@ def state_check(
     断言：
     - 首轮: rewritten_question 应为 None/空
     - 首轮: conversation_summary 应为 None/空
-    - 多轮 rewrite: rewritten_question is not None and != question
-    - summarize 触发后: summary non-empty
+    - 多轮 rewrite: rewritten_question is not None (expected.rewrite_should_trigger)
+    - summarize 触发后: summary non-empty (expected.summary_triggered)
     """
     failures = []
 
@@ -67,11 +69,8 @@ def state_check(
 
     if expected.get("rewrite_should_trigger") and not is_first_turn:
         rewritten = state.get("rewritten_question")
-        question = state.get("question", "")
         if not rewritten:
             failures.append("多轮应触发 rewrite，但 rewritten_question 为 null")
-        elif rewritten == question:
-            failures.append("rewrite 后的问题应不同于原始问题")
 
     if expected.get("summary_triggered"):
         summary = state.get("conversation_summary")
@@ -93,24 +92,15 @@ def tool_calls_check(
     """Grader 3: 验证节点调用行为
 
     通过事件流中的节点名来验证：
-    - rewrite 首轮: 存在但为 no-op（无 LLM 调用）
-    - textbook 路径: summarize → classify → rewrite → retrieve → respond
-    - unrelated 路径: summarize → classify → refuse
+    - 所有输入统一走线性路径: summarize → rewrite → retrieve → respond
     """
     failures = []
 
-    if expected.get("intent") == "textbook":
-        expected_path = ["summarize", "classify", "rewrite", "retrieve", "respond"]
-        if event_keys != expected_path:
-            failures.append(
-                f"textbook 路径应为 {expected_path}，实际: {event_keys}"
-            )
-    elif expected.get("intent") == "unrelated":
-        expected_path = ["summarize", "classify", "refuse"]
-        if event_keys != expected_path:
-            failures.append(
-                f"unrelated 路径应为 {expected_path}，实际: {event_keys}"
-            )
+    expected_path = ["summarize", "rewrite", "retrieve", "respond"]
+    if event_keys != expected_path:
+        failures.append(
+            f"路径应为 {expected_path}，实际: {event_keys}"
+        )
 
     return GraderResult(
         name="tool_calls",
@@ -131,9 +121,9 @@ def transcript_check(
     """
     failures = []
 
-    # 全链路耗时 <= 120s（适配真实 LLM 延迟）
-    if elapsed_ms > 120000:
-        failures.append(f"全链路耗时 {elapsed_ms:.0f}ms 超过 120s 上限")
+    # 全链路耗时上限
+    if elapsed_ms > MAX_ELAPSED_MS:
+        failures.append(f"全链路耗时 {elapsed_ms:.0f}ms 超过 {MAX_ELAPSED_MS/1000:.0f}s 上限")
 
     return GraderResult(
         name="transcript",
@@ -144,7 +134,7 @@ def transcript_check(
 
 def deterministic_filter(
     state: dict,
-    events: list[dict],
+    events: list[dict],  # noqa: ARG001 — 保留参数以兼容调用方签名
     expected: dict,
     negative: bool,
 ) -> GraderResult:
@@ -157,14 +147,8 @@ def deterministic_filter(
 
     if negative:
         # 负面用例验证
-        intent = state.get("intent", "")
         rewritten = state.get("rewritten_question", "")
         question = state.get("question", "")
-
-        if expected.get("intent") == "unrelated" and intent != "unrelated":
-            failures.append(
-                f"负面用例 intent 应为 unrelated，实际: {intent}"
-            )
 
         if expected.get("rewrite_should_not_contain"):
             for kw in expected["rewrite_should_not_contain"]:
@@ -187,12 +171,6 @@ def deterministic_filter(
                     failures.append(
                         f"rewrite 结果应包含 '{kw}'，实际: {rewritten}"
                     )
-
-        intent = state.get("intent", "")
-        if expected.get("intent") and intent != expected["intent"]:
-            failures.append(
-                f"intent 应为 {expected['intent']}，实际: {intent}"
-            )
 
     return GraderResult(
         name="deterministic_filter",

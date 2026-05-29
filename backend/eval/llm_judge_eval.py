@@ -131,7 +131,7 @@ async def _run_llm_judge_for_case(
         prompt = RETRIEVAL_RELEVANCE_PROMPT.format(
             question=turns[-1]["content"],
             num_chunks=len(chunks_raw),
-            chunks_summary=chunks_summary or "(无检索结果)",
+            chunks_summary=chunks_summary,
         )
         judge_output = call_llm_json(prompt, llm_config)
         result.judge_results.append(
@@ -173,7 +173,7 @@ async def _run_llm_judge_for_case(
         context_summary = _summarize_chunks(chunks_raw) or "(无检索结果)"
         ai_answer = final_state.get("last_ai_answer", "")
         prompt = GROUNDING_PROMPT.format(
-            context=context_summary or "(无检索结果)",
+            context=context_summary,
             question=turns[-1]["content"],
             answer=ai_answer or "(无回答)",
         )

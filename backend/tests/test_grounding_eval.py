@@ -1,8 +1,11 @@
 """R010 Grounding 评估维度测试"""
 
 import json
+from pathlib import Path
 
 from eval.judge_prompts import GROUNDING_PROMPT
+
+_EVAL_DATASET = Path(__file__).resolve().parent.parent / "eval" / "datasets" / "multi_turn_eval.json"
 
 
 class TestGroundingPrompt:
@@ -47,14 +50,14 @@ class TestEvalDatasetL7:
 
     def test_l7_cases_exist(self):
         """eval 数据集中存在 L7 用例"""
-        with open("eval/datasets/multi_turn_eval.json", "r") as f:
+        with open(_EVAL_DATASET, "r") as f:
             data = json.load(f)
         l7_cases = [c for c in data if c["level"] == "L7"]
         assert len(l7_cases) >= 5, f"Expected >= 5 L7 cases, got {len(l7_cases)}"
 
     def test_l7_cases_are_negative(self):
         """L7 用例全部标记为 negative"""
-        with open("eval/datasets/multi_turn_eval.json", "r") as f:
+        with open(_EVAL_DATASET, "r") as f:
             data = json.load(f)
         l7_cases = [c for c in data if c["level"] == "L7"]
         for case in l7_cases:
@@ -63,7 +66,7 @@ class TestEvalDatasetL7:
 
     def test_l7_cases_have_expected_fields(self):
         """L7 用例包含必要的 expected 字段"""
-        with open("eval/datasets/multi_turn_eval.json", "r") as f:
+        with open(_EVAL_DATASET, "r") as f:
             data = json.load(f)
         l7_cases = [c for c in data if c["level"] == "L7"]
         for case in l7_cases:

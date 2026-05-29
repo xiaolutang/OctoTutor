@@ -92,7 +92,7 @@ def client():
     from app.rag.models import QueryResult, ChunkMetadata
 
     mock_graph_service = MagicMock()
-    mock_graph_service._retrieve.return_value = MagicMock(
+    mock_graph_service.retrieve.return_value = MagicMock(
         chunks=[], degraded=False, degradation_reason=None
     )
 
