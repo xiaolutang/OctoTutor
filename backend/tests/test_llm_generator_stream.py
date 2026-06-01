@@ -6,7 +6,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.infra.llm import MATH_JUDGE_PROMPT, SYSTEM_PROMPT, LLMGenerator
-from app.rag.models import ChunkMetadata, QueryResult
+from app.rag.models import QueryResult
+from tests.conftest import make_query_result
 
 
 # ---------------------------------------------------------------------------
@@ -48,27 +49,6 @@ class MockAsyncStream:
         raise StopAsyncIteration
 
 
-def _make_chunk_metadata() -> ChunkMetadata:
-    return ChunkMetadata(
-        book="高中数学必修一",
-        chapter="第一章 集合与函数概念",
-        section="1.1 集合的概念",
-        section_id="高中数学必修一::1.1",
-        page=10,
-        page_start=10,
-        page_end=12,
-    )
-
-
-def _make_query_result(text: str = "集合是由一些确定的、互不相同的对象组成的整体。") -> QueryResult:
-    return QueryResult(
-        chunk_id="chunk_001",
-        text=text,
-        score=0.95,
-        metadata=_make_chunk_metadata(),
-    )
-
-
 def _create_generator() -> LLMGenerator:
     return LLMGenerator(api_key="test-key", base_url="https://api.test.com", model="test-model")
 
@@ -98,7 +78,7 @@ class TestGenerateStreamBasic:
             ):
                 tokens = []
                 async for token in gen.generate_stream(
-                    "什么是集合？", [_make_query_result()]
+                    "什么是集合？", [make_query_result()]
                 ):
                     tokens.append(token)
             return tokens
@@ -167,7 +147,7 @@ class TestGenerateStreamResourceCleanup:
             ):
                 tokens = []
                 async for token in gen.generate_stream(
-                    "什么是集合？", [_make_query_result()]
+                    "什么是集合？", [make_query_result()]
                 ):
                     tokens.append(token)
             return mock_stream
@@ -198,7 +178,7 @@ class TestGenerateStreamResourceCleanup:
                 tokens = []
                 try:
                     async for token in gen.generate_stream(
-                        "什么是集合？", [_make_query_result()]
+                        "什么是集合？", [make_query_result()]
                     ):
                         tokens.append(token)
                 except RuntimeError:
@@ -237,7 +217,7 @@ class TestGenerateStreamNoTokens:
             ):
                 tokens = []
                 async for token in gen.generate_stream(
-                    "什么是集合？", [_make_query_result()]
+                    "什么是集合？", [make_query_result()]
                 ):
                     tokens.append(token)
             return tokens
@@ -263,7 +243,7 @@ class TestGenerateStreamNoTokens:
             ):
                 tokens = []
                 async for token in gen.generate_stream(
-                    "什么是集合？", [_make_query_result()]
+                    "什么是集合？", [make_query_result()]
                 ):
                     tokens.append(token)
             return tokens
@@ -303,7 +283,7 @@ class TestEmptyChoicesChunk:
             ):
                 tokens = []
                 async for token in gen.generate_stream(
-                    "什么是集合？", [_make_query_result()]
+                    "什么是集合？", [make_query_result()]
                 ):
                     tokens.append(token)
             return tokens

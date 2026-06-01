@@ -47,25 +47,66 @@ def make_query_result(
     chunk_id: str = "test::chunk::id",
     text: str = "test text",
     score: float = 0.95,
+    book: str = "必修第一册",
+    chapter: str = "第一章 集合与函数概念",
+    section: str = "1.1 集合",
+    section_id: str = "",
+    page: int = 1,
+    page_start: int | None = None,
+    page_end: int | None = None,
+    source_pages: list[int] | None = None,
+    chunk_type: str = "child",
+    block_type: str = "unknown",
+    has_formula: bool = False,
+    parent_id: str = "test::parent",
+    child_index: int = 0,
 ) -> QueryResult:
-    """辅助函数：构造 QueryResult"""
+    """辅助函数：构造 QueryResult
+
+    所有参数都有合理默认值。page_start/page_end 默认跟随 page。
+    section_id 默认自动推导为 "{book}::1.1"。
+    """
+    _page_start = page_start if page_start is not None else page
+    _page_end = page_end if page_end is not None else page
+    _source_pages = source_pages if source_pages is not None else [page]
+    _section_id = section_id or f"{book}::1.1"
+
     return QueryResult(
         chunk_id=chunk_id,
         text=text,
         score=score,
         metadata=ChunkMetadata(
-            book="必修第一册",
-            chapter="第一章 集合与函数概念",
-            section="1.1 集合",
-            section_id="必修第一册::1.1",
-            page=1,
-            page_start=1,
-            page_end=1,
-            source_pages=[1],
-            chunk_type="child",
-            block_type="unknown",
-            has_formula=False,
-            parent_id="test::parent",
-            child_index=0,
+            book=book,
+            chapter=chapter,
+            section=section,
+            section_id=_section_id,
+            page=page,
+            page_start=_page_start,
+            page_end=_page_end,
+            source_pages=_source_pages,
+            chunk_type=chunk_type,
+            block_type=block_type,
+            has_formula=has_formula,
+            parent_id=parent_id,
+            child_index=child_index,
         ),
+    )
+
+
+def make_eval_query_result(
+    book: str = "必修第一册",
+    page: int = 5,
+    score: float = 0.9,
+    section_id: str = "",
+) -> QueryResult:
+    """构造 eval 场景的 QueryResult（简化签名：book/page/score/section_id）"""
+    return make_query_result(
+        chunk_id=f"test::{book}::p{page}",
+        text=f"测试文本 page={page}",
+        score=score,
+        book=book,
+        chapter="测试章节",
+        section="测试小节",
+        section_id=section_id or f"{book}::1.1",
+        page=page,
     )

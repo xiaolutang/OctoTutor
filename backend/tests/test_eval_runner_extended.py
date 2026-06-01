@@ -27,6 +27,7 @@ from app.evaluation.eval_runner import (
 from app.evaluation.eval_set_loader import EvalSetLoader
 from app.evaluation.eval_types import EvalItem, EvalSource, RetrievalTruth
 from app.rag.models import ChunkMetadata, QueryResult
+from tests.conftest import make_query_result, make_eval_query_result
 
 
 # ---------------------------------------------------------------------------
@@ -57,29 +58,6 @@ def make_eval_item(
         retrieval_truth=truth,
         key_facts=key_facts or [],
         suite=suite,
-    )
-
-
-def make_query_result(
-    book: str = "必修第一册",
-    page: int = 5,
-    score: float = 0.9,
-    section_id: str = "",
-) -> QueryResult:
-    """构造 QueryResult 辅助函数"""
-    return QueryResult(
-        chunk_id=f"test::{book}::p{page}",
-        text=f"测试文本 page={page}",
-        metadata=ChunkMetadata(
-            book=book,
-            chapter="测试章",
-            section="测试节",
-            section_id=section_id or f"{book}::s1",
-            page=page,
-            page_start=page,
-            page_end=page,
-        ),
-        score=score,
     )
 
 
@@ -144,8 +122,8 @@ class TestRunContextPrecision:
 
         mock_store = MagicMock()
         mock_store.query.return_value = [
-            make_query_result(section_id="必修第一册::s1", score=0.95),
-            make_query_result(page=6, section_id="必修第一册::s2", score=0.80),
+            make_eval_query_result(section_id="必修第一册::s1", score=0.95),
+            make_eval_query_result(page=6, section_id="必修第一册::s2", score=0.80),
         ]
 
         runner = make_runner(
@@ -204,8 +182,8 @@ class TestRunContextPrecision:
 
         mock_store = MagicMock()
         mock_store.query.return_value = [
-            make_query_result(page=5, score=0.9),   # 在范围内
-            make_query_result(page=20, score=0.7),   # 不在范围内
+            make_eval_query_result(page=5, score=0.9),   # 在范围内
+            make_eval_query_result(page=20, score=0.7),   # 不在范围内
         ]
 
         runner = make_runner(
@@ -299,7 +277,7 @@ class TestRunFaithfulness:
         mock_embedding.embed_query.return_value = [0.1, 0.2]
 
         mock_store = MagicMock()
-        qr = make_query_result(score=0.95)
+        qr = make_eval_query_result(score=0.95)
         mock_store.query.return_value = [qr]
 
         mock_reranker = MagicMock()
@@ -393,7 +371,7 @@ class TestRunFaithfulness:
         # 所有结果分数都低于阈值
         mock_store = MagicMock()
         mock_store.query.return_value = [
-            make_query_result(score=0.3),
+            make_eval_query_result(score=0.3),
         ]
 
         mock_reranker = MagicMock()
@@ -449,7 +427,7 @@ class TestRunRegression:
 
         mock_store = MagicMock()
         mock_store.query.return_value = [
-            make_query_result(page=5, score=0.9),
+            make_eval_query_result(page=5, score=0.9),
         ]
 
         runner = make_runner(
@@ -499,7 +477,7 @@ class TestRunRegression:
 
         mock_store = MagicMock()
         mock_store.query.return_value = [
-            make_query_result(page=5, score=0.95),
+            make_eval_query_result(page=5, score=0.95),
         ]
 
         runner = make_runner(
@@ -563,7 +541,7 @@ class TestRunFull:
         mock_embedding.embed_query.return_value = [0.1]
 
         mock_store = MagicMock()
-        qr = make_query_result(score=0.95)
+        qr = make_eval_query_result(score=0.95)
         mock_store.query.return_value = [qr]
 
         mock_reranker = MagicMock()
@@ -646,7 +624,7 @@ class TestExistingRunUnaffected:
 
         mock_store = MagicMock()
         mock_store.query.return_value = [
-            make_query_result(page=5, score=0.9),
+            make_eval_query_result(page=5, score=0.9),
         ]
 
         runner = make_runner(
@@ -673,7 +651,7 @@ class TestExistingRunUnaffected:
         mock_embedding.embed_query.return_value = [0.1]
 
         mock_store = MagicMock()
-        mock_store.query.return_value = [make_query_result()]
+        mock_store.query.return_value = [make_eval_query_result()]
 
         # 只传必选参数
         runner = EvalRunner(
@@ -822,7 +800,7 @@ class TestRelevance:
         mock_embedding.embed_query.return_value = [0.1, 0.2]
 
         mock_store = MagicMock()
-        qr = make_query_result(score=0.95)
+        qr = make_eval_query_result(score=0.95)
         mock_store.query.return_value = [qr]
 
         mock_reranker = MagicMock()

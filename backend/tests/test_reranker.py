@@ -8,6 +8,7 @@ import pytest
 
 from app.infra.reranker import DashScopeReranker
 from app.rag.models import ChunkMetadata, QueryResult
+from tests.conftest import make_query_result
 
 
 # ---------- 辅助函数 ----------
@@ -34,18 +35,6 @@ def _make_metadata(**overrides) -> ChunkMetadata:
     return ChunkMetadata(**defaults)
 
 
-def _make_query_result(
-    chunk_id: str, text: str, score: float = 0.5, **meta_overrides
-) -> QueryResult:
-    """创建 QueryResult"""
-    return QueryResult(
-        chunk_id=chunk_id,
-        text=text,
-        metadata=_make_metadata(**meta_overrides),
-        score=score,
-    )
-
-
 def _mock_response(status_code: int = 200, results: list | None = None) -> MagicMock:
     """构造 DashScope TextReRank mock response"""
     resp = MagicMock()
@@ -70,9 +59,9 @@ class TestDashScopeReranker:
         """正常 rerank：返回排序后子集，score 为 relevance_score"""
         # 准备输入
         results = [
-            _make_query_result("c1", "集合的概念", score=0.3),
-            _make_query_result("c2", "函数的定义", score=0.7),
-            _make_query_result("c3", "三角函数", score=0.5),
+            make_query_result("c1", "集合的概念", score=0.3),
+            make_query_result("c2", "函数的定义", score=0.7),
+            make_query_result("c3", "三角函数", score=0.5),
         ]
 
         # mock API 返回：按相关性排序后返回 top 2
@@ -107,7 +96,7 @@ class TestDashScopeReranker:
         self, mock_dashscope: MagicMock, mock_text_rerank: MagicMock
     ) -> None:
         """API 错误：抛出 RuntimeError"""
-        results = [_make_query_result("c1", "文本")]
+        results = [make_query_result("c1", "文本")]
         mock_text_rerank.call.return_value = _mock_response(
             status_code=500,
         )
@@ -158,8 +147,8 @@ class TestDashScopeReranker:
     ) -> None:
         """验证 TextReRank.call 参数正确"""
         results = [
-            _make_query_result("c1", "文本一"),
-            _make_query_result("c2", "文本二"),
+            make_query_result("c1", "文本一"),
+            make_query_result("c2", "文本二"),
         ]
         mock_text_rerank.call.return_value = _mock_response(
             status_code=200, results=[]
@@ -182,7 +171,7 @@ class TestDashScopeReranker:
         self, mock_dashscope: MagicMock, mock_text_rerank: MagicMock
     ) -> None:
         """API 返回空结果列表时返回空列表"""
-        results = [_make_query_result("c1", "文本")]
+        results = [make_query_result("c1", "文本")]
         mock_text_rerank.call.return_value = _mock_response(
             status_code=200, results=[]
         )
@@ -197,7 +186,7 @@ class TestDashScopeReranker:
         self, mock_dashscope: MagicMock, mock_text_rerank: MagicMock
     ) -> None:
         """越界 index 被安全跳过"""
-        results = [_make_query_result("c1", "文本一")]
+        results = [make_query_result("c1", "文本一")]
         mock_text_rerank.call.return_value = _mock_response(
             status_code=200,
             results=[

@@ -46,7 +46,7 @@ class ChatService:
     def retrieve(self, question: str, top_k: int) -> RetrieveResult:
         """检索管线：Embed -> Vector -> Threshold -> BM25 -> RRF -> Rerank -> Truncate"""
         embedding = self._embedding.embed_query(question)
-        vector_results = self._vector_store.query(embedding, self._settings.retrieval_top_k)
+        vector_results = self._vector_store.query(embedding, top_k)
 
         # 相似度阈值过滤（在 RRF 融合前）
         vector_results = [
@@ -55,7 +55,7 @@ class ChatService:
 
         # BM25 检索
         if self._settings.bm25_enabled:
-            bm25_results = self._bm25.query(question, self._settings.retrieval_top_k)
+            bm25_results = self._bm25.query(question, top_k)
             fused = self._rrf_fuse(vector_results, bm25_results, self._settings.rrf_k)
         else:
             fused = vector_results

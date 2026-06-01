@@ -25,6 +25,7 @@ from app.rag.models import ChunkMetadata, QueryResult
 from app.chat.service import ChatService
 from app.chat.schemas import ChatResponse
 from app.domain.models import SourceReference
+from tests.conftest import make_query_result
 
 
 # ---------------------------------------------------------------------------
@@ -34,33 +35,6 @@ from app.domain.models import SourceReference
 
 def make_chunk_id(i: int) -> str:
     return f"chunk_{i}"
-
-
-def make_query_result(
-    chunk_id: str = "test::chunk",
-    text: str = "test text",
-    score: float = 0.95,
-) -> QueryResult:
-    return QueryResult(
-        chunk_id=chunk_id,
-        text=text,
-        score=score,
-        metadata=ChunkMetadata(
-            book="必修第一册",
-            chapter="第一章 集合与函数概念",
-            section="1.1 集合",
-            section_id="必修第一册::1.1",
-            page=1,
-            page_start=1,
-            page_end=1,
-            source_pages=[1],
-            chunk_type="child",
-            block_type="definition",
-            has_formula=False,
-            parent_id="test::parent",
-            child_index=0,
-        ),
-    )
 
 
 def make_settings(**overrides):
@@ -407,8 +381,8 @@ class TestHandleChatFullPipeline:
 
         # 验证调用链
         mock_embedding.embed_query.assert_called_once_with("什么是集合？")
-        mock_vector_store.query.assert_called_once_with([0.1, 0.2, 0.3], 20)
-        mock_bm25.query.assert_called_once_with("什么是集合？", 20)
+        mock_vector_store.query.assert_called_once_with([0.1, 0.2, 0.3], 10)
+        mock_bm25.query.assert_called_once_with("什么是集合？", 10)
         mock_reranker.rerank.assert_called_once()
         mock_generator.generate.assert_called_once()
 

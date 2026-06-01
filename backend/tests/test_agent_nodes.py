@@ -7,8 +7,10 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.graph.message import RemoveMessage
 
 from app.agent.prompts import TEACHING_SYSTEM_PROMPT
-from app.agent.graph import _make_summarize
+from app.agent.graph import _make_summarize, _make_rewrite, build_context_injection
+from app.agent.token_budget import TokenBudget
 from app.chat.errors import ChatErrorCode
+from tests.conftest import make_query_result
 
 
 # ===================================================================
@@ -97,6 +99,14 @@ def _make_long_text(char_count: int) -> str:
 class TestSummarizeNode:
     """_make_summarize 闭包单元测试"""
 
+    # 基于 TokenBudget 常量推导的测试参数
+    # 阈值 = CONTEXT_WINDOW * SUMMARIZE_THRESHOLD = 130_000 tokens
+    # 每条 char_per_msg 字符 → char_per_msg * 1.5 tokens
+    # 需要 total_tokens > 阈值 + RESERVED → 消息数 > (130000 + 12000) / (char_per_msg * 1.5)
+    # 加上 RECENT_MESSAGES_KEEP 限制，消息数必须 > RECENT_MESSAGES_KEEP
+    CHAR_PER_MSG = 10_000   # 每条 10000 字符 → 15000 tokens
+    MSG_COUNT_ABOVE = 15    # > RECENT_MESSAGES_KEEP(10) 且总 tokens 超阈值
+
     @pytest.fixture
     def mock_chat_model(self):
         """创建 mock chat_model"""
@@ -111,6 +121,14 @@ class TestSummarizeNode:
     def summarize(self, mock_chat_model):
         """创建 _summarize 闭包"""
         return _make_summarize(mock_chat_model)
+
+    def _make_over_threshold_messages(self):
+        """构造超阈值消息列表（MSG_COUNT_ABOVE 条，每条 CHAR_PER_MSG 字符）"""
+        messages = []
+        for i in range(self.MSG_COUNT_ABOVE):
+            msg_cls = HumanMessage if i % 2 == 0 else AIMessage
+            messages.append(msg_cls(content=_make_long_text(self.CHAR_PER_MSG), id=f"msg-{i}"))
+        return messages
 
     @pytest.mark.asyncio
     async def test_under_threshold_no_op(self, summarize):
@@ -128,17 +146,7 @@ class TestSummarizeNode:
     @pytest.mark.asyncio
     async def test_over_threshold_generates_summary(self, summarize, mock_chat_model):
         """超阈值 → LLM 生成摘要 + RemoveMessage 清理旧消息"""
-        # 阈值 = 200_000 * 0.65 = 130_000 tokens
-        # 每条消息 10000 字符 → 15000 tokens，需要 > 130000/15000 ≈ 9 条
-        # 加上 reserved (12000)，需要约 10 条
-        # 但 RECENT_MESSAGES_KEEP = 10，所以需要 > 10 条才能触发
-        # 用 15 条消息，每条足够长来超阈值
-        char_per_msg = 10000  # 10000 字符 → 15000 tokens
-        messages = []
-        for i in range(15):
-            msg_cls = HumanMessage if i % 2 == 0 else AIMessage
-            messages.append(msg_cls(content=_make_long_text(char_per_msg), id=f"msg-{i}"))
-
+        messages = self._make_over_threshold_messages()
         state = {
             "messages": messages,
             "conversation_summary": "",
@@ -153,8 +161,8 @@ class TestSummarizeNode:
         assert "messages" in result
         remove_msgs = result["messages"]
         assert all(isinstance(m, RemoveMessage) for m in remove_msgs)
-        # 应该移除前 5 条消息（15 - 10 = 5）
-        assert len(remove_msgs) == 5
+        expected_remove = self.MSG_COUNT_ABOVE - TokenBudget.RECENT_MESSAGES_KEEP
+        assert len(remove_msgs) == expected_remove
 
         # 验证调用了 LLM
         mock_chat_model.ainvoke.assert_called_once()
@@ -162,13 +170,7 @@ class TestSummarizeNode:
     @pytest.mark.asyncio
     async def test_with_existing_summary(self, summarize, mock_chat_model):
         """有旧摘要 → LLM prompt 包含旧摘要信息"""
-        # 构造超阈值消息
-        char_per_msg = 10000
-        messages = []
-        for i in range(15):
-            msg_cls = HumanMessage if i % 2 == 0 else AIMessage
-            messages.append(msg_cls(content=_make_long_text(char_per_msg), id=f"msg-{i}"))
-
+        messages = self._make_over_threshold_messages()
         state = {
             "messages": messages,
             "conversation_summary": "之前的对话摘要内容",
@@ -188,12 +190,7 @@ class TestSummarizeNode:
         mock_chat_model.ainvoke.side_effect = Exception("LLM error")
         summarize = _make_summarize(mock_chat_model)
 
-        char_per_msg = 10000
-        messages = []
-        for i in range(15):
-            msg_cls = HumanMessage if i % 2 == 0 else AIMessage
-            messages.append(msg_cls(content=_make_long_text(char_per_msg), id=f"msg-{i}"))
-
+        messages = self._make_over_threshold_messages()
         state = {
             "messages": messages,
             "conversation_summary": "",
@@ -204,14 +201,12 @@ class TestSummarizeNode:
     @pytest.mark.asyncio
     async def test_few_messages_no_op(self, summarize):
         """消息数 <= RECENT_MESSAGES_KEEP → return {}，即使 token 超阈值"""
-        # 构造超长消息（超阈值），但只有 5 条（<= 10）
-        messages = [
-            HumanMessage(content=_make_long_text(100000), id="msg-0"),
-            AIMessage(content=_make_long_text(100000), id="msg-1"),
-            HumanMessage(content=_make_long_text(100000), id="msg-2"),
-            AIMessage(content=_make_long_text(100000), id="msg-3"),
-            HumanMessage(content=_make_long_text(100000), id="msg-4"),
-        ]
+        # 构造超长消息（超阈值），但数量 < RECENT_MESSAGES_KEEP
+        few_count = TokenBudget.RECENT_MESSAGES_KEEP - 1
+        messages = []
+        for i in range(few_count):
+            msg_cls = HumanMessage if i % 2 == 0 else AIMessage
+            messages.append(msg_cls(content=_make_long_text(100000), id=f"msg-{i}"))
 
         state = {
             "messages": messages,
@@ -232,7 +227,7 @@ class TestRewriteNode:
     @pytest.mark.asyncio
     async def test_first_turn_passthrough(self):
         """首轮（messages <= 1）→ return {}"""
-        from app.agent.graph import _make_rewrite
+
         mock_chat_model = AsyncMock()
         _rewrite = _make_rewrite(mock_chat_model)
 
@@ -247,7 +242,7 @@ class TestRewriteNode:
     @pytest.mark.asyncio
     async def test_multi_turn_rewrite(self):
         """多轮 → LLM 改写 → 返回 rewritten_question"""
-        from app.agent.graph import _make_rewrite
+
         mock_chat_model = AsyncMock()
         mock_chat_model.ainvoke.return_value = MagicMock(content="函数的定义域怎么求？")
         _rewrite = _make_rewrite(mock_chat_model)
@@ -269,7 +264,7 @@ class TestRewriteNode:
     @pytest.mark.asyncio
     async def test_llm_failure_fallback(self):
         """LLM 失败 → return {}"""
-        from app.agent.graph import _make_rewrite
+
         mock_chat_model = AsyncMock()
         mock_chat_model.ainvoke.side_effect = Exception("LLM error")
         _rewrite = _make_rewrite(mock_chat_model)
@@ -296,38 +291,35 @@ class TestBuildContextInjection:
 
     def _make_chunk(self, score: float):
         """构造带指定 score 的 QueryResult"""
-        from tests.conftest import make_query_result
         return make_query_result(text="测试内容", score=score)
 
     def test_no_chunks_returns_empty(self):
         """空 chunks → 不注入"""
-        from app.agent.graph import build_context_injection
         assert build_context_injection([], False, 0.5) == ""
 
     def test_high_score_strict_context(self):
         """高相关性 → 强约束"""
-        from app.agent.graph import build_context_injection
         result = build_context_injection([self._make_chunk(0.9)], False, 0.5)
         assert "严格基于以上教材内容回答" in result
         assert "可能相关的参考内容" not in result
 
     def test_low_score_weak_reference(self):
         """低相关性 → 弱参考"""
-        from app.agent.graph import build_context_injection
+
         result = build_context_injection([self._make_chunk(0.2)], False, 0.5)
         assert "可能相关的参考内容" in result
         assert "严格基于以上教材内容回答" not in result
 
     def test_degraded_weak_reference_even_with_high_score(self):
         """降级 → 即使 score 高也走弱参考"""
-        from app.agent.graph import build_context_injection
+
         result = build_context_injection([self._make_chunk(0.9)], True, 0.5)
         assert "可能相关的参考内容" in result
         assert "严格基于以上教材内容回答" not in result
 
     def test_score_exactly_at_threshold_goes_strict(self):
         """score 恰好等于 threshold → 走强约束（>= 包含边界）"""
-        from app.agent.graph import build_context_injection
+
         result = build_context_injection([self._make_chunk(0.5)], False, 0.5)
         assert "严格基于以上教材内容回答" in result
         assert "可能相关的参考内容" not in result

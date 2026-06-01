@@ -26,6 +26,7 @@ from fastapi.testclient import TestClient
 from app.rag.models import ChunkMetadata, QueryResult
 from app.chat.schemas import ChatResponse
 from app.domain.models import SourceReference
+from tests.conftest import make_query_result
 from app.evaluation.eval_runner import (
     EvalRunner,
     ContextPrecisionReport,
@@ -43,38 +44,6 @@ _test_user = UserContext(user_id="user-123", username="testuser")
 # ---------------------------------------------------------------------------
 # 辅助函数
 # ---------------------------------------------------------------------------
-
-
-def make_query_result(
-    chunk_id: str = "test::chunk",
-    text: str = "test text",
-    score: float = 0.95,
-    book: str = "必修第一册",
-    section_id: str = "必修第一册::1.1",
-    page: int = 1,
-    page_start: int = 1,
-    page_end: int = 2,
-) -> QueryResult:
-    return QueryResult(
-        chunk_id=chunk_id,
-        text=text,
-        score=score,
-        metadata=ChunkMetadata(
-            book=book,
-            chapter="第一章 集合与函数概念",
-            section="1.1 集合",
-            section_id=section_id,
-            page=page,
-            page_start=page_start,
-            page_end=page_end,
-            source_pages=[page],
-            chunk_type="child",
-            block_type="definition",
-            has_formula=False,
-            parent_id="test::parent",
-            child_index=0,
-        ),
-    )
 
 
 def make_source_ref(

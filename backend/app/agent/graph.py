@@ -179,29 +179,13 @@ def _make_rewrite(chat_model):
     return _rewrite
 
 
-def create_graph(checkpointer=None, chat_service=None, generator=None):
-    """创建并编译 Agent StateGraph
-
-    Args:
-        checkpointer: LangGraph checkpointer 实例
-            (AsyncPostgresSaver / MemorySaver)
-        chat_service: ChatService 实例，用于 retrieve 节点检索
-        generator: LLMGenerator 实例，用于提取 api_key/base_url/model 构建 ChatOpenAI
-
-    Returns:
-        CompiledStateGraph: 编译后的可执行图
-    """
-    # 从 generator 获取 ChatOpenAI 实例（支持原生 streaming）
-    chat_model = generator.get_chat_model()
-
-    _summarize = _make_summarize(chat_model)
-    _rewrite = _make_rewrite(chat_model)
+def _make_retrieve(chat_service):
+    """创建 retrieve 节点闭包（可独立测试）"""
 
     async def _retrieve(state):
         """retrieve 节点 — 调用 ChatService.retrieve 检索管线"""
-        # 优先使用 rewritten_question，无则 fallback 到 question
         question = state.get("rewritten_question") or state.get("question", "")
-        top_k = 10
+        top_k = settings.retrieval_top_k
 
         result = await asyncio.to_thread(chat_service.retrieve, question, top_k)
 
@@ -215,15 +199,20 @@ def create_graph(checkpointer=None, chat_service=None, generator=None):
             "degradation_reason": result.degradation_reason,
         }
 
-    async def _respond(state):
-        """respond 节点 — 构建完整消息列表并调用 LLM
+    return _retrieve
 
-        消息结构：
-        1. SystemMessage：教学策略 + RAG context（动态注入）
-        2. SystemMessage（可选）：对话摘要（如存在）
-        3. 历史消息（summarize 已清理旧消息，只剩近期）
-        4. LLM 调用
-        """
+
+def _make_respond(chat_model):
+    """创建 respond 节点闭包（可独立测试）
+
+    消息结构：
+    1. SystemMessage：教学策略 + RAG context（动态注入）
+    2. SystemMessage（可选）：对话摘要（如存在）
+    3. 历史消息（summarize 已清理旧消息，只剩近期）
+    4. LLM 调用
+    """
+
+    async def _respond(state):
         chunks = state.get("context_chunks", [])
         summary = state.get("conversation_summary")
         history = state.get("messages", [])
@@ -247,6 +236,28 @@ def create_graph(checkpointer=None, chat_service=None, generator=None):
         # 4. 调用 LLM
         response = await chat_model.ainvoke(messages)
         return {"messages": [response]}
+
+    return _respond
+
+
+def create_graph(checkpointer=None, chat_service=None, generator=None):
+    """创建并编译 Agent StateGraph
+
+    Args:
+        checkpointer: LangGraph checkpointer 实例
+            (AsyncPostgresSaver / MemorySaver)
+        chat_service: ChatService 实例，用于 retrieve 节点检索
+        generator: LLMGenerator 实例，用于提取 api_key/base_url/model 构建 ChatOpenAI
+
+    Returns:
+        CompiledStateGraph: 编译后的可执行图
+    """
+    chat_model = generator.get_chat_model()
+
+    _summarize = _make_summarize(chat_model)
+    _rewrite = _make_rewrite(chat_model)
+    _retrieve = _make_retrieve(chat_service)
+    _respond = _make_respond(chat_model)
 
     # 线性拓扑：START → summarize → rewrite → retrieve → respond → END
     graph = StateGraph(AgentState)

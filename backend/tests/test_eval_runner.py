@@ -30,6 +30,7 @@ from app.evaluation.eval_runner import (
 from app.evaluation.eval_set_loader import EvalSetLoader
 from app.evaluation.eval_types import EvalItem, EvalSource, RetrievalTruth
 from app.rag.models import ChunkMetadata, QueryResult
+from tests.conftest import make_query_result, make_eval_query_result
 
 
 # ---------------------------------------------------------------------------
@@ -50,34 +51,6 @@ def make_eval_item(
     eval_sources = [EvalSource(**s) for s in sources]
     truth = RetrievalTruth(mode=mode, sources=eval_sources)
     return EvalItem(id=item_id, question=question, retrieval_truth=truth)
-
-
-def make_query_result(
-    book: str = "必修第一册",
-    page: int = 5,
-    score: float = 0.9,
-) -> QueryResult:
-    """构造 QueryResult 辅助函数"""
-    return QueryResult(
-        chunk_id=f"test::{book}::p{page}",
-        text="测试文本",
-        score=score,
-        metadata=ChunkMetadata(
-            book=book,
-            chapter="测试章节",
-            section="测试小节",
-            section_id=f"{book}::1.1",
-            page=page,
-            page_start=page,
-            page_end=page,
-            source_pages=[page],
-            chunk_type="child",
-            block_type="unknown",
-            has_formula=False,
-            parent_id="test::parent",
-            child_index=0,
-        ),
-    )
 
 
 def create_mock_embedding_and_store(
@@ -305,8 +278,8 @@ class TestEvalRunner:
         ]
 
         query_results = [
-            make_query_result(book="必修第一册", page=3),  # 命中
-            make_query_result(book="必修第二册", page=10),  # 不命中
+            make_eval_query_result(book="必修第一册", page=3),  # 命中
+            make_eval_query_result(book="必修第二册", page=10),  # 不命中
         ]
 
         tmp_dir = create_eval_json_file(eval_data)
@@ -348,10 +321,10 @@ class TestEvalRunner:
         ]
 
         query_results = [
-            make_query_result(book="必修第二册", page=10),  # 不命中
-            make_query_result(book="选择性必修第一册", page=50),  # 不命中
-            make_query_result(book="必修第一册", page=50),  # 命中
-            make_query_result(book="必修第一册", page=80),  # 不在范围
+            make_eval_query_result(book="必修第二册", page=10),  # 不命中
+            make_eval_query_result(book="选择性必修第一册", page=50),  # 不命中
+            make_eval_query_result(book="必修第一册", page=50),  # 命中
+            make_eval_query_result(book="必修第一册", page=80),  # 不在范围
         ]
 
         tmp_dir = create_eval_json_file(eval_data)
@@ -388,8 +361,8 @@ class TestEvalRunner:
         ]
 
         query_results = [
-            make_query_result(book="必修第二册", page=10),
-            make_query_result(book="选择性必修第一册", page=50),
+            make_eval_query_result(book="必修第二册", page=10),
+            make_eval_query_result(book="选择性必修第一册", page=50),
         ]
 
         tmp_dir = create_eval_json_file(eval_data)
@@ -430,9 +403,9 @@ class TestEvalRunner:
         ]
 
         query_results = [
-            make_query_result(book="选择性必修第一册", page=100),  # 命中 source 1
-            make_query_result(book="选择性必修第一册", page=120),  # 命中 source 2
-            make_query_result(book="必修第一册", page=10),
+            make_eval_query_result(book="选择性必修第一册", page=100),  # 命中 source 1
+            make_eval_query_result(book="选择性必修第一册", page=120),  # 命中 source 2
+            make_eval_query_result(book="必修第一册", page=10),
         ]
 
         tmp_dir = create_eval_json_file(eval_data)
@@ -472,8 +445,8 @@ class TestEvalRunner:
         ]
 
         query_results = [
-            make_query_result(book="选择性必修第三册", page=15),  # 命中 source 1
-            make_query_result(book="必修第一册", page=10),  # 不命中
+            make_eval_query_result(book="选择性必修第三册", page=15),  # 命中 source 1
+            make_eval_query_result(book="必修第一册", page=10),  # 不命中
         ]
 
         tmp_dir = create_eval_json_file(eval_data)
@@ -526,16 +499,16 @@ class TestEvalRunner:
 
         results_map = {
             "集合的概念": [
-                make_query_result(book="必修第一册", page=3),  # 命中
-                make_query_result(book="必修第二册", page=10),
+                make_eval_query_result(book="必修第一册", page=3),  # 命中
+                make_eval_query_result(book="必修第二册", page=10),
             ],
             "函数的单调性": [
-                make_query_result(book="必修第二册", page=10),  # 不命中
-                make_query_result(book="必修第一册", page=60),  # 命中
+                make_eval_query_result(book="必修第二册", page=10),  # 不命中
+                make_eval_query_result(book="必修第一册", page=60),  # 命中
             ],
             "平面向量的加法": [
-                make_query_result(book="选择性必修第一册", page=10),  # 不命中
-                make_query_result(book="必修第二册", page=20),  # 不在范围
+                make_eval_query_result(book="选择性必修第一册", page=10),  # 不命中
+                make_eval_query_result(book="必修第二册", page=20),  # 不在范围
             ],
         }
 
@@ -659,13 +632,13 @@ class TestEvalRunner:
         ]
 
         query_results = [
-            make_query_result(book="必修第二册", page=10),
-            make_query_result(book="必修第二册", page=20),
-            make_query_result(book="必修第二册", page=30),
-            make_query_result(book="必修第二册", page=40),
-            make_query_result(book="必修第一册", page=5),  # rank=5, 命中
-            make_query_result(book="必修第二册", page=50),
-            make_query_result(book="必修第二册", page=60),
+            make_eval_query_result(book="必修第二册", page=10),
+            make_eval_query_result(book="必修第二册", page=20),
+            make_eval_query_result(book="必修第二册", page=30),
+            make_eval_query_result(book="必修第二册", page=40),
+            make_eval_query_result(book="必修第一册", page=5),  # rank=5, 命中
+            make_eval_query_result(book="必修第二册", page=50),
+            make_eval_query_result(book="必修第二册", page=60),
         ]
 
         tmp_dir = create_eval_json_file(eval_data)
@@ -787,8 +760,8 @@ class TestEvalRunnerWithRealEvalSet:
         ) -> list[QueryResult]:
             # 返回一个通用命中结果
             return [
-                make_query_result(book="必修第一册", page=3),
-                make_query_result(book="必修第二册", page=10),
+                make_eval_query_result(book="必修第一册", page=3),
+                make_eval_query_result(book="必修第二册", page=10),
             ][:top_k]
 
         mock_store.query.side_effect = query_side_effect
@@ -1034,7 +1007,7 @@ class TestSectionHit:
 
         # 结果的 section_id 匹配
         query_results = [
-            make_query_result(book="必修第一册", page=5),
+            make_eval_query_result(book="必修第一册", page=5),
         ]
 
         tmp_dir = create_eval_json_file(eval_data)
@@ -1075,7 +1048,7 @@ class TestSectionHit:
         ]
 
         query_results = [
-            make_query_result(book="必修第一册", page=5),
+            make_eval_query_result(book="必修第一册", page=5),
         ]
 
         tmp_dir = create_eval_json_file(eval_data)
@@ -1111,7 +1084,7 @@ class TestSectionHit:
         ]
 
         query_results = [
-            make_query_result(book="必修第一册", page=5),
+            make_eval_query_result(book="必修第一册", page=5),
         ]
 
         tmp_dir = create_eval_json_file(eval_data)
@@ -1236,7 +1209,7 @@ class TestKeywordCoverage:
         ]
 
         # 结果文本包含 "集合" 但不包含 "元素"
-        result = make_query_result(book="必修第一册", page=5)
+        result = make_eval_query_result(book="必修第一册", page=5)
         result.text = "集合是由确定的、互不相同的对象组成的整体"
         query_results = [result]
 
@@ -1277,7 +1250,7 @@ class TestKeywordCoverage:
             }
         ]
 
-        result = make_query_result(book="必修第一册", page=5)
+        result = make_eval_query_result(book="必修第一册", page=5)
         result.text = "集合是由确定的元素组成的整体"
         query_results = [result]
 
@@ -1317,7 +1290,7 @@ class TestKeywordCoverage:
             }
         ]
 
-        result = make_query_result(book="必修第一册", page=5)
+        result = make_eval_query_result(book="必修第一册", page=5)
         result.text = "集合是由确定的元素组成的整体"
         query_results = [result]
 
@@ -1352,7 +1325,7 @@ class TestKeywordCoverage:
             }
         ]
 
-        query_results = [make_query_result(book="必修第一册", page=5)]
+        query_results = [make_eval_query_result(book="必修第一册", page=5)]
 
         tmp_dir = create_eval_json_file(eval_data)
         try:
@@ -1529,7 +1502,7 @@ class TestEvalReportNewMetrics:
         ]
 
         query_results = [
-            make_query_result(book="必修第一册", page=3),
+            make_eval_query_result(book="必修第一册", page=3),
         ]
 
         tmp_dir = create_eval_json_file(eval_data)
@@ -1584,7 +1557,7 @@ class TestEvalReportNewMetrics:
             },
         ]
 
-        result1 = make_query_result(book="必修第一册", page=3)
+        result1 = make_eval_query_result(book="必修第一册", page=3)
         result1.text = "集合是数学的基本概念"
         query_results = [result1]
 

@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock
 from langchain_core.messages import AIMessage, HumanMessage
 
 from app.agent.graph import create_graph
+from app.config import settings
 from app.rag.models import QueryResult, ChunkMetadata
 
 # 共享辅助函数
@@ -67,7 +68,7 @@ class TestLinearPath:
             events.append(event)
 
         # 验证经过 retrieve 节点 — retrieve 被调用
-        chat_svc.retrieve.assert_called_once_with("什么是集合？", 10)
+        chat_svc.retrieve.assert_called_once_with("什么是集合？", settings.retrieval_top_k)
 
         # 验证经过 respond 节点 — 返回 AIMessage
         last_event = events[-1]
