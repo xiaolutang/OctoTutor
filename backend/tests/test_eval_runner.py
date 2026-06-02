@@ -31,26 +31,12 @@ from app.evaluation.eval_set_loader import EvalSetLoader
 from app.evaluation.eval_types import EvalItem, EvalSource, RetrievalTruth
 from app.rag.models import ChunkMetadata, QueryResult
 from tests.conftest import make_query_result, make_eval_query_result
+from tests._helpers import make_eval_item
 
 
 # ---------------------------------------------------------------------------
 # 辅助函数
 # ---------------------------------------------------------------------------
-
-
-def make_eval_item(
-    item_id: str = "q001",
-    question: str = "测试问题",
-    mode: str = "ANY",
-    sources: list[dict] | None = None,
-) -> EvalItem:
-    """构造 EvalItem 辅助函数"""
-    if sources is None:
-        sources = [{"book": "必修第一册", "page_start": 1, "page_end": 10}]
-
-    eval_sources = [EvalSource(**s) for s in sources]
-    truth = RetrievalTruth(mode=mode, sources=eval_sources)
-    return EvalItem(id=item_id, question=question, retrieval_truth=truth)
 
 
 def create_mock_embedding_and_store(

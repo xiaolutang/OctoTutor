@@ -158,10 +158,9 @@ def _make_rewrite(chat_model):
         if len(messages) <= 1:
             return {}
 
-        # 2. 多轮 → 取最近几轮构建 history
-        # 只取最近 6 条消息（3 轮对话）作为 history
-        recent = messages[-6:] if len(messages) > 6 else messages[:-1]
-        history = "\n".join(_format_msg_line(msg) for msg in recent)
+        # 2. 多轮 → 取最近几轮构建 history（排除当前消息，最多 6 条）
+        history_msgs = messages[:-1][-6:]
+        history = "\n".join(_format_msg_line(msg) for msg in history_msgs)
 
         # 3. 调用 LLM 改写
         prompt = REWRITE_PROMPT.format(history=history, question=question)
@@ -179,13 +178,12 @@ def _make_rewrite(chat_model):
     return _rewrite
 
 
-def _make_retrieve(chat_service):
+def _make_retrieve(chat_service, top_k: int):
     """创建 retrieve 节点闭包（可独立测试）"""
 
     async def _retrieve(state):
         """retrieve 节点 — 调用 ChatService.retrieve 检索管线"""
         question = state.get("rewritten_question") or state.get("question", "")
-        top_k = settings.retrieval_top_k
 
         result = await asyncio.to_thread(chat_service.retrieve, question, top_k)
 
@@ -202,7 +200,7 @@ def _make_retrieve(chat_service):
     return _retrieve
 
 
-def _make_respond(chat_model):
+def _make_respond(chat_model, relevance_threshold: float):
     """创建 respond 节点闭包（可独立测试）
 
     消息结构：
@@ -221,7 +219,7 @@ def _make_respond(chat_model):
         system_content = TEACHING_SYSTEM_PROMPT
         degraded = state.get("degraded", False)
         system_content += build_context_injection(
-            chunks, degraded, settings.relevance_threshold
+            chunks, degraded, relevance_threshold
         )
 
         messages = [SystemMessage(content=system_content)]
@@ -256,8 +254,8 @@ def create_graph(checkpointer=None, chat_service=None, generator=None):
 
     _summarize = _make_summarize(chat_model)
     _rewrite = _make_rewrite(chat_model)
-    _retrieve = _make_retrieve(chat_service)
-    _respond = _make_respond(chat_model)
+    _retrieve = _make_retrieve(chat_service, settings.retrieval_top_k)
+    _respond = _make_respond(chat_model, settings.relevance_threshold)
 
     # 线性拓扑：START → summarize → rewrite → retrieve → respond → END
     graph = StateGraph(AgentState)

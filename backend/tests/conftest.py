@@ -50,7 +50,7 @@ def make_query_result(
     book: str = "必修第一册",
     chapter: str = "第一章 集合与函数概念",
     section: str = "1.1 集合",
-    section_id: str = "",
+    section_id: str | None = None,
     page: int = 1,
     page_start: int | None = None,
     page_end: int | None = None,
@@ -69,7 +69,7 @@ def make_query_result(
     _page_start = page_start if page_start is not None else page
     _page_end = page_end if page_end is not None else page
     _source_pages = source_pages if source_pages is not None else [page]
-    _section_id = section_id or f"{book}::1.1"
+    _section_id = section_id if section_id is not None else f"{book}::{section.split()[0] if section else '1'}"
 
     return QueryResult(
         chunk_id=chunk_id,
@@ -97,7 +97,7 @@ def make_eval_query_result(
     book: str = "必修第一册",
     page: int = 5,
     score: float = 0.9,
-    section_id: str = "",
+    section_id: str | None = None,
 ) -> QueryResult:
     """构造 eval 场景的 QueryResult（简化签名：book/page/score/section_id）"""
     return make_query_result(
@@ -105,8 +105,6 @@ def make_eval_query_result(
         text=f"测试文本 page={page}",
         score=score,
         book=book,
-        chapter="测试章节",
-        section="测试小节",
-        section_id=section_id or f"{book}::1.1",
+        section_id=section_id,
         page=page,
     )

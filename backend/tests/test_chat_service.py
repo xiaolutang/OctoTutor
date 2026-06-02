@@ -26,6 +26,7 @@ from app.chat.service import ChatService
 from app.chat.schemas import ChatResponse
 from app.domain.models import SourceReference
 from tests.conftest import make_query_result
+from tests._helpers import make_settings, make_source_ref
 
 
 # ---------------------------------------------------------------------------
@@ -35,30 +36,6 @@ from tests.conftest import make_query_result
 
 def make_chunk_id(i: int) -> str:
     return f"chunk_{i}"
-
-
-def make_settings(**overrides):
-    """构造 mock Settings 对象"""
-    defaults = dict(
-        retrieval_top_k=20,
-        similarity_threshold=0.70,
-        bm25_enabled=True,
-        rrf_k=60,
-        rerank_top_n=3,
-        chat_max_context_tokens=3000,
-    )
-    defaults.update(overrides)
-    return MagicMock(**defaults)
-
-
-def make_source_ref(chunk_id: str = "ref_1") -> SourceReference:
-    return SourceReference(
-        chunk_id=chunk_id,
-        book="必修第一册",
-        section="1.1 集合",
-        page_start=1,
-        page_end=2,
-    )
 
 
 # ---------------------------------------------------------------------------

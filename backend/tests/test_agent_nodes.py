@@ -22,47 +22,25 @@ from tests.conftest import make_query_result
 
 
 class TestTeachingSystemPrompt:
-    """验证教学策略 prompt 包含要求的关键词"""
+    """验证教学策略 prompt 包含要求的关键词和约束"""
 
-    def test_prompt_contains_analogy(self):
-        """类比驱动"""
-        assert "类比" in TEACHING_SYSTEM_PROMPT
+    REQUIRED_KEYWORDS = ["类比", "启发", "步骤", "纠正", "关联"]
+    REQUIRED_CONSTRAINTS = ["忠实性约束", "最高优先级", "绝不编造"]
 
-    def test_prompt_contains_heuristic(self):
-        """启发式引导"""
-        assert "启发" in TEACHING_SYSTEM_PROMPT
-
-    def test_prompt_contains_stepwise(self):
-        """步骤化叙事"""
-        assert "步骤" in TEACHING_SYSTEM_PROMPT
-
-    def test_prompt_contains_correction(self):
-        """纠正误解"""
-        assert "纠正" in TEACHING_SYSTEM_PROMPT
-
-    def test_prompt_contains_connection(self):
-        """知识关联"""
-        assert "关联" in TEACHING_SYSTEM_PROMPT
-
-    def test_prompt_contains_core_principles(self):
-        """核心原则 — 不直接给答案"""
-        assert "不直接" in TEACHING_SYSTEM_PROMPT or "绝不直接" in TEACHING_SYSTEM_PROMPT
+    def test_prompt_contains_teaching_strategies(self):
+        """prompt 包含所有教学策略关键词"""
+        for kw in self.REQUIRED_KEYWORDS:
+            assert kw in TEACHING_SYSTEM_PROMPT, f"缺少教学策略关键词：{kw}"
 
     def test_prompt_is_not_placeholder(self):
         """prompt 已替换，不是占位符"""
         assert len(TEACHING_SYSTEM_PROMPT) > 100
 
-    def test_prompt_contains_faithfulness_constraint(self):
-        """忠实性约束章节存在"""
-        assert "忠实性约束" in TEACHING_SYSTEM_PROMPT
-
-    def test_prompt_contains_highest_priority(self):
-        """忠实性约束标记为最高优先级"""
-        assert "最高优先级" in TEACHING_SYSTEM_PROMPT
-
-    def test_prompt_contains_no_fabrication(self):
-        """绝不编造措辞"""
-        assert "绝不编造" in TEACHING_SYSTEM_PROMPT
+    def test_prompt_contains_faithfulness_constraints(self):
+        """prompt 包含忠实性约束完整链条"""
+        for constraint in self.REQUIRED_CONSTRAINTS:
+            assert constraint in TEACHING_SYSTEM_PROMPT, f"缺少忠实性约束：{constraint}"
+        assert "不直接" in TEACHING_SYSTEM_PROMPT or "绝不直接" in TEACHING_SYSTEM_PROMPT
 
 
 # ===================================================================
@@ -73,17 +51,13 @@ class TestTeachingSystemPrompt:
 class TestErrorCodeMapping:
     """验证 ChatErrorCode 错误码值"""
 
-    def test_connection_error_maps_to_02201(self):
-        """ConnectionError → LLM_CONNECT_FAILED (02201)"""
-        assert ChatErrorCode.LLM_CONNECT_FAILED.value == "02201"
-
-    def test_runtime_error_maps_to_02202(self):
-        """RuntimeError → LLM_STREAM_ERROR (02202)"""
-        assert ChatErrorCode.LLM_STREAM_ERROR.value == "02202"
-
-    def test_timeout_error_maps_to_02204(self):
-        """TimeoutError → LLM_TIMEOUT (02204)"""
-        assert ChatErrorCode.LLM_TIMEOUT.value == "02204"
+    @pytest.mark.parametrize("code,expected", [
+        (ChatErrorCode.LLM_CONNECT_FAILED, "02201"),
+        (ChatErrorCode.LLM_STREAM_ERROR, "02202"),
+        (ChatErrorCode.LLM_TIMEOUT, "02204"),
+    ])
+    def test_error_code_values(self, code, expected):
+        assert code.value == expected
 
 
 # ===================================================================

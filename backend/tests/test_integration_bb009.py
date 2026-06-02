@@ -27,6 +27,7 @@ from app.rag.models import ChunkMetadata, QueryResult
 from app.chat.schemas import ChatResponse
 from app.domain.models import SourceReference
 from tests.conftest import make_query_result
+from tests._helpers import make_settings, make_source_ref
 from app.evaluation.eval_runner import (
     EvalRunner,
     ContextPrecisionReport,
@@ -44,35 +45,6 @@ _test_user = UserContext(user_id="user-123", username="testuser")
 # ---------------------------------------------------------------------------
 # 辅助函数
 # ---------------------------------------------------------------------------
-
-
-def make_source_ref(
-    chunk_id: str = "ref_1",
-    book: str = "必修第一册",
-    section: str = "1.1 集合",
-    page_start: int = 1,
-    page_end: int = 2,
-) -> SourceReference:
-    return SourceReference(
-        chunk_id=chunk_id,
-        book=book,
-        section=section,
-        page_start=page_start,
-        page_end=page_end,
-    )
-
-
-def make_settings(**overrides):
-    defaults = dict(
-        retrieval_top_k=20,
-        similarity_threshold=0.70,
-        bm25_enabled=True,
-        rrf_k=60,
-        rerank_top_n=3,
-        chat_max_context_tokens=3000,
-    )
-    defaults.update(overrides)
-    return MagicMock(**defaults)
 
 
 def make_eval_items() -> list[EvalItem]:

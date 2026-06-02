@@ -23,6 +23,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 
@@ -544,14 +545,37 @@ class EvalRunner:
 
         details: list[FaithfulnessDetail] = []
         for item in items:
-            detail = self._evaluate_faithfulness_item(
-                item=item,
-                top_k=top_k,
-                threshold=threshold,
-                rerank_top_n=rerank_top_n,
-                deterministic_grader=deterministic_grader,
-                llm_judge=llm_judge,
-            )
+            detail = None
+            for attempt in range(3):
+                try:
+                    detail = self._evaluate_faithfulness_item(
+                        item=item,
+                        top_k=top_k,
+                        threshold=threshold,
+                        rerank_top_n=rerank_top_n,
+                        deterministic_grader=deterministic_grader,
+                        llm_judge=llm_judge,
+                    )
+                    break
+                except Exception as e:
+                    is_transient = any(
+                        kw in str(e).lower()
+                        for kw in ["overloaded", "529", "timeout", "connection"]
+                    )
+                    if not is_transient or attempt == 2:
+                        logger.warning("Faithfulness 评估失败 [%s]: %s", item.id, e)
+                        detail = FaithfulnessDetail(
+                            item_id=item.id,
+                            question=item.question,
+                            faithfulness=0.0,
+                            coverage=0.0,
+                            unknown_ratio=0.0,
+                            deterministic_passed=False,
+                        )
+                        break
+                    backoff = [1, 5, 10][attempt]
+                    logger.info("重试 %d/%d [%s]，等待 %ds", attempt + 1, 3, item.id, backoff)
+                    time.sleep(backoff)
             details.append(detail)
 
         # 汇总指标

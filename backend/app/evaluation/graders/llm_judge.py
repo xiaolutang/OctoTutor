@@ -179,7 +179,11 @@ class LLMJudge:
             temperature=0.0,
         )
 
-        raw_content = response.choices[0].message.content
+        # 兼容非标准 API 返回（部分模型直接返回 string）
+        if isinstance(response, str):
+            raw_content = response
+        else:
+            raw_content = response.choices[0].message.content
         return self._parse_response(raw_content)
 
     def _parse_response(self, raw_content: str) -> JudgeResult:
