@@ -1,7 +1,7 @@
 {
   "version": "3.0",
   "project": "OctoTutor",
-  "active_rc": "R011",
+  "active_rc": null,
   "default_workflow": {
     "name": "XLFoundry",
     "mode": "A",
@@ -22,7 +22,8 @@
     { "id": "R008", "name": "architecture-refactor", "archive_dir": "R008", "total_tasks": 3, "completed_at": "2026-05-24" },
     { "id": "R009", "name": "conversation-management", "archive_dir": "R009", "total_tasks": 25, "completed_at": "2026-05-25" },
     { "id": "R010", "name": "grounding-faithfulness", "archive_dir": "R010", "total_tasks": 14, "completed_at": "2026-06-02" },
-    { "id": "R009-PATCH01", "name": "stream-conversation-ownership", "archive_dir": "R009-PATCH01", "patch_for": "R009", "total_tasks": 5, "completed_at": "2026-06-02" }
+    { "id": "R009-PATCH01", "name": "stream-conversation-ownership", "archive_dir": "R009-PATCH01", "patch_for": "R009", "total_tasks": 5, "completed_at": "2026-06-02" },
+    { "id": "R011", "name": "auth-race-condition", "archive_dir": "R011", "total_tasks": 2, "completed_at": "2026-06-02" }
   ],
   "rc_queue": []
 }

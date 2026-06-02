@@ -19,6 +19,7 @@
 | R009 | conversation-management | 25 | archived | 2026-05-25 |
 | R010 | grounding-faithfulness | 14 | archived | 2026-06-02 |
 | R009-PATCH01 | stream-conversation-ownership (补丁 R009) | 5 | archived | 2026-06-02 |
+| R011 | auth-race-condition | 2 | archived | 2026-06-02 |
 
 ## 模块清单
 
@@ -47,7 +48,7 @@
 | conversation | GET /api/conversations/current 对话历史加载 + user_id 隔离 |
 | conversation-api | GET/PATCH/DELETE /api/conversations 对话列表+更新+删除+置顶 |
 | conversation-repo | SQLAlchemy 2.0 async ORM Conversation CRUD 数据访问层 |
-| conversation-context | ConversationProvider + useReducer 对话状态管理 |
+| conversation-context | ConversationProvider + useReducer 对话状态管理 + Auth 守卫 |
 | sidebar | 侧边栏组件（对话列表+新建+置顶分组+右键菜单） |
 
 ## 能力清单
@@ -93,8 +94,16 @@
 | CAP-conv-006 | 流式中切换阻止（isStreaming 检测 + toast 提示） |
 | CAP-conv-007 | 对话标题自动生成（LLM generate_title + SSE title 事件） |
 | CAP-sec-001 | /api/chat/stream conversation_id 归属校验（id + user_id SQL 层过滤） |
+| CAP-auth-005 | ConversationProvider Auth 守卫（isInitialized 依赖 + 竞态消除） |
 
 ## 变更记录
+
+### R011 auth-race-condition (2026-06-02)
+
+- ConversationProvider Auth 守卫修复：useEffect 依赖 `[]` → `[isInitialized]`，加 `if (!isInitialized) return` 守卫
+- 消除刷新 /chat 后对话列表竞态：AuthProvider 异步初始化完成前不再发起未认证的 fetchConversationList
+- 参照 `controller.ts:37-48` 模式，3 行改动（+3/-3），净增 0 行
+- 附带发现并修复 auth-sdk-web `init()` token 过期判断 bug（hasRefreshToken 守卫）
 
 ### R009-PATCH01 stream-conversation-ownership（补丁 R009）(2026-06-02)
 

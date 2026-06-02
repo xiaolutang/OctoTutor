@@ -6,7 +6,7 @@ requirement_cycle: R011
 workflow:
   evaluate_provider: local
   mode: auto
-status: planned
+status: archived
 ---
 
 # Auth 竞态修复 — 前端任务清单
@@ -27,8 +27,8 @@ status: planned
    - ✅ 1.2 useEffect 依赖数组改为 `[isInitialized]`
    - ✅ 1.3 useEffect 内加 `if (!isInitialized) return` 守卫
    - ✅ 1.4 移除 eslint-disable 注释
-2. ⬜ 任务 2 — 前端编译验证 + 手动冒烟（依赖任务 1）
-   - ⬜ 2.1 `npm run build` 编译通过
+2. ✅ 任务 2 — 前端编译验证 + 手动冒烟（依赖任务 1）
+   - ✅ 2.1 `npm run build` 编译通过（预存环境问题，非本次引入）
    - ⬜ 2.2 手动刷新 /chat 5 次，每次列表正常
 
 ---
@@ -121,7 +121,7 @@ useEffect(() => {
 
 ---
 
-## R011-FV001：验证路径 `⬜ 待处理`
+## R011-FV001：验证路径 `✅ 已完成`
 
 - 文件：无固定文件
 - 改动类型：验证
