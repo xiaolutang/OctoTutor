@@ -18,6 +18,7 @@
 | R008 | architecture-refactor | 3 | archived | 2026-05-24 |
 | R009 | conversation-management | 25 | archived | 2026-05-25 |
 | R010 | grounding-faithfulness | 14 | archived | 2026-06-02 |
+| R009-PATCH01 | stream-conversation-ownership (补丁 R009) | 5 | archived | 2026-06-02 |
 
 ## 模块清单
 
@@ -91,8 +92,18 @@
 | CAP-conv-005 | 多对话切换（ConversationContext + activeId + 消息加载） |
 | CAP-conv-006 | 流式中切换阻止（isStreaming 检测 + toast 提示） |
 | CAP-conv-007 | 对话标题自动生成（LLM generate_title + SSE title 事件） |
+| CAP-sec-001 | /api/chat/stream conversation_id 归属校验（id + user_id SQL 层过滤） |
 
 ## 变更记录
+
+### R009-PATCH01 stream-conversation-ownership（补丁 R009）(2026-06-02)
+
+- stream_router.py 归属校验：已有 conversation_id 进入 graph.astream 前校验 id + user_id
+- 归属失败 → SSE error 03901（对话不存在），DB 异常 → SSE error 02901
+- 新增 _single_error_event helper 替代内联 async generator
+- 4 个归属测试（not_found/db_error/pass/new_skip）+ 4 个旧测试补 get_by_id mock
+- architecture.md 不变量补充 stream 归属校验
+- 40 测试全通过（stream_conversation + sse_integration + router_auth）
 
 ### R010 grounding-faithfulness (2026-06-02)
 

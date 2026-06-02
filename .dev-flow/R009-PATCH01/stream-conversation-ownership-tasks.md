@@ -7,7 +7,7 @@ patch_for: R009
 workflow:
   evaluate_provider: local
   mode: auto
-status: completed
+status: archived
 ---
 
 # 流式对话 conversation_id 归属校验 — 后端任务清单
