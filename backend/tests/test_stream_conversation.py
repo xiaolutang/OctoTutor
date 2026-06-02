@@ -160,7 +160,12 @@ class TestExistingConversation:
         """传入 conversation_id → 不调用 ConversationRepo.create"""
         app, mock_db = _create_test_app(title="测试标题")
 
+        # mock 已有对话记录
+        from app.domain.models import Conversation
+        mock_conv = Conversation(id="conv-existing-001", user_id="user-123")
+
         with patch("app.chat.stream_router.ConversationRepo") as MockRepo:
+            MockRepo.get_by_id = AsyncMock(return_value=mock_conv)
             MockRepo.update_message_stats = AsyncMock()
             MockRepo.update = AsyncMock()
 
@@ -188,7 +193,12 @@ class TestExistingConversation:
         """传入 conversation_id → 不尝试生成标题（非新对话）"""
         app, mock_db = _create_test_app(title="不应出现的标题")
 
+        # mock 已有对话记录
+        from app.domain.models import Conversation
+        mock_conv = Conversation(id="conv-existing-002", user_id="user-123")
+
         with patch("app.chat.stream_router.ConversationRepo") as MockRepo:
+            MockRepo.get_by_id = AsyncMock(return_value=mock_conv)
             MockRepo.update_message_stats = AsyncMock()
             MockRepo.update = AsyncMock()
 
@@ -352,7 +362,12 @@ class TestMessageCountUpdate:
         """多轮对话也更新 message_count"""
         app, mock_db = _create_test_app()
 
+        # mock 已有对话记录
+        from app.domain.models import Conversation
+        mock_conv = Conversation(id="conv-stats-001", user_id="user-123")
+
         with patch("app.chat.stream_router.ConversationRepo") as MockRepo:
+            MockRepo.get_by_id = AsyncMock(return_value=mock_conv)
             MockRepo.update_message_stats = AsyncMock()
 
             with TestClient(app) as client:
@@ -433,7 +448,12 @@ class TestSSEEventOrder:
         """多轮对话：init → ... → done（无 title）"""
         app, mock_db = _create_test_app(title="不应出现")
 
+        # mock 已有对话记录
+        from app.domain.models import Conversation
+        mock_conv = Conversation(id="conv-order-001", user_id="user-123")
+
         with patch("app.chat.stream_router.ConversationRepo") as MockRepo:
+            MockRepo.get_by_id = AsyncMock(return_value=mock_conv)
             MockRepo.update_message_stats = AsyncMock()
 
             with TestClient(app) as client:
@@ -477,3 +497,145 @@ class TestSSEEventOrder:
             frames = parse_sse_frames(resp.text)
             assert frames[0]["type"] == "init"
             assert "conversation_id" in frames[0]["data"]
+
+
+class TestOwnershipCheck:
+    """已有 conversation_id 归属校验 — R009-PATCH01-BB001"""
+
+    def test_ownership_not_found_returns_error_03901(self):
+        """get_by_id 返回 None → SSE error 03901，不发送 init，不调用 graph"""
+        from app.domain.models import Conversation
+
+        app, mock_db = _create_test_app(title="不应出现")
+
+        with patch("app.chat.stream_router.ConversationRepo") as MockRepo:
+            MockRepo.get_by_id = AsyncMock(return_value=None)
+            MockRepo.update_message_stats = AsyncMock()
+            MockRepo.update = AsyncMock()
+            MockRepo.create = AsyncMock()
+
+            with TestClient(app) as client:
+                resp = client.post(
+                    "/api/chat/stream",
+                    json={
+                        "question": "越权问题",
+                        "conversation_id": "conv-other-user-001",
+                    },
+                    headers={"Authorization": "Bearer fake"},
+                )
+
+            assert resp.status_code == 200
+            frames = parse_sse_frames(resp.text)
+
+            # 第一帧是 error，code=03901
+            assert len(frames) == 1
+            assert frames[0]["type"] == "error"
+            assert frames[0]["data"]["code"] == "03901"
+
+            # 不发送 init
+            # （frames 中只有 error 这一帧，无 init）
+
+            # 不调用 graph → update_message_stats 不应被调用
+            MockRepo.update_message_stats.assert_not_called()
+
+            # 不调用 create
+            MockRepo.create.assert_not_called()
+
+    def test_ownership_db_exception_returns_error_02901(self):
+        """get_by_id 抛异常 → SSE error 02901，不发送 init，不调用 graph"""
+        app, mock_db = _create_test_app(title="不应出现")
+
+        with patch("app.chat.stream_router.ConversationRepo") as MockRepo:
+            MockRepo.get_by_id = AsyncMock(side_effect=RuntimeError("DB 连接断开"))
+            MockRepo.update_message_stats = AsyncMock()
+            MockRepo.update = AsyncMock()
+            MockRepo.create = AsyncMock()
+
+            with TestClient(app) as client:
+                resp = client.post(
+                    "/api/chat/stream",
+                    json={
+                        "question": "测试异常",
+                        "conversation_id": "conv-db-error-001",
+                    },
+                    headers={"Authorization": "Bearer fake"},
+                )
+
+            assert resp.status_code == 200
+            frames = parse_sse_frames(resp.text)
+
+            # 第一帧是 error，code=02901
+            assert len(frames) == 1
+            assert frames[0]["type"] == "error"
+            assert frames[0]["data"]["code"] == "02901"
+
+            # 不发送 init
+
+            # 不调用 graph → update_message_stats 不应被调用
+            MockRepo.update_message_stats.assert_not_called()
+
+            # 不调用 create
+            MockRepo.create.assert_not_called()
+
+    def test_ownership_pass_allows_stream(self):
+        """get_by_id 返回记录 → 正常进入 graph.astream，发送 init"""
+        from app.domain.models import Conversation
+
+        app, mock_db = _create_test_app()
+
+        mock_conv = Conversation(id="conv-own-001", user_id="user-123")
+
+        with patch("app.chat.stream_router.ConversationRepo") as MockRepo:
+            MockRepo.get_by_id = AsyncMock(return_value=mock_conv)
+            MockRepo.update_message_stats = AsyncMock()
+
+            with TestClient(app) as client:
+                resp = client.post(
+                    "/api/chat/stream",
+                    json={
+                        "question": "正常问题",
+                        "conversation_id": "conv-own-001",
+                    },
+                    headers={"Authorization": "Bearer fake"},
+                )
+
+            assert resp.status_code == 200
+            frames = parse_sse_frames(resp.text)
+
+            # init 正常发送
+            assert frames[0]["type"] == "init"
+            assert frames[0]["data"]["conversation_id"] == "conv-own-001"
+
+            # 不调用 create
+            MockRepo.create.assert_not_called()
+
+            # update_message_stats 被调用
+            MockRepo.update_message_stats.assert_awaited_once()
+
+    def test_new_conversation_skips_ownership_check(self):
+        """新对话不触发 get_by_id 归属校验"""
+        app, mock_db = _create_test_app()
+
+        with patch("app.chat.stream_router.ConversationRepo") as MockRepo:
+            MockRepo.create = AsyncMock()
+            MockRepo.update_message_stats = AsyncMock()
+            MockRepo.get_by_id = AsyncMock(return_value=None)
+
+            with TestClient(app) as client:
+                resp = client.post(
+                    "/api/chat/stream",
+                    json={"question": "新对话问题"},
+                    headers={"Authorization": "Bearer fake"},
+                )
+
+            assert resp.status_code == 200
+            frames = parse_sse_frames(resp.text)
+
+            # init 正常
+            assert frames[0]["type"] == "init"
+
+            # 不调用 get_by_id（新对话不走归属校验）
+            MockRepo.get_by_id.assert_not_called()
+
+            # create 被调用
+            MockRepo.create.assert_awaited_once()

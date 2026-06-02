@@ -57,6 +57,7 @@ SSE 流式连接：Browser → Traefik → Backend SSE Endpoint (/api/chat/strea
 - LLM 调用统一在 Backend 内（infra/llm.py），Frontend 不持有 LLM Key
 - respond 节点使用分级 context 注入：高相关性（degraded=False, score>=threshold）强约束；低相关性和降级（degraded=True）弱参考；无结果不注入
 - OCR 缓存是唯一权威数据源（parsed/ 目录），入库脚本按缓存状态决定是否调 OCR
+- /api/chat/stream 使用已有 conversation_id 前必须通过 conversations 表按 id + user_id 校验归属；校验失败不得进入 LangGraph thread_id
 
 ## 不变量
 

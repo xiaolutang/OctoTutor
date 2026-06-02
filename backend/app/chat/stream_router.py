@@ -22,7 +22,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.chat.dependencies import get_graph, get_checkpointer, get_db
-from app.chat.errors import ChatErrorCode, make_error
+from app.chat.errors import ChatErrorCode, ConversationErrorCode, make_error, make_conversation_error
 from app.chat.schemas import ChatRequest
 from app.domain.models import Conversation
 from app.infra.conversation_repo import ConversationRepo
@@ -51,6 +51,23 @@ async def stream_chat(
     """
     conversation_id = body.conversation_id or str(uuid.uuid4())
     is_new_conversation = not body.conversation_id
+
+    # 已有 conversation_id：归属校验
+    if not is_new_conversation:
+        try:
+            conv = await ConversationRepo.get_by_id(db, conversation_id, user.user_id)
+            if conv is None:
+                # 归属校验失败：对话不存在或无权访问
+                return StreamingResponse(
+                    _single_error_event(make_conversation_error(ConversationErrorCode.NOT_FOUND)),
+                    media_type="text/event-stream",
+                )
+        except Exception as e:
+            logger.error(f"[stream] conversation ownership check failed: {e}", exc_info=True)
+            return StreamingResponse(
+                _single_error_event(make_error(ChatErrorCode.INTERNAL_ERROR)),
+                media_type="text/event-stream",
+            )
 
     # 新对话：init 阶段前创建 conversation 记录
     if is_new_conversation:
@@ -191,6 +208,11 @@ async def _map_node_update_to_sse(node_name: str, node_output: dict):
 def _sse_frame(event_type: str, data: Any) -> str:
     """构造 SSE 文本帧"""
     return f"event: {event_type}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+async def _single_error_event(error: dict):
+    """仅 yield 一帧 SSE error 事件的异步生成器"""
+    yield _sse_frame("error", error)
 
 
 def _serialize_source(source) -> dict:
