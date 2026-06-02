@@ -188,11 +188,13 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
     ...initialState,
     activeId: getStoredActiveId(),
   });
+  const { isInitialized } = useAuth();
   const [isStreaming, setIsStreaming] = React.useState(false);
   const loadingMoreRef = useRef(false);
 
   // 初始化加载对话列表
   useEffect(() => {
+    if (!isInitialized) return;
     let cancelled = false;
     (async () => {
       dispatch({ type: 'SET_LOADING', payload: true });
@@ -218,8 +220,7 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isInitialized]);
 
   const switchTo = useCallback((id: string) => {
     dispatch({ type: 'SET_ACTIVE', payload: id });
