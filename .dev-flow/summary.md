@@ -1,6 +1,6 @@
 # OctoTutor Development Summary
 
-最后更新: 2026-05-25
+最后更新: 2026-06-02
 
 ## 需求包索引
 
@@ -17,6 +17,7 @@
 | R007-PATCH02 | reverse-dependency-fix (补丁 R007) | 3 | archived | 2026-05-24 |
 | R008 | architecture-refactor | 3 | archived | 2026-05-24 |
 | R009 | conversation-management | 25 | archived | 2026-05-25 |
+| R010 | grounding-faithfulness | 14 | archived | 2026-06-02 |
 
 ## 模块清单
 
@@ -32,6 +33,8 @@
 | retrieve | POST /api/retrieve + GET /api/health |
 | spot-check | 入库抽检（页码 + 内容 + 结构 + 元数据） |
 | evaluation | EvalRunner + EvalSetLoader + 分层评估指标 |
+| eval-infra | 确定性 Grader + LLM-as-Judge + 指数退避重试 |
+| classifier | 问题分类器（textbook/unrelated + 社交噪音检测） |
 | chat | ChatService 对话管线（混合检索 + Rerank + LLM 生成） |
 | infra | LLM Generator + Reranker + BM25Retriever 基础设施层 |
 | docker-deploy | Docker Compose 双容器 + Traefik 路由 |
@@ -64,6 +67,10 @@
 | CAP-dialogue-003 | Reranker 精炼 + 降级 |
 | CAP-dialogue-004 | LLM 对话生成 + Token 截断 |
 | CAP-dialogue-007 | Faithfulness + Coverage + Relevance 三角评估 |
+| CAP-eval-008 | 确定性 Grader + LLM Judge + 指数退避重试评估体系 |
+| CAP-agent-005 | 长对话上下文管理（summarize 摘要 + rewrite 改写 + context injection） |
+| CAP-agent-006 | 分类器默认策略修正（unrelated 默认 + 社交噪音检测 + 数学关键词扩展） |
+| CAP-agent-007 | 分级 Context 注入（强约束/弱参考 + 降级模式） |
 | CAP-eval-001 | Relevance 相关性评估（BB010 补齐） |
 | CAP-chatui-001 | SSE 流式回答（逐 token 推送 + 状态提示） |
 | CAP-chatui-002 | 检索无结果兜底回答 |
@@ -86,6 +93,15 @@
 | CAP-conv-007 | 对话标题自动生成（LLM generate_title + SSE title 事件） |
 
 ## 变更记录
+
+### R010 grounding-faithfulness (2026-06-02)
+
+- 长对话上下文管理：summarize 摘要压缩（超阈值自动触发 + RemoveMessage 清理）+ rewrite 多轮改写（6 条历史窗口 + 首轮透传）+ respond 节点修复
+- 分类器默认策略修正：默认改 unrelated（宁可拒答不误答）+ 社交噪音检测（去问候后残余为空→unrelated）+ 数学关键词扩展（"题"、"算"）
+- 分级 Context 注入：高相关性→强约束 prompt / 低相关性→弱参考 / 降级模式→弱参考
+- 评估体系：确定性 Grader（关键词匹配 + page 验证）+ LLM-as-Judge（Faithfulness + Coverage + Relevance 合并评估）+ 1s→5s→10s 指数退避重试 + 非标准 API 兼容
+- 代码收敛：闭包参数注入（relevance_threshold / top_k）+ 测试工厂统一（_helpers.py）+ 测试精简（parametrize 合并）+ conftest section_id 动态推导
+- 全量评估脚本 run_eval.py：200 题 Faithfulness 全量跑通，Faithfulness≈0.82, Coverage≈0.63, Relevance≈0.88
 
 ### R009 conversation-management (2026-05-25)
 

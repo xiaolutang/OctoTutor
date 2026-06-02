@@ -6,7 +6,7 @@ requirement_cycle: R010
 workflow:
   evaluate_provider: local
   mode: auto
-status: completed
+status: archived
 ---
 
 # 长对话上下文管理 — 后端任务清单

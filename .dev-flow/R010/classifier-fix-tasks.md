@@ -6,7 +6,7 @@ requirement_cycle: R010
 workflow:
   evaluate_provider: local
   mode: auto
-status: completed
+status: archived
 ---
 
 # 分类器默认策略修正 — 后端任务清单

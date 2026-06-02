@@ -1,7 +1,7 @@
 {
   "version": "3.0",
   "project": "OctoTutor",
-  "active_rc": "R010",
+  "active_rc": null,
   "default_workflow": {
     "name": "XLFoundry",
     "mode": "A",
@@ -20,7 +20,8 @@
     { "id": "R007-PATCH01", "name": "architecture-cleanup", "archive_dir": "R007-PATCH01", "patch_for": "R007", "total_tasks": 7, "completed_at": "2026-05-24" },
     { "id": "R007-PATCH02", "name": "reverse-dependency-fix", "archive_dir": "R007-PATCH02", "patch_for": "R007", "total_tasks": 3, "completed_at": "2026-05-24" },
     { "id": "R008", "name": "architecture-refactor", "archive_dir": "R008", "total_tasks": 3, "completed_at": "2026-05-24" },
-    { "id": "R009", "name": "conversation-management", "archive_dir": "R009", "total_tasks": 25, "completed_at": "2026-05-25" }
+    { "id": "R009", "name": "conversation-management", "archive_dir": "R009", "total_tasks": 25, "completed_at": "2026-05-25" },
+    { "id": "R010", "name": "grounding-faithfulness", "archive_dir": "R010", "total_tasks": 14, "completed_at": "2026-06-02" }
   ],
   "rc_queue": []
 }

@@ -21,10 +21,13 @@ graph LR
     ConvAPI --> AuthMiddleware
 
     AuthMiddleware --> StateGraph[LangGraph StateGraph]
-    StateGraph --> Classify[classify 节点]
+    StateGraph --> Summarize[summarize 摘要压缩]
+    Summarize --> Rewrite[rewrite 多轮改写]
+    Rewrite --> Classify[classify 分类器]
     Classify -->|textbook| Retrieve[混合检索+Rerank]
     Classify -->|unrelated| Refuse[refuse 拒绝]
-    Retrieve --> Respond[respond ChatOpenAI]
+    Retrieve --> CtxInject[context injection 分级注入]
+    CtxInject --> Respond[respond ChatOpenAI]
 
     Retrieve --> Embedding[DashScopeEmbedding]
     Retrieve --> VectorStore[ChromaDBStore]
@@ -44,6 +47,8 @@ graph LR
 
     EvalCLI --> CPEval[Context Precision Eval]
     EvalCLI --> FaithEval[Faithfulness Eval]
+    FaithEval --> DetGrader[确定性 Grader]
+    FaithEval --> LLMJudge[LLM-as-Judge]
     CPEval --> Retrieve
     FaithEval --> Retrieve
     FaithEval --> Generator
@@ -61,13 +66,18 @@ graph LR
     Chunker --> PDFReader[PDF Reader]
 
     style StateGraph fill:#A5D6A7
+    style Summarize fill:#A5D6A7
+    style Rewrite fill:#A5D6A7
     style Classify fill:#A5D6A7
+    style CtxInject fill:#A5D6A7
     style Respond fill:#A5D6A7
     style Refuse fill:#A5D6A7
     style ConvRouter fill:#A5D6A7
     style Checkpointer fill:#A5D6A7
     style ConvRepo fill:#A5D6A7
     style AuthMiddleware fill:#A5D6A7
+    style DetGrader fill:#CE93D8
+    style LLMJudge fill:#CE93D8
     style ApiClient fill:#90CAF9
     style TokenMgr fill:#90CAF9
     style ConvCtx fill:#90CAF9
@@ -80,6 +90,7 @@ graph LR
 | 颜色 | 前缀 | 含义 |
 |------|------|------|
 | 🔵 蓝色 | FF | 前端基础（apiClient, TokenManager, ConversationContext, Sidebar） |
-| 🟢 绿色 | BF/BB | 后端基础+业务（StateGraph, Auth, Checkpointer, ConvRouter, ConvRepo） |
+| 🟢 绿色 | BF/BB | 后端基础+业务（StateGraph, Summarize, Rewrite, Classify, CtxInject, Auth, Checkpointer, ConvRouter, ConvRepo） |
 | 🟡 黄色 | BB | 后端业务（Router Depends 注入） |
 | 🟠 橙色 | FB | 前端业务（useChatStream, useConversation） |
+| 🟣 紫色 | BB | 评估基础设施（DetGrader, LLMJudge） |

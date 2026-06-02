@@ -6,7 +6,7 @@ requirement_cycle: R010
 workflow:
   evaluate_provider: local
   mode: auto
-status: completed
+status: archived
 ---
 
 # LLM 忠实性与接地性修复 — 后端任务清单
