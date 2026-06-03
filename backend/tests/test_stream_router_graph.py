@@ -185,6 +185,19 @@ async def test_run_graph_normal_generates_title_for_new_conversation(
             assert call_args[0][2] == mock_user.user_id
             assert call_args[1]["title"] == "测试标题"
 
+    # 验证 queue 中收到 _TitleEvent（在 _GRAPH_DONE 之前）
+    from app.chat.stream_router import _TitleEvent
+    events = await _drain_queue_async(queue)
+    title_events = [e for e in events if isinstance(e, _TitleEvent)]
+    assert len(title_events) == 1
+    assert title_events[0].conversation_id == conversation_id
+    assert title_events[0].title == "测试标题"
+    # _GRAPH_DONE 在 _TitleEvent 之后
+    from app.chat.stream_router import _GRAPH_DONE
+    done_events = [e for e in events if e is _GRAPH_DONE]
+    assert len(done_events) == 1
+    assert events.index(title_events[0]) < events.index(done_events[0])
+
 
 @pytest.mark.asyncio
 async def test_run_graph_normal_no_title_for_existing_conversation(

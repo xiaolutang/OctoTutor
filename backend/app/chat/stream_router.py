@@ -42,6 +42,13 @@ _GRAPH_ERROR = object()  # sentinel: graph 发生错误
 
 
 @dataclass
+class _TitleEvent:
+    """标题生成完成事件，推送到 SSE 流"""
+    conversation_id: str
+    title: str
+
+
+@dataclass
 class GraphTaskInfo:
     """活跃 graph 任务信息"""
     queue: asyncio.Queue           # 事件队列
@@ -98,23 +105,25 @@ async def _run_graph(
     else:
         # 正常完成（未超时、未异常、未取消）
         if not cancelled:
-            await queue.put(_GRAPH_DONE)
-
-            # 完成后更新统计和标题
+            # 完成后更新统计
             try:
                 await ConversationRepo.update_message_stats(db, conversation_id)
                 await db.commit()
             except Exception as e:
                 logger.warning(f"[stream] update_message_stats failed: {e}")
 
+            # 标题生成：新对话时生成标题并推送 SSE title 事件
             if is_new:
                 try:
                     title = await app_state.generator.generate_title(question)
                     if title:
                         await ConversationRepo.update(db, conversation_id, user.user_id, title=title)
                         await db.commit()
+                        await queue.put(_TitleEvent(conversation_id=conversation_id, title=title))
                 except Exception as e:
                     logger.warning(f"[stream] title generation failed: {e}")
+
+            await queue.put(_GRAPH_DONE)
     finally:
         # 从注册表移除
         _active_graphs.pop(conversation_id, None)
@@ -318,6 +327,9 @@ async def _create_sse_generator(
             elif event is _GRAPH_ERROR:
                 yield _sse_frame("error", make_error(ChatErrorCode.INTERNAL_ERROR))
                 return
+            elif isinstance(event, _TitleEvent):
+                yield _sse_frame("title", {"conversation_id": event.conversation_id, "title": event.title})
+                continue
 
             async for frame in _map_event_to_sse(event, http_request):
                 yield frame
