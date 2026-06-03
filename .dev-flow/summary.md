@@ -21,6 +21,7 @@
 | R009-PATCH01 | stream-conversation-ownership (补丁 R009) | 5 | archived | 2026-06-02 |
 | R011 | auth-race-condition | 2 | archived | 2026-06-02 |
 | R012 | sse-decouple | 5 | archived | 2026-06-03 |
+| R013 | code-quality-governance | 4 | archived | 2026-06-03 |
 
 ## 模块清单
 
@@ -104,6 +105,14 @@
 | CAP-sse-005 | 前端停止按钮适配（fire-and-forget POST /chat/stop + 立即 abort） |
 
 ## 变更记录
+
+### R013 code-quality-governance (2026-06-03)
+
+- 后端共享工具函数提取：`conversation_utils.py` 新建，`load_conversation_by_id` + `to_api_message` + `extract_latest_messages` 从 conversation_router 移出，两个路由统一导入
+- 前端 Reducer 独立文件：`conversation-reducer.ts` 提取自 conversation-context.tsx，ConversationAction 类型 + reducer + initialState + localStorage 工具函数，context 和测试文件统一导入真实实现
+- SSE 事件分发共享函数：`handleSSEEvent` + `BaseSSECallbacks` 类型，chatStreamFetch 和 resumeStream 复用，消除 ~40 行重复 switch-case
+- Controller 竞态测试重写：30 个纯逻辑测试（+8），覆盖 needsResumePlaceholder、SSE 重连触发条件、INSERT_NEW 安全性、mounted 守卫、完整时序模拟
+- 后端 683 测试 + 前端 271 测试全通过
 
 ### R012 sse-decouple (2026-06-03)
 

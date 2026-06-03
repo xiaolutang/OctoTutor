@@ -22,6 +22,42 @@ export interface ResumeCallbacks {
   onMessagesReady: (messages: Message[]) => void;
 }
 
+/** 公共 SSE 事件回调 — chatStreamFetch 和 resumeStream 共用 */
+type BaseSSECallbacks = {
+  onStatus: (stage: string, message: string) => void;
+  onSources: (sources: SourceReference[]) => void;
+  onToken: (token: string) => void;
+  onThinking: (step: ThinkingStep) => void;
+  onDone: () => void;
+  onError: (error: { code: string; message: string; action: string }) => void;
+};
+
+/** 处理公共 SSE 事件（status/sources/thinking/token/done/error） */
+function handleSSEEvent(event: { type: string; data: unknown }, callbacks: BaseSSECallbacks): void {
+  switch (event.type) {
+    case 'status': {
+      const d = event.data as { stage: string; message: string };
+      callbacks.onStatus(d.stage, d.message);
+      break;
+    }
+    case 'sources':
+      callbacks.onSources(event.data as SourceReference[]);
+      break;
+    case 'thinking':
+      callbacks.onThinking(event.data as ThinkingStep);
+      break;
+    case 'token':
+      callbacks.onToken(event.data as string);
+      break;
+    case 'done':
+      callbacks.onDone();
+      break;
+    case 'error':
+      callbacks.onError(event.data as { code: string; message: string; action: string });
+      break;
+  }
+}
+
 /**
  * 从 Response 的 ReadableStream 中读取并解析 SSE 事件
  * @internal 提取为共享函数，供 chatStreamFetch 和 resumeStream 复用
@@ -102,31 +138,13 @@ export function chatStreamFetch(
               callbacks.onInit(d.conversation_id);
               break;
             }
-            case 'status': {
-              const d = event.data as { stage: string; message: string };
-              callbacks.onStatus(d.stage, d.message);
-              break;
-            }
-            case 'sources':
-              callbacks.onSources(event.data as SourceReference[]);
-              break;
-            case 'thinking':
-              callbacks.onThinking(event.data as ThinkingStep);
-              break;
-            case 'token':
-              callbacks.onToken(event.data as string);
-              break;
-            case 'done':
-              callbacks.onDone();
-              break;
             case 'title': {
               const d = event.data as { conversation_id: string; title: string };
               callbacks.onTitle(d.conversation_id, d.title);
               break;
             }
-            case 'error':
-              callbacks.onError(event.data as { code: string; message: string; action: string });
-              break;
+            default:
+              handleSSEEvent(event, callbacks);
           }
         },
         onStreamError: () => {
@@ -206,28 +224,7 @@ export function resumeStream(
       await readSSEStream(reader, {
         onEvent: (event) => {
           firstEventReceived = true;
-          switch (event.type) {
-            case 'status': {
-              const d = event.data as { stage: string; message: string };
-              callbacks.onStatus(d.stage, d.message);
-              break;
-            }
-            case 'sources':
-              callbacks.onSources(event.data as SourceReference[]);
-              break;
-            case 'thinking':
-              callbacks.onThinking(event.data as ThinkingStep);
-              break;
-            case 'token':
-              callbacks.onToken(event.data as string);
-              break;
-            case 'done':
-              callbacks.onDone();
-              break;
-            case 'error':
-              callbacks.onError(event.data as { code: string; message: string; action: string });
-              break;
-          }
+          handleSSEEvent(event, callbacks);
         },
         onStreamError: () => {
           if (firstEventReceived) {

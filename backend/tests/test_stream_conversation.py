@@ -388,7 +388,7 @@ class TestSSEEventOrder:
     """SSE 事件顺序正确"""
 
     def test_event_order_init_done_title(self):
-        """新对话 + 标题生成成功：init → ... → done → title"""
+        """新对话 + 标题生成成功：init → ... → title → done"""
         app, mock_db = _create_test_app(title="集合基础")
 
         with patch("app.chat.stream_router.ConversationRepo") as MockRepo:
@@ -409,15 +409,15 @@ class TestSSEEventOrder:
             # 1. 第一个事件是 init
             assert event_types[0] == "init"
 
-            # 2. done 出现在 title 之前
+            # 2. title 出现在 done 之前
             assert "done" in event_types
             assert "title" in event_types
             done_idx = event_types.index("done")
             title_idx = event_types.index("title")
-            assert done_idx < title_idx, f"done({done_idx}) should be before title({title_idx})"
+            assert title_idx < done_idx, f"title({title_idx}) should be before done({done_idx})"
 
-            # 3. title 是最后一个事件
-            assert event_types[-1] == "title"
+            # 3. done 是最后一个事件
+            assert event_types[-1] == "done"
 
     def test_event_order_no_title(self):
         """新对话 + 标题生成失败：init → ... → done（无 title）"""

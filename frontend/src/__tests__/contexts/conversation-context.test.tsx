@@ -1,15 +1,8 @@
 /**
  * FF003: ConversationContext 状态管理测试
  *
- * 由于 @xlfoundry/auth-sdk-web symlink 是 broken 状态，
- * vitest 无法 resolve 该模块（auth-context -> auth-sdk-web），
- * 因此不能直接 render ConversationProvider。
- *
- * 本测试直接验证 conversation-context.tsx 中的核心逻辑：
- * 1. conversationReducer 纯函数：所有 action 的状态转换
- * 2. Provider 层面的组合逻辑：初始化加载、分页、删除自动切换等
- *
- * 测试模式参照 auth-context-token.test.ts
+ * 测试 conversation-reducer.ts 中的 conversationReducer 纯函数。
+ * Reducer 已提取为独立模块，无需 import conversation-context.tsx（避免 auth-sdk-web symlink 问题）。
  */
 
 /**
@@ -17,109 +10,12 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ConversationItem, ConversationListState } from '@/chat/types';
-
-// ============================================================
-// 复制 reducer 逻辑（从 conversation-context.tsx 提取）
-// ============================================================
+import {
+  conversationReducer,
+  initialState,
+} from '@/chat/conversation-reducer';
 
 const STORAGE_KEY = 'octotutor_active_conversation_id';
-
-type ConversationAction =
-  | { type: 'SET_LOADING'; payload: boolean }
-  | {
-      type: 'INIT_LIST';
-      payload: { items: ConversationItem[]; cursor: string | null; hasMore: boolean };
-    }
-  | { type: 'SET_ACTIVE'; payload: string | null }
-  | { type: 'SET_NEW_CONVERSATION'; payload: boolean }
-  | { type: 'INSERT_NEW'; payload: ConversationItem }
-  | { type: 'UPDATE_TITLE'; payload: { id: string; title: string } }
-  | {
-      type: 'APPEND_PAGE';
-      payload: { items: ConversationItem[]; cursor: string | null; hasMore: boolean };
-    }
-  | { type: 'REMOVE_ITEM'; payload: string }
-  | { type: 'UPDATE_ITEM'; payload: ConversationItem };
-
-const initialState: ConversationListState = {
-  items: [],
-  cursor: null,
-  hasMore: false,
-  isLoading: false,
-  isInitialized: false,
-  activeId: null,
-  isNewConversation: false,
-};
-
-// 注意：SET_ACTIVE 有副作用（sessionStorage），测试时需要 jsdom 环境
-function conversationReducer(
-  state: ConversationListState,
-  action: ConversationAction,
-): ConversationListState {
-  switch (action.type) {
-    case 'SET_LOADING':
-      return { ...state, isLoading: action.payload };
-    case 'INIT_LIST':
-      return {
-        ...state,
-        items: action.payload.items,
-        cursor: action.payload.cursor,
-        hasMore: action.payload.hasMore,
-        isInitialized: true,
-        isLoading: false,
-      };
-    case 'SET_ACTIVE':
-      try {
-        if (action.payload) {
-          sessionStorage.setItem(STORAGE_KEY, action.payload);
-        } else {
-          sessionStorage.removeItem(STORAGE_KEY);
-        }
-      } catch {
-        // ignore
-      }
-      return { ...state, activeId: action.payload, isNewConversation: false };
-    case 'SET_NEW_CONVERSATION':
-      return { ...state, isNewConversation: action.payload, activeId: null };
-    case 'INSERT_NEW':
-      return {
-        ...state,
-        items: [action.payload, ...state.items],
-        activeId: action.payload.id,
-        isNewConversation: false,
-      };
-    case 'UPDATE_TITLE':
-      return {
-        ...state,
-        items: state.items.map((item) =>
-          item.id === action.payload.id
-            ? { ...item, title: action.payload.title }
-            : item,
-        ),
-      };
-    case 'APPEND_PAGE':
-      return {
-        ...state,
-        items: [...state.items, ...action.payload.items],
-        cursor: action.payload.cursor,
-        hasMore: action.payload.hasMore,
-      };
-    case 'REMOVE_ITEM':
-      return {
-        ...state,
-        items: state.items.filter((item) => item.id !== action.payload),
-      };
-    case 'UPDATE_ITEM':
-      return {
-        ...state,
-        items: state.items.map((item) =>
-          item.id === action.payload.id ? action.payload : item,
-        ),
-      };
-    default:
-      return state;
-  }
-}
 
 // ============================================================
 // 测试数据工厂
@@ -748,8 +644,11 @@ describe('FF003: ConversationContext 状态管理', () => {
         payload: updatedItem,
       });
 
-      expect(nextState.items[0]).toEqual(mockItems[0]);
-      expect(nextState.items[2]).toEqual(mockItems[2]);
+      // UPDATE_ITEM 会重排序，用 find 按 id 检查而非 index
+      const other1 = nextState.items.find((i) => i.id === 'conv-1');
+      const other3 = nextState.items.find((i) => i.id === 'conv-3');
+      expect(other1?.title).toBe('对话一');
+      expect(other3?.title).toBe('对话三');
     });
   });
 

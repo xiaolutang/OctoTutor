@@ -18,14 +18,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.chat.dependencies import get_checkpointer, get_db
 from app.chat.errors import ConversationErrorCode, make_conversation_error
+from app.chat.conversation_utils import extract_latest_messages, load_conversation_by_id, to_api_message
 from app.chat.schemas import (
-    ApiMessage,
     ConversationItemResponse,
     ConversationListResponse,
     ConversationUpdateRequest,
-    ThinkingPayload,
 )
-from app.domain.models import SourceReference
 from app.infra.conversation_repo import ConversationRepo
 from app.middleware.auth import UserContext, get_current_user
 
@@ -48,7 +46,7 @@ async def get_current_conversation(
     - 无消息 → 204 No Content
     """
     if conversation_id:
-        messages = await _load_conversation_by_id(checkpointer, conversation_id, user.user_id)
+        messages = await load_conversation_by_id(checkpointer, conversation_id, user.user_id)
     else:
         conversation_id, messages = await _load_latest_conversation(
             checkpointer, user.user_id
@@ -58,7 +56,7 @@ async def get_current_conversation(
         return Response(status_code=204)
 
     # 转换为 ApiMessage 格式
-    api_messages = [_to_api_message(msg, idx) for idx, msg in enumerate(messages)]
+    api_messages = [to_api_message(msg, idx) for idx, msg in enumerate(messages)]
 
     return JSONResponse(
         status_code=200,
@@ -67,60 +65,6 @@ async def get_current_conversation(
             "messages": [msg.model_dump() for msg in api_messages],
         },
     )
-
-
-async def _load_conversation_by_id(checkpointer, conversation_id: str, user_id: str):
-    """通过 conversation_id 直接加载指定对话，验证 user_id 归属"""
-    try:
-        # MemorySaver：直接从 storage 读取
-        if hasattr(checkpointer, "storage"):
-            if conversation_id not in checkpointer.storage:
-                return []
-            namespaces = checkpointer.storage[conversation_id]
-            messages, _ = _extract_latest_messages(
-                {conversation_id: namespaces}, user_id
-            )
-            return messages
-
-        # PostgresSaver：alist 返回带 config 的 CheckpointTuple，可验证 user_id
-        config = {"configurable": {"thread_id": conversation_id}}
-        async for tuple_item in checkpointer.alist(config, limit=1):
-            cp_user_id = tuple_item.config.get("configurable", {}).get("user_id")
-            if cp_user_id and cp_user_id != user_id:
-                return []
-            checkpoint = tuple_item.checkpoint
-            if not checkpoint:
-                return []
-            channel_values = checkpoint.get("channel_values", {})
-            return channel_values.get("messages", [])
-        return []
-    except Exception as e:
-        logger.warning(f"[conversation] load by id failed: {e}")
-        return []
-
-
-def _extract_latest_messages(namespaces: dict, user_id: str | None = None) -> tuple[list, str]:
-    """从 MemorySaver namespaces 提取最新 messages（可选按 user_id 过滤）
-
-    Returns:
-        (messages, ts) tuple — 最新消息列表和时间戳
-    """
-    best_messages = []
-    best_ts = ""
-    for _ns, checkpoints in namespaces.items():
-        for _cp_id, (checkpoint, meta, _parent) in checkpoints.items():
-            # user_id 过滤
-            if user_id:
-                cp_user_id = meta.get("configurable", {}).get("user_id") if meta else None
-                if cp_user_id and cp_user_id != user_id:
-                    continue
-            channel_values = checkpoint.get("channel_values", {})
-            messages = channel_values.get("messages", [])
-            ts = checkpoint.get("ts", "")
-            if messages and ts >= best_ts:
-                best_ts = ts
-                best_messages = messages
-    return best_messages, best_ts
 
 
 async def _load_latest_conversation(checkpointer, user_id: str):
@@ -143,7 +87,7 @@ async def _load_from_memory_saver(checkpointer, user_id: str):
     for thread_id, namespaces in checkpointer.storage.items():
         if not thread_id or thread_id in ("undefined", "null", ""):
             continue
-        messages, ts = _extract_latest_messages({thread_id: namespaces}, user_id)
+        messages, ts = extract_latest_messages({thread_id: namespaces}, user_id)
         if messages and ts >= best_ts:
             best_ts = ts
             best_thread_id = thread_id
@@ -183,56 +127,6 @@ async def _load_from_postgres_saver(checkpointer, user_id: str):
         logger.info(f"[conversation] fallback thread={best_thread_id}, msgs={len(best_messages)}")
         return best_thread_id, best_messages
     return None, []
-
-
-def _to_api_message(msg, index: int) -> ApiMessage:
-    """将 LangGraph message 转换为 ApiMessage 格式"""
-    msg_id = getattr(msg, "id", None) or str(index)
-    content = getattr(msg, "content", "") or ""
-    msg_type = getattr(msg, "type", "unknown")
-
-    role = msg_type
-
-    additional_kwargs = getattr(msg, "additional_kwargs", {}) or {}
-
-    sources = []
-    raw_sources = additional_kwargs.get("sources", [])
-    if raw_sources:
-        for s in raw_sources:
-            if isinstance(s, SourceReference):
-                sources.append(s)
-            elif isinstance(s, dict):
-                try:
-                    sources.append(SourceReference(**s))
-                except Exception:
-                    pass
-
-    thinking_steps = []
-    raw_thinking = additional_kwargs.get("thinking_steps", [])
-    if raw_thinking:
-        for t in raw_thinking:
-            if isinstance(t, ThinkingPayload):
-                thinking_steps.append(t)
-            elif isinstance(t, dict):
-                try:
-                    thinking_steps.append(ThinkingPayload(**t))
-                except Exception:
-                    pass
-
-    created_at = ""
-    response_metadata = getattr(msg, "response_metadata", {}) or {}
-    if "created_at" in response_metadata:
-        created_at = response_metadata["created_at"]
-
-    return ApiMessage(
-        id=str(msg_id),
-        role=role,
-        content=content,
-        status="completed",
-        sources=sources,
-        thinking_steps=thinking_steps,
-        created_at=created_at,
-    )
 
 
 # ---------------------------------------------------------------------------

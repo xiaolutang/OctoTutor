@@ -507,7 +507,7 @@ async def test_resume_stream_task_completed_returns_json(
     with patch("app.chat.stream_router.ConversationRepo.get_by_id", new_callable=AsyncMock) as mock_get:
         mock_get.return_value = MagicMock()  # 归属校验通过
 
-        with patch("app.chat.stream_router._load_conversation_by_id", new_callable=AsyncMock) as mock_load:
+        with patch("app.chat.stream_router.load_conversation_by_id", new_callable=AsyncMock) as mock_load:
             from langchain_core.messages import AIMessage
             mock_load.return_value = [
                 AIMessage(content="测试回答"),
@@ -574,7 +574,7 @@ async def test_resume_stream_completed_no_messages_returns_204(
     with patch("app.chat.stream_router.ConversationRepo.get_by_id", new_callable=AsyncMock) as mock_get:
         mock_get.return_value = MagicMock()  # 归属校验通过
 
-        with patch("app.chat.stream_router._load_conversation_by_id", new_callable=AsyncMock) as mock_load:
+        with patch("app.chat.stream_router.load_conversation_by_id", new_callable=AsyncMock) as mock_load:
             mock_load.return_value = []  # 无消息
 
             from app.chat.stream_router import resume_stream

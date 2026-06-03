@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.chat.dependencies import get_graph, get_checkpointer, get_db
 from app.chat.errors import ChatErrorCode, ConversationErrorCode, make_error, make_conversation_error
 from app.chat.schemas import ChatRequest, StopRequest
-from app.chat.conversation_router import _load_conversation_by_id, _to_api_message
+from app.chat.conversation_utils import load_conversation_by_id, to_api_message
 from app.domain.models import Conversation
 from app.infra.conversation_repo import ConversationRepo
 from app.middleware.auth import UserContext, get_current_user
@@ -369,10 +369,10 @@ async def resume_stream(
     task_info = _active_graphs.get(conversation_id)
     if task_info is None:
         # 后台任务已完成，从 checkpoint 返回完整消息
-        messages = await _load_conversation_by_id(checkpointer, conversation_id, user.user_id)
+        messages = await load_conversation_by_id(checkpointer, conversation_id, user.user_id)
         if not messages:
             return Response(status_code=204)
-        api_messages = [_to_api_message(msg, idx) for idx, msg in enumerate(messages)]
+        api_messages = [to_api_message(msg, idx) for idx, msg in enumerate(messages)]
         return JSONResponse(
             {"conversation_id": conversation_id, "messages": [m.model_dump() for m in api_messages]}
         )
