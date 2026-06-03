@@ -21,8 +21,12 @@ export function ChatUI() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // 自动滚动到底部
+  // 新消息（长度变化）用 smooth，token 更新用 instant 避免卡顿
+  const prevLenRef = useRef(0);
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const smooth = messages.length > prevLenRef.current;
+    prevLenRef.current = messages.length;
+    messagesEndRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'instant' });
   }, [messages]);
 
   if (!mounted) {
@@ -46,7 +50,6 @@ export function ChatUI() {
             <MessageBubble
               key={msg.id}
               message={msg}
-              isStreaming={isStreaming}
               onRegenerate={handleRegenerate}
             />
           ))

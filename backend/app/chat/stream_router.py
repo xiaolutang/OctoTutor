@@ -378,6 +378,7 @@ async def resume_stream(
 @router.post("/chat/stop")
 async def stop_chat(
     body: StopRequest,
+    db: AsyncSession = Depends(get_db),
     user: UserContext = Depends(get_current_user),
 ):
     """停止正在运行的对话
@@ -386,6 +387,11 @@ async def stop_chat(
     不更新 stats（用户主动取消）。
     注册表清理由 _run_graph 的 finally 块负责。
     """
+    # 归属校验：非本人对话不允许停止
+    conv = await ConversationRepo.get_by_id(db, body.conversation_id, user.user_id)
+    if not conv:
+        return JSONResponse(status_code=404, content=make_conversation_error(ConversationErrorCode.NOT_FOUND))
+
     task_info = _active_graphs.get(body.conversation_id)
     if task_info:
         task_info.cancel_event.set()

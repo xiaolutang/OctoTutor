@@ -599,7 +599,10 @@ async def test_stop_chat_sets_cancel_event():
     from app.chat.schemas import StopRequest
 
     body = StopRequest(conversation_id=conversation_id)
-    response = await stop_chat(body=body, user=UserContext(user_id="test-user-123", username="testuser"))
+    mock_db = AsyncMock(spec=AsyncSession)
+    with patch("app.chat.stream_router.ConversationRepo.get_by_id", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = MagicMock()  # 归属校验通过
+        response = await stop_chat(body=body, db=mock_db, user=UserContext(user_id="test-user-123", username="testuser"))
 
     assert cancel_event.is_set()
 
@@ -612,8 +615,8 @@ async def test_stop_chat_sets_cancel_event():
 
 
 @pytest.mark.asyncio
-async def test_stop_chat_nonexistent_conversation_returns_ok():
-    """stop_chat 对不存在的 conversation_id 静默返回 ok"""
+async def test_stop_chat_nonexistent_conversation_returns_404():
+    """stop_chat 对非本人对话返回 404"""
     from app.chat.stream_router import _active_graphs, stop_chat
     from app.chat.schemas import StopRequest
 
@@ -621,11 +624,14 @@ async def test_stop_chat_nonexistent_conversation_returns_ok():
     _active_graphs.pop(conversation_id, None)
 
     body = StopRequest(conversation_id=conversation_id)
-    response = await stop_chat(body=body, user=UserContext(user_id="test-user-123", username="testuser"))
+    mock_db = AsyncMock(spec=AsyncSession)
+    with patch("app.chat.stream_router.ConversationRepo.get_by_id", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = None  # 归属校验失败
+        response = await stop_chat(body=body, db=mock_db, user=UserContext(user_id="test-user-123", username="testuser"))
 
     from starlette.responses import JSONResponse
     assert isinstance(response, JSONResponse)
-    assert response.status_code == 200
+    assert response.status_code == 404
 
 
 @pytest.mark.asyncio

@@ -6,6 +6,7 @@ import React, {
   useReducer,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
 } from 'react';
 import type { ConversationItem, ConversationListState } from '@/chat/types';
@@ -287,22 +288,25 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
     switchHandlerRef.current = handler;
   }, []);
 
-  const value: ConversationContextValue = {
-    ...state,
-    isStreaming,
-    setIsStreaming,
-    switchTo,
-    createNew,
-    insertNewConversation,
-    updateTitle,
-    loadMore,
-    removeConversation,
-    renameConversation,
-    pinConversation,
-    unpinConversation,
-    deleteConversation,
-    registerSwitchHandler,
-  };
+  const value: ConversationContextValue = useMemo(
+    () => ({
+      ...state,
+      isStreaming,
+      setIsStreaming,
+      switchTo,
+      createNew,
+      insertNewConversation,
+      updateTitle,
+      loadMore,
+      removeConversation,
+      renameConversation,
+      pinConversation,
+      unpinConversation,
+      deleteConversation,
+      registerSwitchHandler,
+    }),
+    [state, isStreaming, switchTo, createNew, insertNewConversation, updateTitle, loadMore, removeConversation, renameConversation, pinConversation, unpinConversation, deleteConversation, registerSwitchHandler],
+  );
 
   return (
     <ConversationContext.Provider value={value}>{children}</ConversationContext.Provider>

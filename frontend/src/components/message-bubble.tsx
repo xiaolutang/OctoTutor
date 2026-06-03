@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
@@ -10,7 +10,6 @@ import { ThinkingProcess } from './thinking-process';
 
 interface MessageBubbleProps {
   message: Message;
-  isStreaming: boolean;
   onRegenerate?: (messageId: string) => void;
 }
 
@@ -25,9 +24,8 @@ const statusLabels: Record<string, string> = {
 
 const remarkPlugins = [remarkMath];
 
-export function MessageBubble({
+export const MessageBubble = memo(function MessageBubble({
   message,
-  isStreaming,
   onRegenerate,
 }: MessageBubbleProps) {
   const isUser = message.role === 'user';
@@ -148,4 +146,4 @@ export function MessageBubble({
       )}
     </div>
   );
-}
+});

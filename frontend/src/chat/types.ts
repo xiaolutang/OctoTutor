@@ -64,6 +64,33 @@ export interface SSECallbacks {
 
 export type MessageStatus = 'sending' | 'retrieving' | 'generating' | 'done' | 'stopped' | 'error';
 
+/** 将后端 ApiMessage 的 status 映射为前端 MessageStatus */
+export function mapApiStatus(status: ApiMessage['status']): MessageStatus {
+  switch (status) {
+    case 'completed':
+      return 'done';
+    case 'stopped':
+      return 'stopped';
+    case 'error':
+      return 'error';
+    default:
+      return 'done';
+  }
+}
+
+/** 将后端 ApiMessage[] 转换为前端 Message[] */
+export function convertApiMessages(apiMsgs: ApiMessage[]): Message[] {
+  return apiMsgs.map((apiMsg) => ({
+    id: apiMsg.id,
+    role: apiMsg.role === 'human' ? ('user' as const) : ('ai' as const),
+    content: apiMsg.content,
+    status: mapApiStatus(apiMsg.status),
+    sources: apiMsg.sources,
+    thinkingSteps: apiMsg.thinking_steps,
+    timestamp: apiMsg.created_at ? new Date(apiMsg.created_at).getTime() : Date.now(),
+  }));
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'ai';

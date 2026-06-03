@@ -1,6 +1,7 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { parseSSEEvents } from './parse-sse';
-import type { SSECallbacks, SourceReference, ThinkingStep, Message, MessageStatus, ApiMessage } from './types';
+import type { SSECallbacks, SourceReference, ThinkingStep, Message, ApiMessage } from './types';
+import { convertApiMessages } from './types';
 import { fetchWithAuth } from '../lib/api-client';
 
 interface UseChatStreamReturn {
@@ -19,20 +20,6 @@ export interface ResumeCallbacks {
   onError: (error: { code: string; message: string; action: string }) => void;
   /** 服务端返回 JSON（graph 已完成），直接提供完整消息列表 */
   onMessagesReady: (messages: Message[]) => void;
-}
-
-/** 将后端 ApiMessage 的 status 映射为前端 MessageStatus */
-function mapApiStatus(status: ApiMessage['status']): MessageStatus {
-  switch (status) {
-    case 'completed':
-      return 'done';
-    case 'stopped':
-      return 'stopped';
-    case 'error':
-      return 'error';
-    default:
-      return 'done';
-  }
 }
 
 /**
@@ -202,15 +189,7 @@ export function resumeStream(
       // JSON 响应 → graph 已完成，直接提供完整消息
       if (contentType.includes('application/json')) {
         const data = await response.json();
-        const messages: Message[] = (data.messages as ApiMessage[]).map((apiMsg) => ({
-          id: apiMsg.id,
-          role: apiMsg.role === 'human' ? ('user' as const) : ('ai' as const),
-          content: apiMsg.content,
-          status: mapApiStatus(apiMsg.status),
-          sources: apiMsg.sources,
-          thinkingSteps: apiMsg.thinking_steps,
-          timestamp: apiMsg.created_at ? new Date(apiMsg.created_at).getTime() : Date.now(),
-        }));
+        const messages = convertApiMessages(data.messages as ApiMessage[]);
         callbacks.onMessagesReady(messages);
         return;
       }

@@ -1,22 +1,7 @@
 import { useCallback, useRef } from 'react';
 import { fetchWithAuth } from '@/lib/api-client';
-import type { Message, MessageStatus, ConversationResponse, ApiMessage } from './types';
-
-/**
- * 将后端 API 消息状态映射为前端 MessageStatus
- */
-function mapApiStatus(status: ApiMessage['status']): MessageStatus {
-  switch (status) {
-    case 'completed':
-      return 'done';
-    case 'stopped':
-      return 'stopped';
-    case 'error':
-      return 'error';
-    default:
-      return 'done';
-  }
-}
+import type { Message, ConversationResponse } from './types';
+import { convertApiMessages } from './types';
 
 interface UseConversationReturn {
   loadConversation: (conversationId?: string | null) => Promise<{ messages: Message[]; stale?: boolean }>;
@@ -47,16 +32,7 @@ export function useConversation(): UseConversationReturn {
           return { messages: [], stale: myRequestId !== requestIdRef.current };
         }
         const data: ConversationResponse = await response.json();
-        const mapped: Message[] = data.messages.map((apiMsg) => ({
-          id: apiMsg.id,
-          role: apiMsg.role === 'human' ? ('user' as const) : ('ai' as const),
-          content: apiMsg.content,
-          status: mapApiStatus(apiMsg.status),
-          sources: apiMsg.sources,
-          thinkingSteps: apiMsg.thinking_steps,
-          timestamp: apiMsg.created_at ? new Date(apiMsg.created_at).getTime() : Date.now(),
-        }));
-        return { messages: mapped, stale: myRequestId !== requestIdRef.current };
+        return { messages: convertApiMessages(data.messages), stale: myRequestId !== requestIdRef.current };
       } catch {
         return { messages: [], stale: myRequestId !== requestIdRef.current };
       }

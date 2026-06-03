@@ -45,6 +45,30 @@ export function useChatController() {
     [],
   );
 
+  // 追加 token 到指定消息
+  const appendToken = useCallback(
+    (id: string, token: string) => {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === id ? { ...m, content: m.content + token } : m)),
+      );
+    },
+    [],
+  );
+
+  // 追加 thinking step 到指定消息
+  const appendThinking = useCallback(
+    (id: string, step: ThinkingStep) => {
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.id !== id) return m;
+          const existing = m.thinkingSteps ?? [];
+          return { ...m, thinkingSteps: [...existing, step] };
+        }),
+      );
+    },
+    [],
+  );
+
   // 同步 isStreaming 到 ConversationContext（供 sidebar 使用）
   useEffect(() => {
     setContextStreaming(isStreaming);
@@ -117,27 +141,13 @@ export function useChatController() {
         if (!cancelled) updateMsg(lastMsg.id, { status: stage as MessageStatus });
       },
       onToken: (token) => {
-        if (!cancelled) {
-          setMessages(prev =>
-            prev.map(m =>
-              m.id === lastMsg.id ? { ...m, content: m.content + token } : m,
-            ),
-          );
-        }
+        if (!cancelled) appendToken(lastMsg.id, token);
       },
       onSources: (sources) => {
         if (!cancelled) updateMsg(lastMsg.id, { sources });
       },
       onThinking: (step) => {
-        if (!cancelled) {
-          setMessages(prev =>
-            prev.map(m => {
-              if (m.id !== lastMsg.id) return m;
-              const existing = m.thinkingSteps ?? [];
-              return { ...m, thinkingSteps: [...existing, step] };
-            }),
-          );
-        }
+        if (!cancelled) appendThinking(lastMsg.id, step);
       },
       onDone: () => {
         if (!cancelled) updateMsg(lastMsg.id, { status: 'done' });
@@ -153,7 +163,7 @@ export function useChatController() {
     resumeStream(activeId, callbacks);
 
     return () => { cancelled = true; };
-  }, [mounted, isStreaming, activeId, updateMsg]);
+  }, [mounted, isStreaming, activeId, updateMsg, appendToken, appendThinking]);
 
   // SSE 流式启动
   const startSSE = useCallback(
@@ -183,20 +193,10 @@ export function useChatController() {
             updateMsg(aiMsgId, { sources });
           },
           onToken: (token: string) => {
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === aiMsgId ? { ...m, content: m.content + token } : m,
-              ),
-            );
+            appendToken(aiMsgId, token);
           },
           onThinking: (step: ThinkingStep) => {
-            setMessages((prev) =>
-              prev.map((m) => {
-                if (m.id !== aiMsgId) return m;
-                const existing = m.thinkingSteps ?? [];
-                return { ...m, thinkingSteps: [...existing, step] };
-              }),
-            );
+            appendThinking(aiMsgId, step);
           },
           onDone: () => {
             updateMsg(aiMsgId, { status: 'done' });
