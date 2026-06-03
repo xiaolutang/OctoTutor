@@ -1,6 +1,6 @@
 # OctoTutor Development Summary
 
-最后更新: 2026-06-02
+最后更新: 2026-06-03
 
 ## 需求包索引
 
@@ -20,6 +20,7 @@
 | R010 | grounding-faithfulness | 14 | archived | 2026-06-02 |
 | R009-PATCH01 | stream-conversation-ownership (补丁 R009) | 5 | archived | 2026-06-02 |
 | R011 | auth-race-condition | 2 | archived | 2026-06-02 |
+| R012 | sse-decouple | 5 | archived | 2026-06-03 |
 
 ## 模块清单
 
@@ -50,6 +51,7 @@
 | conversation-repo | SQLAlchemy 2.0 async ORM Conversation CRUD 数据访问层 |
 | conversation-context | ConversationProvider + useReducer 对话状态管理 + Auth 守卫 |
 | sidebar | 侧边栏组件（对话列表+新建+置顶分组+右键菜单） |
+| sse-decouple | SSE 断连恢复（后台任务解耦 + Queue 事件队列 + 重连端点 + 停止端点） |
 
 ## 能力清单
 
@@ -95,8 +97,23 @@
 | CAP-conv-007 | 对话标题自动生成（LLM generate_title + SSE title 事件） |
 | CAP-sec-001 | /api/chat/stream conversation_id 归属校验（id + user_id SQL 层过滤） |
 | CAP-auth-005 | ConversationProvider Auth 守卫（isInitialized 依赖 + 竞态消除） |
+| CAP-sse-001 | SSE 后台任务解耦（asyncio.create_task + Queue + 客户端断连不影响 graph 执行） |
+| CAP-sse-002 | SSE 重连端点 GET /chat/stream/resume（活跃任务→SSE 流 / 已完成→JSON / 404/204） |
+| CAP-sse-003 | 停止端点 POST /chat/stop（cancel_event 设置 + 后台任务事件边界停止） |
+| CAP-sse-004 | 前端 SSE 重连（刷新后检测未完成 AI 回复 → resumeStream → 流式恢复或直接显示） |
+| CAP-sse-005 | 前端停止按钮适配（fire-and-forget POST /chat/stop + 立即 abort） |
 
 ## 变更记录
+
+### R012 sse-decouple (2026-06-03)
+
+- 后端 graph 执行解耦：`_run_graph` 后台任务 + `asyncio.Queue` 事件队列 + `_active_graphs` 注册表，客户端断连后 graph 继续运行
+- SSE 重连端点 `GET /chat/stream/resume`：活跃任务→复用同一 Queue 返回 SSE 流；已完成→返回 JSON（完整消息）；无消息→204
+- 停止端点 `POST /chat/stop`：设置 `cancel_event`，后台任务在下一个事件边界停止，不更新 stats
+- 前端 SSE 重连：刷新后检测未完成 AI 回复（generating/retrieving status + 2 min 窗口），发起 resumeStream 恢复流式显示或直接显示完整回复
+- 前端停止适配：fire-and-forget POST /chat/stop + 立即 abort，移除旧轮询逻辑
+- 收敛：`_create_sse_generator` 共享 SSE 生成器、`readSSEStream` 共享解析、autouse test fixture、冗余测试合并
+- 16 后端测试全通过
 
 ### R011 auth-race-condition (2026-06-02)
 
