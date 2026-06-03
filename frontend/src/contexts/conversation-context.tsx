@@ -91,10 +91,12 @@ function conversationReducer(
       storeActiveId(action.payload);
       return { ...state, activeId: action.payload, isNewConversation: false };
     case 'SET_NEW_CONVERSATION':
+      storeActiveId(null);
       return { ...state, isNewConversation: action.payload, activeId: null };
     case 'INSERT_NEW':
       // 新对话 pinned=false，插入到普通区头部（置顶区之后）
       {
+        storeActiveId(action.payload.id);
         const pinned = state.items.filter((i) => i.pinned);
         const normal = state.items.filter((i) => !i.pinned);
         return {
@@ -167,6 +169,7 @@ interface ConversationContextValue extends ConversationListState {
   pinConversation: (id: string) => Promise<void>;
   unpinConversation: (id: string) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
+  registerSwitchHandler: (handler: ((id: string) => Promise<void>) | null) => void;
 }
 
 const ConversationContext = createContext<ConversationContextValue | null>(null);
@@ -191,6 +194,7 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
   const { isInitialized } = useAuth();
   const [isStreaming, setIsStreaming] = React.useState(false);
   const loadingMoreRef = useRef(false);
+  const switchHandlerRef = useRef<((id: string) => Promise<void>) | null>(null);
 
   // 初始化加载对话列表
   useEffect(() => {
@@ -224,6 +228,7 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
 
   const switchTo = useCallback((id: string) => {
     dispatch({ type: 'SET_ACTIVE', payload: id });
+    switchHandlerRef.current?.(id);
   }, []);
 
   const createNew = useCallback(() => {
@@ -278,6 +283,10 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
     dispatch({ type: 'REMOVE_ITEM', payload: id });
   }, []);
 
+  const registerSwitchHandler = useCallback((handler: ((id: string) => Promise<void>) | null) => {
+    switchHandlerRef.current = handler;
+  }, []);
+
   const value: ConversationContextValue = {
     ...state,
     isStreaming,
@@ -292,6 +301,7 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
     pinConversation,
     unpinConversation,
     deleteConversation,
+    registerSwitchHandler,
   };
 
   return (

@@ -9,22 +9,47 @@ function createId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
+/** AI 回复占位消息 ID 前缀，用于区分轮询占位和真实消息 */
+const POLLING_PLACEHOLDER_PREFIX = '__polling__';
+
+/** 检测消息列表是否以用户消息结尾（AI 回复待处理），且在 2 分钟内 */
+function needsPollingPlaceholder(msgs: Message[]): boolean {
+  if (msgs.length === 0) return false;
+  const last = msgs[msgs.length - 1];
+  return last.role === 'user' && Date.now() - last.timestamp < 120_000;
+}
+
+/** 为消息列表添加占位 AI 消息（显示"正在检索…"动画） */
+function withPollingPlaceholder(msgs: Message[]): Message[] {
+  return [
+    ...msgs,
+    {
+      id: POLLING_PLACEHOLDER_PREFIX + createId(),
+      role: 'ai',
+      content: '',
+      status: 'retrieving',
+      timestamp: Date.now(),
+    },
+  ];
+}
+
 export function useChatController() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [mounted, setMounted] = useState(false);
   const { sendMessage, stop, isStreaming } = useChatStream();
   const { loadConversation } = useConversation();
-  const { isInitialized } = useAuth();
+  const { isInitialized: isAuthReady } = useAuth();
   const {
     activeId,
     isNewConversation,
+    isInitialized: isConvReady,
     insertNewConversation,
     updateTitle,
     setIsStreaming: setContextStreaming,
+    registerSwitchHandler,
   } = useConversationContext();
   const aiMsgIdRef = useRef<string>('');
-  const prevActiveIdRef = useRef<string | null>(activeId);
   const messagesRef = useRef<Message[]>(messages);
   messagesRef.current = messages;
 
@@ -33,40 +58,119 @@ export function useChatController() {
     setContextStreaming(isStreaming);
   }, [isStreaming, setContextStreaming]);
 
-  // Auth 初始化后加载对话历史
+  // 等 Auth + 对话列表都初始化完成后再加载消息
+  // 此时 activeId 已被 ConversationProvider 正确设置，不存在竞态
   useEffect(() => {
-    if (!isInitialized) return;
+    if (!isAuthReady) return;
+    if (!isConvReady) return;
+    if (mounted) return;
     let cancelled = false;
     loadConversation(activeId).then(({ messages: loadedMessages }) => {
       if (!cancelled) {
-        setMessages(loadedMessages);
+        setMessages(
+          needsPollingPlaceholder(loadedMessages)
+            ? withPollingPlaceholder(loadedMessages)
+            : loadedMessages,
+        );
         setMounted(true);
       }
     });
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isInitialized]);
+  }, [isAuthReady, isConvReady, activeId, mounted, loadConversation]);
 
-  // 切换对话时重新加载历史消息
+  // 新对话：清空消息
   useEffect(() => {
     if (!mounted) return;
-
-    // 新对话：始终清空消息（不依赖 prevActiveId 比较）
     if (activeId === null && isNewConversation) {
-      prevActiveIdRef.current = null;
       setMessages([]);
-      return;
     }
+  }, [activeId, isNewConversation, mounted]);
 
-    if (prevActiveIdRef.current === activeId) return;
-    prevActiveIdRef.current = activeId;
-
-    loadConversation(activeId).then(({ messages: loadedMessages, stale }) => {
-      if (!stale) {
-        setMessages(loadedMessages);
-      }
+  // 注册 switchHandler：用户切换对话时主动调用 loadConversation
+  useEffect(() => {
+    if (!mounted) return;
+    registerSwitchHandler(async (id: string) => {
+      const loaded = (await loadConversation(id)).messages;
+      setMessages(
+        needsPollingPlaceholder(loaded) ? withPollingPlaceholder(loaded) : loaded,
+      );
     });
-  }, [activeId, isNewConversation, mounted, loadConversation]);
+    return () => registerSwitchHandler(null);
+  }, [mounted, registerSwitchHandler, loadConversation]);
+
+  // 轮询 AI 回复：刷新后 SSE 断裂，先轮询等待，超时则标记中断
+  // 触发条件：消息列表最后一条是占位/正在生成的 AI 消息
+  useEffect(() => {
+    if (!mounted || !activeId || isStreaming) return;
+    if (messages.length === 0) return;
+
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg.role !== 'ai' || !['generating', 'retrieving'].includes(lastMsg.status)) return;
+    if (Date.now() - lastMsg.timestamp > 180_000) return;
+
+    // 记住当前真实 AI 消息数量（排除占位），用于检测服务端新增
+    const localRealAiCount = messages.filter(
+      (m) => m.role === 'ai' && !m.id.startsWith(POLLING_PLACEHOLDER_PREFIX),
+    ).length;
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let pollsLeft = 10; // 10 × 3s = 30s
+
+    const markAsInterrupted = () => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id.startsWith(POLLING_PLACEHOLDER_PREFIX)
+            ? {
+                ...m,
+                status: 'error',
+                error: {
+                  code: 'INTERRUPTED',
+                  message: 'AI 回复因页面刷新而中断，请重新生成',
+                  action: 'retry',
+                },
+              }
+            : m,
+        ),
+      );
+    };
+
+    const scheduleNext = () => {
+      if (cancelled) return;
+      if (pollsLeft <= 0) {
+        markAsInterrupted();
+        return;
+      }
+      timer = setTimeout(async () => {
+        if (cancelled) return;
+        timer = null;
+        pollsLeft--;
+        try {
+          const { messages: serverMessages, stale } = await loadConversation(activeId);
+          if (cancelled || stale) { scheduleNext(); return; }
+
+          const serverAiCount = serverMessages.filter((m) => m.role === 'ai').length;
+          if (serverAiCount > localRealAiCount) {
+            setMessages(serverMessages);
+            const last = serverMessages[serverMessages.length - 1];
+            if (last.role === 'ai' && ['done', 'error', 'stopped'].includes(last.status)) {
+              return;
+            }
+          }
+          scheduleNext();
+        } catch {
+          scheduleNext();
+        }
+      }, 3000);
+    };
+
+    scheduleNext();
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [mounted, messages, isStreaming, activeId, loadConversation]);
 
   // 更新单条消息
   const updateMsg = useCallback(
