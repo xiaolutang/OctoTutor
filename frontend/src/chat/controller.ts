@@ -33,6 +33,11 @@ function withPollingPlaceholder(msgs: Message[]): Message[] {
   ];
 }
 
+/** 加载消息后按需追加占位 AI 消息 */
+function loadWithPlaceholder(msgs: Message[]): Message[] {
+  return needsPollingPlaceholder(msgs) ? withPollingPlaceholder(msgs) : msgs;
+}
+
 export function useChatController() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -67,11 +72,7 @@ export function useChatController() {
     let cancelled = false;
     loadConversation(activeId).then(({ messages: loadedMessages }) => {
       if (!cancelled) {
-        setMessages(
-          needsPollingPlaceholder(loadedMessages)
-            ? withPollingPlaceholder(loadedMessages)
-            : loadedMessages,
-        );
+        setMessages(loadWithPlaceholder(loadedMessages));
         setMounted(true);
       }
     });
@@ -91,31 +92,32 @@ export function useChatController() {
     if (!mounted) return;
     registerSwitchHandler(async (id: string) => {
       const loaded = (await loadConversation(id)).messages;
-      setMessages(
-        needsPollingPlaceholder(loaded) ? withPollingPlaceholder(loaded) : loaded,
-      );
+      setMessages(loadWithPlaceholder(loaded));
     });
     return () => registerSwitchHandler(null);
   }, [mounted, registerSwitchHandler, loadConversation]);
 
   // 轮询 AI 回复：刷新后 SSE 断裂，先轮询等待，超时则标记中断
   // 触发条件：消息列表最后一条是占位/正在生成的 AI 消息
+  // 注意：不依赖 messages，通过 messagesRef 读取，避免轮询更新触发 effect 重建
   useEffect(() => {
     if (!mounted || !activeId || isStreaming) return;
-    if (messages.length === 0) return;
 
-    const lastMsg = messages[messages.length - 1];
+    const currentMessages = messagesRef.current;
+    if (currentMessages.length === 0) return;
+
+    const lastMsg = currentMessages[currentMessages.length - 1];
     if (lastMsg.role !== 'ai' || !['generating', 'retrieving'].includes(lastMsg.status)) return;
     if (Date.now() - lastMsg.timestamp > 180_000) return;
 
     // 记住当前真实 AI 消息数量（排除占位），用于检测服务端新增
-    const localRealAiCount = messages.filter(
+    const localRealAiCount = currentMessages.filter(
       (m) => m.role === 'ai' && !m.id.startsWith(POLLING_PLACEHOLDER_PREFIX),
     ).length;
 
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    let pollsLeft = 10; // 10 × 3s = 30s
+    let pollsLeft = 10; // 10 × 3s = 30s 总超时
 
     const markAsInterrupted = () => {
       setMessages((prev) =>
@@ -170,7 +172,7 @@ export function useChatController() {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [mounted, messages, isStreaming, activeId, loadConversation]);
+  }, [mounted, isStreaming, activeId, loadConversation]);
 
   // 更新单条消息
   const updateMsg = useCallback(
@@ -230,12 +232,8 @@ export function useChatController() {
             updateTitle(convId, title);
           },
           onError: (error) => {
-            if (error.code === '00000') {
-              updateMsg(aiMsgId, { status: 'error', error });
-              setInput(question);
-            } else {
-              updateMsg(aiMsgId, { status: 'error', error });
-            }
+            updateMsg(aiMsgId, { status: 'error', error });
+            if (error.code === '00000') setInput(question);
           },
         },
         activeId ?? undefined,
