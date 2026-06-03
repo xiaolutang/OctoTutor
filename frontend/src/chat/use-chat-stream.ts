@@ -267,6 +267,7 @@ export function resumeStream(
 export function useChatStream(): UseChatStreamReturn {
   const [isStreaming, setIsStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const conversationIdRef = useRef<string | undefined>(undefined);
 
   // 组件卸载时终止正在进行的 SSE 连接
   useEffect(() => {
@@ -279,6 +280,7 @@ export function useChatStream(): UseChatStreamReturn {
     (question: string, callbacks: SSECallbacks, conversationId?: string) => {
       const abortController = new AbortController();
       abortRef.current = abortController;
+      conversationIdRef.current = conversationId;
       setIsStreaming(true);
 
       chatStreamFetch(question, callbacks, abortController, setIsStreaming, conversationId);
@@ -286,7 +288,18 @@ export function useChatStream(): UseChatStreamReturn {
     [],
   );
 
-  const stop = useCallback(() => {
+  const stop = useCallback(async () => {
+    if (conversationIdRef.current) {
+      try {
+        await fetchWithAuth('/chat/stop', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ conversation_id: conversationIdRef.current }),
+        });
+      } catch {
+        // POST /chat/stop 失败不阻断 abort
+      }
+    }
     abortRef.current?.abort();
   }, []);
 
