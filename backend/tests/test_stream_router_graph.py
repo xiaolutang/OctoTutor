@@ -25,6 +25,14 @@ from app.middleware.auth import UserContext
 # Fixtures
 # ============================================================================
 
+@pytest.fixture(autouse=True)
+def _cleanup_active_graphs():
+    """每个测试前后清理 _active_graphs，防止测试间泄漏"""
+    from app.chat.stream_router import _active_graphs
+    _active_graphs.clear()
+    yield
+    _active_graphs.clear()
+
 @pytest.fixture
 def mock_user():
     """Mock 用户上下文"""
@@ -378,13 +386,13 @@ async def test_run_graph_cancelled_after_some_events(
 # ============================================================================
 
 @pytest.mark.asyncio
-async def test_run_graph_timeout_puts_error(
+async def test_run_graph_timeout_puts_error_and_cleans_registry(
     mock_graph,
     mock_db,
     mock_user,
     mock_app_state,
 ):
-    """超时时 queue 收到 ERROR sentinel，注册表被清理"""
+    """超时时 queue 收到 ERROR sentinel + stats 不更新 + 注册表被清理"""
     from app.chat.stream_router import _active_graphs, _GRAPH_ERROR
 
     conversation_id = "conv-timeout"
@@ -410,41 +418,10 @@ async def test_run_graph_timeout_puts_error(
     assert len(events) == 1
     assert events[0] is _GRAPH_ERROR
 
-    # 超时不更新 stats（因为不是正常完成）
+    # 超时不更新 stats
     mock_stats.assert_not_called()
 
     # 注册表被清理
-    assert conversation_id not in _active_graphs
-
-
-@pytest.mark.asyncio
-async def test_run_graph_timeout_cleans_registry(
-    mock_graph,
-    mock_db,
-    mock_user,
-    mock_app_state,
-):
-    """超时后 _active_graphs 注册表被清理"""
-    from app.chat.stream_router import _active_graphs
-
-    conversation_id = "conv-timeout-cleanup"
-    queue, cancel_event = _register_graph(conversation_id)
-
-    async def mock_astream_timeout(*args, **kwargs):
-        raise TimeoutError()
-        yield
-
-    mock_graph.astream = mock_astream_timeout
-
-    with patch("app.chat.stream_router.ConversationRepo.update_message_stats", new_callable=AsyncMock):
-        await _run_graph(
-            graph=mock_graph, input_state={}, config={},
-            queue=queue, cancel_event=cancel_event,
-            db=mock_db, conversation_id=conversation_id,
-            user=mock_user, question="测试问题",
-            is_new=False, app_state=mock_app_state,
-        )
-
     assert conversation_id not in _active_graphs
 
 

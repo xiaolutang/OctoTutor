@@ -288,17 +288,14 @@ export function useChatStream(): UseChatStreamReturn {
     [],
   );
 
-  const stop = useCallback(async () => {
+  const stop = useCallback(() => {
     if (conversationIdRef.current) {
-      try {
-        await fetchWithAuth('/chat/stop', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ conversation_id: conversationIdRef.current }),
-        });
-      } catch {
-        // POST /chat/stop 失败不阻断 abort
-      }
+      // Fire-and-forget: 不 await，避免延迟 abort
+      fetchWithAuth('/chat/stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversation_id: conversationIdRef.current }),
+      }).catch(() => {});
     }
     abortRef.current?.abort();
   }, []);

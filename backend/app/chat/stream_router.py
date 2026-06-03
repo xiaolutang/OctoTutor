@@ -199,42 +199,10 @@ async def stream_chat(
     )
     task_info.task = task
 
-    async def event_generator():
-        """SSE 事件生成器：从 queue 读取事件并 yield SSE frame"""
-        try:
-            # 首个事件：回传 conversation_id 给前端
-            yield _sse_frame("init", {"conversation_id": conversation_id})
-
-            while True:
-                # 检查客户端断开
-                if await http_request.is_disconnected():
-                    logger.info(f"[stream] client disconnected: {conversation_id}")
-                    return
-
-                try:
-                    # 从 queue 获取事件，超时 5s 用于心跳检测
-                    event = await asyncio.wait_for(queue.get(), timeout=5.0)
-                except asyncio.TimeoutError:
-                    # 超时继续等待（心跳机制）
-                    continue
-
-                # 处理特殊 sentinel
-                if event is _GRAPH_DONE:
-                    yield "event: done\ndata: null\n\n"
-                    return
-                elif event is _GRAPH_ERROR:
-                    yield _sse_frame("error", make_error(ChatErrorCode.INTERNAL_ERROR))
-                    return
-
-                # 正常事件：映射为 SSE 帧
-                async for frame in _map_event_to_sse(event, http_request):
-                    yield frame
-
-        except Exception as e:
-            logger.error(f"SSE stream error: {e}", exc_info=True)
-            yield _sse_frame("error", make_error(ChatErrorCode.INTERNAL_ERROR))
-
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        _create_sse_generator(queue, conversation_id, http_request, "SSE stream"),
+        media_type="text/event-stream",
+    )
 
 
 async def _map_event_to_sse(event, http_request: Request):
@@ -321,6 +289,44 @@ def _serialize_source(source) -> dict:
     return source
 
 
+async def _create_sse_generator(
+    queue: asyncio.Queue,
+    conversation_id: str,
+    http_request: Request,
+    label: str,
+):
+    """共享 SSE 事件生成器：从 queue 读取事件并 yield SSE frame
+
+    由 event_generator（stream_chat）和 resume_generator（resume_stream）复用。
+    """
+    try:
+        yield _sse_frame("init", {"conversation_id": conversation_id})
+
+        while True:
+            if await http_request.is_disconnected():
+                logger.info(f"[stream] client disconnected ({label}): {conversation_id}")
+                return
+
+            try:
+                event = await asyncio.wait_for(queue.get(), timeout=5.0)
+            except asyncio.TimeoutError:
+                continue
+
+            if event is _GRAPH_DONE:
+                yield "event: done\ndata: null\n\n"
+                return
+            elif event is _GRAPH_ERROR:
+                yield _sse_frame("error", make_error(ChatErrorCode.INTERNAL_ERROR))
+                return
+
+            async for frame in _map_event_to_sse(event, http_request):
+                yield frame
+
+    except Exception as e:
+        logger.error(f"{label} error: {e}", exc_info=True)
+        yield _sse_frame("error", make_error(ChatErrorCode.INTERNAL_ERROR))
+
+
 # ========== SSE 重连端点 (R012-BB002) ==========
 
 
@@ -360,28 +366,10 @@ async def resume_stream(
         )
 
     # 3. 仍在运行 → SSE 流
-    async def resume_generator():
-        try:
-            yield _sse_frame("init", {"conversation_id": conversation_id})
-            while True:
-                if await http_request.is_disconnected():
-                    return
-                try:
-                    event = await asyncio.wait_for(task_info.queue.get(), timeout=5.0)
-                except asyncio.TimeoutError:
-                    continue
-                if event is _GRAPH_DONE:
-                    yield "event: done\ndata: null\n\n"
-                    return
-                elif event is _GRAPH_ERROR:
-                    yield _sse_frame("error", make_error(ChatErrorCode.INTERNAL_ERROR))
-                    return
-                async for frame in _map_event_to_sse(event, http_request):
-                    yield frame
-        except Exception as e:
-            logger.error(f"Resume stream error: {e}", exc_info=True)
-
-    return StreamingResponse(resume_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        _create_sse_generator(task_info.queue, conversation_id, http_request, "Resume stream"),
+        media_type="text/event-stream",
+    )
 
 
 # ========== 停止端点 (R012-BB003) ==========
