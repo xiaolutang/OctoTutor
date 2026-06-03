@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useChatStream } from './use-chat-stream';
+import { useChatStream, resumeStream } from './use-chat-stream';
+import type { ResumeCallbacks } from './use-chat-stream';
 import { useConversation } from './use-conversation';
 import { useAuth } from '@/contexts/auth-context';
 import { useConversationContext } from '@/contexts/conversation-context';
@@ -9,33 +10,11 @@ function createId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
-/** AI 回复占位消息 ID 前缀，用于区分轮询占位和真实消息 */
-const POLLING_PLACEHOLDER_PREFIX = '__polling__';
-
 /** 检测消息列表是否以用户消息结尾（AI 回复待处理），且在 2 分钟内 */
-function needsPollingPlaceholder(msgs: Message[]): boolean {
+function needsResumePlaceholder(msgs: Message[]): boolean {
   if (msgs.length === 0) return false;
   const last = msgs[msgs.length - 1];
   return last.role === 'user' && Date.now() - last.timestamp < 120_000;
-}
-
-/** 为消息列表添加占位 AI 消息（显示"正在检索…"动画） */
-function withPollingPlaceholder(msgs: Message[]): Message[] {
-  return [
-    ...msgs,
-    {
-      id: POLLING_PLACEHOLDER_PREFIX + createId(),
-      role: 'ai',
-      content: '',
-      status: 'retrieving',
-      timestamp: Date.now(),
-    },
-  ];
-}
-
-/** 加载消息后按需追加占位 AI 消息 */
-function loadWithPlaceholder(msgs: Message[]): Message[] {
-  return needsPollingPlaceholder(msgs) ? withPollingPlaceholder(msgs) : msgs;
 }
 
 export function useChatController() {
@@ -58,6 +37,14 @@ export function useChatController() {
   const messagesRef = useRef<Message[]>(messages);
   messagesRef.current = messages;
 
+  // 更新单条消息
+  const updateMsg = useCallback(
+    (id: string, patch: Partial<Message>) => {
+      setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+    },
+    [],
+  );
+
   // 同步 isStreaming 到 ConversationContext（供 sidebar 使用）
   useEffect(() => {
     setContextStreaming(isStreaming);
@@ -72,7 +59,20 @@ export function useChatController() {
     let cancelled = false;
     loadConversation(activeId).then(({ messages: loadedMessages }) => {
       if (!cancelled) {
-        setMessages(loadWithPlaceholder(loadedMessages));
+        // 如果最后一条是用户消息（2分钟内），追加占位 AI 消息
+        const msgs = needsResumePlaceholder(loadedMessages)
+          ? [
+              ...loadedMessages,
+              {
+                id: createId(),
+                role: 'ai' as const,
+                content: '',
+                status: 'retrieving' as const,
+                timestamp: Date.now(),
+              },
+            ]
+          : loadedMessages;
+        setMessages(msgs);
         setMounted(true);
       }
     });
@@ -92,14 +92,14 @@ export function useChatController() {
     if (!mounted) return;
     registerSwitchHandler(async (id: string) => {
       const loaded = (await loadConversation(id)).messages;
-      setMessages(loadWithPlaceholder(loaded));
+      setMessages(loaded);
     });
     return () => registerSwitchHandler(null);
   }, [mounted, registerSwitchHandler, loadConversation]);
 
-  // 轮询 AI 回复：刷新后 SSE 断裂，先轮询等待，超时则标记中断
-  // 触发条件：消息列表最后一条是占位/正在生成的 AI 消息
-  // 注意：不依赖 messages，通过 messagesRef 读取，避免轮询更新触发 effect 重建
+  // SSE 重连：刷新后检测到未完成 AI 回复 → 发起 GET /chat/stream/resume
+  // 触发条件：消息列表最后一条是正在生成/检索的 AI 消息，且在 3 分钟内
+  // 注意：不依赖 messages，通过 messagesRef 读取，避免更新触发 effect 重建
   useEffect(() => {
     if (!mounted || !activeId || isStreaming) return;
 
@@ -110,77 +110,50 @@ export function useChatController() {
     if (lastMsg.role !== 'ai' || !['generating', 'retrieving'].includes(lastMsg.status)) return;
     if (Date.now() - lastMsg.timestamp > 180_000) return;
 
-    // 记住当前真实 AI 消息数量（排除占位），用于检测服务端新增
-    const localRealAiCount = currentMessages.filter(
-      (m) => m.role === 'ai' && !m.id.startsWith(POLLING_PLACEHOLDER_PREFIX),
-    ).length;
-
     let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    let pollsLeft = 10; // 10 × 3s = 30s 总超时
 
-    const markAsInterrupted = () => {
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id.startsWith(POLLING_PLACEHOLDER_PREFIX)
-            ? {
-                ...m,
-                status: 'error',
-                error: {
-                  code: 'INTERRUPTED',
-                  message: 'AI 回复因页面刷新而中断，请重新生成',
-                  action: 'retry',
-                },
-              }
-            : m,
-        ),
-      );
-    };
-
-    const scheduleNext = () => {
-      if (cancelled) return;
-      if (pollsLeft <= 0) {
-        markAsInterrupted();
-        return;
-      }
-      timer = setTimeout(async () => {
-        if (cancelled) return;
-        timer = null;
-        pollsLeft--;
-        try {
-          const { messages: serverMessages, stale } = await loadConversation(activeId);
-          if (cancelled || stale) { scheduleNext(); return; }
-
-          const serverAiCount = serverMessages.filter((m) => m.role === 'ai').length;
-          if (serverAiCount > localRealAiCount) {
-            setMessages(serverMessages);
-            const last = serverMessages[serverMessages.length - 1];
-            if (last.role === 'ai' && ['done', 'error', 'stopped'].includes(last.status)) {
-              return;
-            }
-          }
-          scheduleNext();
-        } catch {
-          scheduleNext();
+    const callbacks: ResumeCallbacks = {
+      onStatus: (stage) => {
+        if (!cancelled) updateMsg(lastMsg.id, { status: stage as MessageStatus });
+      },
+      onToken: (token) => {
+        if (!cancelled) {
+          setMessages(prev =>
+            prev.map(m =>
+              m.id === lastMsg.id ? { ...m, content: m.content + token } : m,
+            ),
+          );
         }
-      }, 3000);
+      },
+      onSources: (sources) => {
+        if (!cancelled) updateMsg(lastMsg.id, { sources });
+      },
+      onThinking: (step) => {
+        if (!cancelled) {
+          setMessages(prev =>
+            prev.map(m => {
+              if (m.id !== lastMsg.id) return m;
+              const existing = m.thinkingSteps ?? [];
+              return { ...m, thinkingSteps: [...existing, step] };
+            }),
+          );
+        }
+      },
+      onDone: () => {
+        if (!cancelled) updateMsg(lastMsg.id, { status: 'done' });
+      },
+      onError: (error) => {
+        if (!cancelled) updateMsg(lastMsg.id, { status: 'error', error });
+      },
+      onMessagesReady: (msgs) => {
+        if (!cancelled) setMessages(msgs);
+      },
     };
 
-    scheduleNext();
+    resumeStream(activeId, callbacks);
 
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-    };
-  }, [mounted, isStreaming, activeId, loadConversation]);
-
-  // 更新单条消息
-  const updateMsg = useCallback(
-    (id: string, patch: Partial<Message>) => {
-      setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)));
-    },
-    [],
-  );
+    return () => { cancelled = true; };
+  }, [mounted, isStreaming, activeId, updateMsg]);
 
   // SSE 流式启动
   const startSSE = useCallback(
