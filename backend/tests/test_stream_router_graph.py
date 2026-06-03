@@ -446,3 +446,262 @@ async def test_run_graph_timeout_cleans_registry(
         )
 
     assert conversation_id not in _active_graphs
+
+
+# ============================================================================
+# 测试 resume_stream 端点 (R012-BB002)
+# ============================================================================
+
+@pytest.mark.asyncio
+async def test_resume_stream_task_running_returns_sse(
+    mock_user,
+    mock_db,
+):
+    """后台任务运行中 -> 返回 SSE 流（剩余事件）"""
+    from app.chat.stream_router import (
+        _active_graphs, GraphTaskInfo, _GRAPH_DONE,
+    )
+
+    conversation_id = "conv-resume-running"
+
+    # 注册活跃任务
+    queue = asyncio.Queue()
+    cancel_event = asyncio.Event()
+    task_info = GraphTaskInfo(queue=queue, cancel_event=cancel_event, task=None)
+    _active_graphs[conversation_id] = task_info
+
+    # 放入一个事件 + DONE
+    await queue.put(("updates", {"retrieve": {"sources": []}}))
+    await queue.put(_GRAPH_DONE)
+
+    with patch("app.chat.stream_router.ConversationRepo.get_by_id", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = MagicMock()  # 归属校验通过
+
+        from app.chat.stream_router import resume_stream
+
+        http_request = AsyncMock()
+        http_request.is_disconnected = AsyncMock(return_value=False)
+
+        response = await resume_stream(
+            conversation_id=conversation_id,
+            http_request=http_request,
+            checkpointer=AsyncMock(),
+            db=mock_db,
+            user=mock_user,
+        )
+
+    # 应该是 StreamingResponse
+    from starlette.responses import StreamingResponse as SR
+    assert isinstance(response, SR)
+
+    # 清理
+    _active_graphs.pop(conversation_id, None)
+
+
+@pytest.mark.asyncio
+async def test_resume_stream_task_completed_returns_json(
+    mock_user,
+    mock_db,
+):
+    """后台任务已完成 -> 返回 JSON（完整消息）"""
+    from app.chat.stream_router import _active_graphs
+    from starlette.responses import JSONResponse
+
+    conversation_id = "conv-resume-done"
+
+    # 确保注册表中没有该任务
+    _active_graphs.pop(conversation_id, None)
+
+    mock_checkpointer = AsyncMock()
+
+    with patch("app.chat.stream_router.ConversationRepo.get_by_id", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = MagicMock()  # 归属校验通过
+
+        with patch("app.chat.stream_router._load_conversation_by_id", new_callable=AsyncMock) as mock_load:
+            from langchain_core.messages import AIMessage
+            mock_load.return_value = [
+                AIMessage(content="测试回答"),
+            ]
+
+            from app.chat.stream_router import resume_stream
+
+            response = await resume_stream(
+                conversation_id=conversation_id,
+                http_request=AsyncMock(),
+                checkpointer=mock_checkpointer,
+                db=mock_db,
+                user=mock_user,
+            )
+
+    assert isinstance(response, JSONResponse)
+    assert response.status_code == 200
+
+    # 清理
+    _active_graphs.pop(conversation_id, None)
+
+
+@pytest.mark.asyncio
+async def test_resume_stream_no_conversation_returns_404(
+    mock_user,
+    mock_db,
+):
+    """非本人对话 -> 返回 404"""
+    from app.chat.stream_router import _active_graphs
+    from starlette.responses import JSONResponse
+
+    conversation_id = "conv-resume-notfound"
+    _active_graphs.pop(conversation_id, None)
+
+    with patch("app.chat.stream_router.ConversationRepo.get_by_id", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = None  # 归属校验失败
+
+        from app.chat.stream_router import resume_stream
+
+        response = await resume_stream(
+            conversation_id=conversation_id,
+            http_request=AsyncMock(),
+            checkpointer=AsyncMock(),
+            db=mock_db,
+            user=mock_user,
+        )
+
+    assert isinstance(response, JSONResponse)
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_resume_stream_completed_no_messages_returns_204(
+    mock_user,
+    mock_db,
+):
+    """后台任务已完成但无消息 -> 返回 204"""
+    from app.chat.stream_router import _active_graphs
+    from starlette.responses import Response
+
+    conversation_id = "conv-resume-empty"
+    _active_graphs.pop(conversation_id, None)
+
+    with patch("app.chat.stream_router.ConversationRepo.get_by_id", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = MagicMock()  # 归属校验通过
+
+        with patch("app.chat.stream_router._load_conversation_by_id", new_callable=AsyncMock) as mock_load:
+            mock_load.return_value = []  # 无消息
+
+            from app.chat.stream_router import resume_stream
+
+            response = await resume_stream(
+                conversation_id=conversation_id,
+                http_request=AsyncMock(),
+                checkpointer=AsyncMock(),
+                db=mock_db,
+                user=mock_user,
+            )
+
+    assert isinstance(response, Response)
+    assert response.status_code == 204
+
+
+# ============================================================================
+# 测试 stop_chat 端点 (R012-BB003)
+# ============================================================================
+
+@pytest.mark.asyncio
+async def test_stop_chat_sets_cancel_event():
+    """stop_chat 设置 cancel_event"""
+    from app.chat.stream_router import _active_graphs, GraphTaskInfo
+
+    conversation_id = "conv-stop-active"
+    queue = asyncio.Queue()
+    cancel_event = asyncio.Event()
+    task_info = GraphTaskInfo(queue=queue, cancel_event=cancel_event, task=None)
+    _active_graphs[conversation_id] = task_info
+
+    assert not cancel_event.is_set()
+
+    from app.chat.stream_router import stop_chat
+    from app.chat.schemas import StopRequest
+
+    body = StopRequest(conversation_id=conversation_id)
+    response = await stop_chat(body=body, user=UserContext(user_id="test-user-123", username="testuser"))
+
+    assert cancel_event.is_set()
+
+    from starlette.responses import JSONResponse
+    assert isinstance(response, JSONResponse)
+    assert response.status_code == 200
+
+    # 清理
+    _active_graphs.pop(conversation_id, None)
+
+
+@pytest.mark.asyncio
+async def test_stop_chat_nonexistent_conversation_returns_ok():
+    """stop_chat 对不存在的 conversation_id 静默返回 ok"""
+    from app.chat.stream_router import _active_graphs, stop_chat
+    from app.chat.schemas import StopRequest
+
+    conversation_id = "conv-stop-nonexist"
+    _active_graphs.pop(conversation_id, None)
+
+    body = StopRequest(conversation_id=conversation_id)
+    response = await stop_chat(body=body, user=UserContext(user_id="test-user-123", username="testuser"))
+
+    from starlette.responses import JSONResponse
+    assert isinstance(response, JSONResponse)
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_stop_chat_cancelled_task_cleans_registry(
+    mock_graph,
+    mock_db,
+    mock_user,
+    mock_app_state,
+):
+    """stop 设置 cancel_event 后，后台任务停止并清理注册表"""
+    from app.chat.stream_router import _active_graphs, _GRAPH_DONE, _GRAPH_ERROR
+
+    conversation_id = "conv-stop-cleanup"
+    queue, cancel_event = _register_graph(conversation_id)
+
+    # Mock astream 产生事件后等待 cancel，然后 yield 下一个事件（将被 cancel 拦截）
+    async def mock_astream_slow(*args, **kwargs):
+        yield ("updates", {"retrieve": {"sources": []}})
+        # 等待 cancel 被设置
+        for _ in range(20):
+            await asyncio.sleep(0.05)
+            if cancel_event.is_set():
+                break
+        # cancel 已设置，下一个事件将在 _run_graph 中被拦截
+        yield ("updates", {"respond": {}})
+
+    mock_graph.astream = mock_astream_slow
+
+    with patch("app.chat.stream_router.ConversationRepo.update_message_stats", new_callable=AsyncMock):
+        # 启动后台任务
+        task = asyncio.create_task(
+            _run_graph(
+                graph=mock_graph, input_state={}, config={},
+                queue=queue, cancel_event=cancel_event,
+                db=mock_db, conversation_id=conversation_id,
+                user=mock_user, question="测试问题",
+                is_new=False, app_state=mock_app_state,
+            )
+        )
+
+        # 等一会儿让第一个事件进入 queue
+        await asyncio.sleep(0.05)
+
+        # 设置 cancel
+        cancel_event.set()
+
+        # 等待后台任务完成
+        await task
+
+    # 注册表被清理
+    assert conversation_id not in _active_graphs
+
+    # 没有 DONE 或 ERROR（用户取消不放入 sentinel）
+    events = await _drain_queue_async(queue)
+    assert _GRAPH_DONE not in events
+    assert _GRAPH_ERROR not in events

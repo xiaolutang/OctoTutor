@@ -86,3 +86,8 @@ class ConversationUpdateRequest(BaseModel):
     """对话更新请求"""
     title: str | None = None
     pinned: bool | None = None
+
+
+class StopRequest(BaseModel):
+    """停止对话请求 — POST /api/chat/stop"""
+    conversation_id: str

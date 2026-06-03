@@ -18,13 +18,14 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage
 
-from fastapi import APIRouter, Depends, Request
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.chat.dependencies import get_graph, get_checkpointer, get_db
 from app.chat.errors import ChatErrorCode, ConversationErrorCode, make_error, make_conversation_error
-from app.chat.schemas import ChatRequest
+from app.chat.schemas import ChatRequest, StopRequest
+from app.chat.conversation_router import _load_conversation_by_id, _to_api_message
 from app.domain.models import Conversation
 from app.infra.conversation_repo import ConversationRepo
 from app.middleware.auth import UserContext, get_current_user
@@ -318,3 +319,86 @@ def _serialize_source(source) -> dict:
     if hasattr(source, "__dataclass_fields__"):
         return asdict(source)
     return source
+
+
+# ========== SSE 重连端点 (R012-BB002) ==========
+
+
+@router.get("/chat/stream/resume")
+async def resume_stream(
+    conversation_id: str = Query(...),
+    http_request: Request = None,
+    checkpointer=Depends(get_checkpointer),
+    db: AsyncSession = Depends(get_db),
+    user: UserContext = Depends(get_current_user),
+):
+    """SSE 重连端点
+
+    客户端断线后重连时调用：
+    - 后台任务运行中 → 返回 SSE 流（剩余事件）
+    - 后台任务已完成 → 返回 JSON（完整消息）
+    - 后台任务不存在且无消息 → 返回 204
+    """
+    # 1. 归属校验
+    conv = await ConversationRepo.get_by_id(db, conversation_id, user.user_id)
+    if not conv:
+        return JSONResponse(
+            status_code=404,
+            content=make_conversation_error(ConversationErrorCode.NOT_FOUND),
+        )
+
+    # 2. 查找活跃后台任务
+    task_info = _active_graphs.get(conversation_id)
+    if task_info is None:
+        # 后台任务已完成，从 checkpoint 返回完整消息
+        messages = await _load_conversation_by_id(checkpointer, conversation_id, user.user_id)
+        if not messages:
+            return Response(status_code=204)
+        api_messages = [_to_api_message(msg, idx) for idx, msg in enumerate(messages)]
+        return JSONResponse(
+            {"conversation_id": conversation_id, "messages": [m.model_dump() for m in api_messages]}
+        )
+
+    # 3. 仍在运行 → SSE 流
+    async def resume_generator():
+        try:
+            yield _sse_frame("init", {"conversation_id": conversation_id})
+            while True:
+                if await http_request.is_disconnected():
+                    return
+                try:
+                    event = await asyncio.wait_for(task_info.queue.get(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    continue
+                if event is _GRAPH_DONE:
+                    yield "event: done\ndata: null\n\n"
+                    return
+                elif event is _GRAPH_ERROR:
+                    yield _sse_frame("error", make_error(ChatErrorCode.INTERNAL_ERROR))
+                    return
+                async for frame in _map_event_to_sse(event, http_request):
+                    yield frame
+        except Exception as e:
+            logger.error(f"Resume stream error: {e}", exc_info=True)
+
+    return StreamingResponse(resume_generator(), media_type="text/event-stream")
+
+
+# ========== 停止端点 (R012-BB003) ==========
+
+
+@router.post("/chat/stop")
+async def stop_chat(
+    body: StopRequest,
+    user: UserContext = Depends(get_current_user),
+):
+    """停止正在运行的对话
+
+    设置 cancel_event，后台任务在下一个事件边界停止。
+    不更新 stats（用户主动取消）。
+    注册表清理由 _run_graph 的 finally 块负责。
+    """
+    task_info = _active_graphs.get(body.conversation_id)
+    if task_info:
+        task_info.cancel_event.set()
+    return JSONResponse({"status": "ok"})
