@@ -9,10 +9,11 @@ respond 节点在 graph 内部调用 ChatOpenAI，PostgresSaver 自动保存 AIM
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import uuid
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from typing import Any
 
 from langchain_core.messages import HumanMessage
@@ -31,6 +32,91 @@ from app.middleware.auth import UserContext, get_current_user
 router = APIRouter(prefix="/api", tags=["chat"])
 
 logger = logging.getLogger(__name__)
+
+
+# ========== 数据结构和注册表 ==========
+
+_GRAPH_DONE = object()   # sentinel: graph 正常完成
+_GRAPH_ERROR = object()  # sentinel: graph 发生错误
+
+
+@dataclass
+class GraphTaskInfo:
+    """活跃 graph 任务信息"""
+    queue: asyncio.Queue           # 事件队列
+    cancel_event: asyncio.Event    # 停止信号
+    task: asyncio.Task | None      # 后台任务引用
+
+
+# 活跃 graph 注册表：conversation_id -> GraphTaskInfo
+_active_graphs: dict[str, GraphTaskInfo] = {}
+
+
+# ========== 后台任务函数 ==========
+
+
+async def _run_graph(
+    graph,
+    input_state: dict,
+    config: dict,
+    queue: asyncio.Queue,
+    cancel_event: asyncio.Event,
+    db: AsyncSession,
+    conversation_id: str,
+    user: UserContext,
+    question: str,
+    is_new: bool,
+    app_state,
+) -> None:
+    """后台任务：迭代 graph.astream()，put 事件到 queue
+
+    图执行完成后（非取消）会执行：
+    - update_message_stats: 更新对话统计
+    - 标题生成：新对话时生成标题
+    """
+    cancelled = False
+    try:
+        async with asyncio.timeout(300):  # 5 分钟硬上限
+            async for event in graph.astream(
+                input_state,
+                config=config,
+                stream_mode=["updates", "messages"],
+            ):
+                if cancel_event.is_set():
+                    logger.info(f"[stream] cancelled by user: {conversation_id}")
+                    cancelled = True
+                    break
+                await queue.put(event)
+    except TimeoutError:
+        logger.warning(f"[stream] graph timeout: {conversation_id}")
+        await queue.put(_GRAPH_ERROR)
+    except Exception as e:
+        logger.error(f"[stream] graph error: {e}", exc_info=True)
+        await queue.put(_GRAPH_ERROR)
+        return
+    else:
+        # 正常完成（未超时、未异常、未取消）
+        if not cancelled:
+            await queue.put(_GRAPH_DONE)
+
+            # 完成后更新统计和标题
+            try:
+                await ConversationRepo.update_message_stats(db, conversation_id)
+                await db.commit()
+            except Exception as e:
+                logger.warning(f"[stream] update_message_stats failed: {e}")
+
+            if is_new:
+                try:
+                    title = await app_state.generator.generate_title(question)
+                    if title:
+                        await ConversationRepo.update(db, conversation_id, user.user_id, title=title)
+                        await db.commit()
+                except Exception as e:
+                    logger.warning(f"[stream] title generation failed: {e}")
+    finally:
+        # 从注册表移除
+        _active_graphs.pop(conversation_id, None)
 
 
 @router.post("/chat/stream")
@@ -88,54 +174,64 @@ async def stream_chat(
         "question": body.question,
     }
 
+    # ========== 创建后台任务基础设施 ==========
+    queue = asyncio.Queue()
+    cancel_event = asyncio.Event()
+    task_info = GraphTaskInfo(queue=queue, cancel_event=cancel_event, task=None)
+    _active_graphs[conversation_id] = task_info
+
+    # 启动后台任务执行 graph
+    task = asyncio.create_task(
+        _run_graph(
+            graph=graph,
+            input_state=input_state,
+            config=config,
+            queue=queue,
+            cancel_event=cancel_event,
+            db=db,
+            conversation_id=conversation_id,
+            user=user,
+            question=body.question,
+            is_new=is_new_conversation,
+            app_state=http_request.app.state,
+        )
+    )
+    task_info.task = task
+
     async def event_generator():
+        """SSE 事件生成器：从 queue 读取事件并 yield SSE frame"""
         try:
             # 首个事件：回传 conversation_id 给前端
             yield _sse_frame("init", {"conversation_id": conversation_id})
 
-            async for event in graph.astream(
-                input_state,
-                config=config,
-                stream_mode=["updates", "messages"],
-            ):
+            while True:
+                # 检查客户端断开
                 if await http_request.is_disconnected():
-                    break
+                    logger.info(f"[stream] client disconnected: {conversation_id}")
+                    return
 
+                try:
+                    # 从 queue 获取事件，超时 5s 用于心跳检测
+                    event = await asyncio.wait_for(queue.get(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    # 超时继续等待（心跳机制）
+                    continue
+
+                # 处理特殊 sentinel
+                if event is _GRAPH_DONE:
+                    yield "event: done\ndata: null\n\n"
+                    return
+                elif event is _GRAPH_ERROR:
+                    yield _sse_frame("error", make_error(ChatErrorCode.INTERNAL_ERROR))
+                    return
+
+                # 正常事件：映射为 SSE 帧
                 async for frame in _map_event_to_sse(event, http_request):
                     yield frame
 
-            if not await http_request.is_disconnected():
-                # 更新统计：updated_at + message_count
-                try:
-                    await ConversationRepo.update_message_stats(db, conversation_id)
-                    await db.commit()
-                except Exception as e:
-                    logger.warning(f"[stream] update_message_stats failed: {e}")
-
-                yield "event: done\ndata: null\n\n"
-
-                # 新对话：尝试生成标题
-                if is_new_conversation:
-                    try:
-                        generator = http_request.app.state.generator
-                        title = await generator.generate_title(body.question)
-                        if title:
-                            await ConversationRepo.update(
-                                db, conversation_id, user.user_id, title=title
-                            )
-                            await db.commit()
-                            yield _sse_frame("title", {
-                                "conversation_id": conversation_id,
-                                "title": title,
-                            })
-                    except Exception as e:
-                        logger.warning(f"[stream] title generation failed: {e}")
-
         except Exception as e:
             logger.error(f"SSE stream error: {e}", exc_info=True)
-            yield (
-                f"event: error\ndata: {json.dumps(make_error(ChatErrorCode.INTERNAL_ERROR), ensure_ascii=False)}\n\n"
-            )
+            yield _sse_frame("error", make_error(ChatErrorCode.INTERNAL_ERROR))
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
