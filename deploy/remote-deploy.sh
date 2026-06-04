@@ -41,8 +41,13 @@ REMOTE_PLATFORM=$(get_env_var "REMOTE_PLATFORM")
 REMOTE_PLATFORM="${REMOTE_PLATFORM:-linux/amd64}"
 AUTH_CLIENT_ID=$(get_env_var "AUTH_CLIENT_ID")
 AUTH_BASE_URL=$(get_env_var "AUTH_BASE_URL")
-IMAGE_NAME="octotutor:latest"
-TMP_FILE="/tmp/octotutor-image.tar.gz"
+DASHSCOPE_API_KEY=$(get_env_var "DASHSCOPE_API_KEY")
+JWT_SECRET_KEY=$(get_env_var "JWT_SECRET_KEY")
+NEWAPI_API_KEY=$(get_env_var "NEWAPI_API_KEY")
+FRONTEND_IMAGE="octotutor-frontend:latest"
+BACKEND_IMAGE="octotutor-backend:latest"
+TMP_FRONTEND="/tmp/octotutor-frontend.tar.gz"
+TMP_BACKEND="/tmp/octotutor-backend.tar.gz"
 
 echo -e "${BLUE}╔═══════════════════════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║       OctoTutor 远端一键部署                             ║${NC}"
@@ -77,43 +82,66 @@ if [[ "${1:-}" != "--skip-build" ]]; then
     cleanup() { rm -rf "$PROJECT_DIR/auth-sdk-web"; }
     trap cleanup EXIT
 
+    # 构建前端
+    echo -e "  ${YELLOW}构建前端...${NC}"
     docker buildx build --platform "$REMOTE_PLATFORM" \
         -f "$SCRIPT_DIR/Dockerfile" \
         --build-arg EXCLUDE_DEV=true \
-        -t "$IMAGE_NAME" \
+        -t "$FRONTEND_IMAGE" \
         --load \
         "$PROJECT_DIR"
+    echo -e "  ${GREEN}前端构建完成${NC}"
+
+    # 构建后端
+    echo -e "  ${YELLOW}构建后端...${NC}"
+    docker buildx build --platform "$REMOTE_PLATFORM" \
+        -f "$PROJECT_DIR/backend/Dockerfile" \
+        -t "$BACKEND_IMAGE" \
+        --load \
+        "$PROJECT_DIR/backend"
+    echo -e "  ${GREEN}后端构建完成${NC}"
 else
     echo -e "${YELLOW}[1/5] 跳过构建（使用已有镜像）${NC}"
 fi
 
 # 检查镜像
-if ! docker image inspect "$IMAGE_NAME" &>/dev/null; then
-    echo -e "${RED}错误: 镜像 $IMAGE_NAME 不存在${NC}"
-    exit 1
-fi
+for IMG in "$FRONTEND_IMAGE" "$BACKEND_IMAGE"; do
+    if ! docker image inspect "$IMG" &>/dev/null; then
+        echo -e "${RED}错误: 镜像 $IMG 不存在${NC}"
+        exit 1
+    fi
+done
 
 # ===== 2. 导出镜像 =====
 echo -e "${YELLOW}[2/5] 导出镜像...${NC}"
-docker save "$IMAGE_NAME" | gzip > "$TMP_FILE"
-IMAGE_SIZE=$(du -h "$TMP_FILE" | cut -f1)
-echo -e "  镜像大小: ${GREEN}${IMAGE_SIZE}${NC}"
+docker save "$FRONTEND_IMAGE" | gzip > "$TMP_FRONTEND"
+FRONTEND_SIZE=$(du -h "$TMP_FRONTEND" | cut -f1)
+echo -e "  前端镜像: ${GREEN}${FRONTEND_SIZE}${NC}"
+
+docker save "$BACKEND_IMAGE" | gzip > "$TMP_BACKEND"
+BACKEND_SIZE=$(du -h "$TMP_BACKEND" | cut -f1)
+echo -e "  后端镜像: ${GREEN}${BACKEND_SIZE}${NC}"
 
 # ===== 3. 传输到服务器 =====
 echo -e "${YELLOW}[3/5] 传输到服务器...${NC}"
-scp -q "$TMP_FILE" "${REMOTE_USER}@${REMOTE_HOST}:/tmp/octotutor-image.tar.gz"
+scp -q "$TMP_FRONTEND" "${REMOTE_USER}@${REMOTE_HOST}:/tmp/octotutor-frontend.tar.gz"
+scp -q "$TMP_BACKEND" "${REMOTE_USER}@${REMOTE_HOST}:/tmp/octotutor-backend.tar.gz"
 scp -q "$SCRIPT_DIR/docker-compose.yml" "${REMOTE_USER}@${REMOTE_HOST}:/tmp/octotutor-compose.yml"
-rm -f "$TMP_FILE"
+rm -f "$TMP_FRONTEND" "$TMP_BACKEND"
 
 # ===== 4. 远端加载并启动 =====
 echo -e "${YELLOW}[4/5] 远端加载并启动...${NC}"
 ssh "${REMOTE_USER}@${REMOTE_HOST}" \
-    "REMOTE_DEPLOY_DIR='${REMOTE_DEPLOY_DIR}' AUTH_CLIENT_ID='${AUTH_CLIENT_ID}' AUTH_BASE_URL='${AUTH_BASE_URL}' bash -s" <<'REMOTE_SCRIPT'
+    "REMOTE_DEPLOY_DIR='${REMOTE_DEPLOY_DIR}' AUTH_CLIENT_ID='${AUTH_CLIENT_ID}' AUTH_BASE_URL='${AUTH_BASE_URL}' DASHSCOPE_API_KEY='${DASHSCOPE_API_KEY}' JWT_SECRET_KEY='${JWT_SECRET_KEY}' NEWAPI_API_KEY='${NEWAPI_API_KEY}' bash -s" <<'REMOTE_SCRIPT'
 set -euo pipefail
 
-echo "  加载镜像..."
-docker load < /tmp/octotutor-image.tar.gz
-rm -f /tmp/octotutor-image.tar.gz
+echo "  加载前端镜像..."
+docker load < /tmp/octotutor-frontend.tar.gz
+rm -f /tmp/octotutor-frontend.tar.gz
+
+echo "  加载后端镜像..."
+docker load < /tmp/octotutor-backend.tar.gz
+rm -f /tmp/octotutor-backend.tar.gz
 
 mkdir -p "${REMOTE_DEPLOY_DIR}/deploy"
 mv /tmp/octotutor-compose.yml "${REMOTE_DEPLOY_DIR}/deploy/docker-compose.yml"
@@ -122,6 +150,9 @@ mv /tmp/octotutor-compose.yml "${REMOTE_DEPLOY_DIR}/deploy/docker-compose.yml"
 cat > "${REMOTE_DEPLOY_DIR}/.env" <<EOF
 AUTH_CLIENT_ID=${AUTH_CLIENT_ID}
 AUTH_BASE_URL=${AUTH_BASE_URL}
+DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+JWT_SECRET_KEY=${JWT_SECRET_KEY}
+NEWAPI_API_KEY=${NEWAPI_API_KEY}
 EOF
 
 cd "${REMOTE_DEPLOY_DIR}"
@@ -130,8 +161,8 @@ docker compose -f deploy/docker-compose.yml up -d
 
 echo "  等待服务启动..."
 for i in $(seq 1 15); do
-    HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/ 2>/dev/null || echo 000)
-    if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "302" ]; then
+    HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/api/health 2>/dev/null || echo 000)
+    if [ "$HTTP_CODE" = "200" ]; then
         echo "  健康检查通过"
         exit 0
     fi

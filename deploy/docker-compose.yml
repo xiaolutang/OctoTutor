@@ -44,6 +44,11 @@ services:
       - "8000"
     environment:
       - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - NEWAPI_API_KEY=${NEWAPI_API_KEY}
+      - NEWAPI_BASE_URL=http://new-api:13000/v1
+      - AUTH_CLIENT_ID=${AUTH_CLIENT_ID}
+      - AUTH_BASE_URL=${AUTH_BASE_URL}
       - CHROMA_PERSIST_DIR=/app/data/chroma_db
     volumes:
       - octotutor-data:/app/data
