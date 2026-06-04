@@ -14,6 +14,22 @@ function needsResumePlaceholder(msgs: Message[]): boolean {
   return last.role === 'user' && Date.now() - last.timestamp < 120_000;
 }
 
+/** 处理加载的消息：如果最后一条是用户消息（2分钟内），追加占位 AI 消息 */
+function processLoadedMessages(loadedMessages: Message[]): Message[] {
+  return needsResumePlaceholder(loadedMessages)
+    ? [
+        ...loadedMessages,
+        {
+          id: createId(),
+          role: 'ai' as const,
+          content: '',
+          status: 'retrieving' as const,
+          timestamp: Date.now(),
+        },
+      ]
+    : loadedMessages;
+}
+
 export function useChatController() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -82,20 +98,7 @@ export function useChatController() {
     loadConversation(activeId).then(({ messages: loadedMessages }) => {
       if (!cancelled) {
         setLoadError(null);
-        // 如果最后一条是用户消息（2分钟内），追加占位 AI 消息
-        const msgs = needsResumePlaceholder(loadedMessages)
-          ? [
-              ...loadedMessages,
-              {
-                id: createId(),
-                role: 'ai' as const,
-                content: '',
-                status: 'retrieving' as const,
-                timestamp: Date.now(),
-              },
-            ]
-          : loadedMessages;
-        setMessages(msgs);
+        setMessages(processLoadedMessages(loadedMessages));
         setMounted(true);
       }
     }).catch(() => {
@@ -304,19 +307,7 @@ export function useChatController() {
     setMounted(false);
     loadConversation(activeId).then(({ messages: loadedMessages }) => {
       setLoadError(null);
-      const msgs = needsResumePlaceholder(loadedMessages)
-        ? [
-            ...loadedMessages,
-            {
-              id: createId(),
-              role: 'ai' as const,
-              content: '',
-              status: 'retrieving' as const,
-              timestamp: Date.now(),
-            },
-          ]
-        : loadedMessages;
-      setMessages(msgs);
+      setMessages(processLoadedMessages(loadedMessages));
       setMounted(true);
     }).catch(() => {
       setLoadError('加载对话失败');
