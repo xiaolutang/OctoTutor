@@ -12,6 +12,8 @@ export function ChatUI() {
     input,
     mounted,
     isStreaming,
+    loadError,
+    retryLoad,
     setInput,
     handleSend,
     handleStop,
@@ -28,6 +30,20 @@ export function ChatUI() {
     prevLenRef.current = messages.length;
     messagesEndRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'instant' });
   }, [messages]);
+
+  if (loadError) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
+        <p>{loadError}</p>
+        <button
+          onClick={retryLoad}
+          className="rounded-md border px-4 py-2 text-sm hover:bg-accent"
+        >
+          重试
+        </button>
+      </div>
+    );
+  }
 
   if (!mounted) {
     return (

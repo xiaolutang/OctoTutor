@@ -1,7 +1,7 @@
 {
   "version": "3.0",
   "project": "OctoTutor",
-  "active_rc": null,
+  "active_rc": "R016",
   "default_workflow": {
     "name": "XLFoundry",
     "mode": "A",
@@ -29,5 +29,7 @@
     { "id": "R014", "name": "sidebar-ux-polish", "archive_dir": "R014", "total_tasks": 2, "completed_at": "2026-06-04" },
     { "id": "R015", "name": "code-convergence", "archive_dir": "R015", "total_tasks": 6, "completed_at": "2026-06-04" }
   ],
-  "rc_queue": []
+  "rc_queue": [
+    { "id": "R016", "name": "conversation-security-fix", "status": "analyzing", "depends_on": [] }
+  ]
 }

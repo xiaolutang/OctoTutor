@@ -87,7 +87,8 @@ export function ConversationProvider({ children }: { children: React.ReactNode }
         }
       } catch {
         if (!cancelled) {
-          dispatch({ type: 'SET_LOADING', payload: false });
+          dispatch({ type: 'INIT_LIST', payload: { items: [], cursor: null, hasMore: false } });
+          dispatch({ type: 'SET_ACTIVE', payload: null });
         }
       }
     })();

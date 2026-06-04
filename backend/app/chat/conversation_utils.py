@@ -23,7 +23,7 @@ def extract_latest_messages(namespaces: dict, user_id: str | None = None) -> tup
     best_ts = ""
     for _ns, checkpoints in namespaces.items():
         for _cp_id, (checkpoint, meta, _parent) in checkpoints.items():
-            # user_id 过滤
+            # user_id 过滤（MemorySaver 的 meta 是原始 config dict，嵌套在 configurable 下）
             if user_id:
                 cp_user_id = meta.get("configurable", {}).get("user_id") if meta else None
                 if cp_user_id and cp_user_id != user_id:
@@ -56,7 +56,7 @@ async def load_conversation_by_id(checkpointer, conversation_id: str, user_id: s
         # PostgresSaver：alist 返回带 config 的 CheckpointTuple，可验证 user_id
         config = {"configurable": {"thread_id": conversation_id}}
         async for tuple_item in checkpointer.alist(config, limit=1):
-            cp_user_id = tuple_item.config.get("configurable", {}).get("user_id")
+            cp_user_id = tuple_item.metadata.get("user_id") if tuple_item.metadata else None
             if cp_user_id and cp_user_id != user_id:
                 return []
             checkpoint = tuple_item.checkpoint

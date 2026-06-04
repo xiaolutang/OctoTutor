@@ -18,6 +18,7 @@ export function useChatController() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [mounted, setMounted] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const { sendMessage, stop, isStreaming } = useChatStream();
   const { loadConversation } = useConversation();
   const { isInitialized: isAuthReady } = useAuth();
@@ -80,6 +81,7 @@ export function useChatController() {
     let cancelled = false;
     loadConversation(activeId).then(({ messages: loadedMessages }) => {
       if (!cancelled) {
+        setLoadError(null);
         // 如果最后一条是用户消息（2分钟内），追加占位 AI 消息
         const msgs = needsResumePlaceholder(loadedMessages)
           ? [
@@ -95,6 +97,10 @@ export function useChatController() {
           : loadedMessages;
         setMessages(msgs);
         setMounted(true);
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setLoadError('加载对话失败');
       }
     });
     return () => { cancelled = true; };
@@ -291,11 +297,39 @@ export function useChatController() {
     [isStreaming, startSSE],
   );
 
+  // 重试加载对话
+  const retryLoad = useCallback(() => {
+    if (!activeId) return;
+    setLoadError(null);
+    setMounted(false);
+    loadConversation(activeId).then(({ messages: loadedMessages }) => {
+      setLoadError(null);
+      const msgs = needsResumePlaceholder(loadedMessages)
+        ? [
+            ...loadedMessages,
+            {
+              id: createId(),
+              role: 'ai' as const,
+              content: '',
+              status: 'retrieving' as const,
+              timestamp: Date.now(),
+            },
+          ]
+        : loadedMessages;
+      setMessages(msgs);
+      setMounted(true);
+    }).catch(() => {
+      setLoadError('加载对话失败');
+    });
+  }, [activeId, loadConversation]);
+
   return {
     messages,
     input,
     mounted,
     isStreaming,
+    loadError,
+    retryLoad,
     setInput,
     handleSend,
     handleStop,

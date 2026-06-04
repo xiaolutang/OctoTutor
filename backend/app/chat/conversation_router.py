@@ -108,8 +108,8 @@ async def _load_from_postgres_saver(checkpointer, user_id: str):
         tid = tuple_item.config.get("configurable", {}).get("thread_id")
         if not tid or tid in ("undefined", "null", ""):
             continue
-        # user_id 过滤
-        tid_user_id = tuple_item.config.get("configurable", {}).get("user_id")
+        # user_id 过滤 — metadata 顶层包含 config["configurable"] 中非排除 key
+        tid_user_id = tuple_item.metadata.get("user_id") if tuple_item.metadata else None
         if tid_user_id and tid_user_id != user_id:
             continue
         checkpoint = tuple_item.checkpoint
