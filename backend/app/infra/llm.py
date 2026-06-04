@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncIterator
 
 from openai import AsyncOpenAI, OpenAI
 
@@ -18,6 +17,9 @@ from app.infra.context_builder import chunks_to_sources
 from app.rag.models import QueryResult
 from app.infra.context_builder import build_numbered_context
 
+# 章鱼哥 RAG 回答的系统提示。
+# 注意：Agent Graph 层的 TEACHING_SYSTEM_PROMPT（app/agent/prompts.py）用于 graph respond 节点，
+# 本 SYSTEM_PROMPT 仅用于 LLMGenerator.generate() 同步 RAG 路径（已较少使用）。
 SYSTEM_PROMPT = """你是章鱼哥，一个高中数学助教。基于给定的教材内容回答学生的问题。
 规则：
 1. 只使用提供的教材内容回答，不要编造内容
@@ -82,30 +84,6 @@ class LLMGenerator:
         # 从 context_chunks metadata 构建 sources（非从 LLM 输出解析）
         sources = chunks_to_sources(context_chunks)
         return answer, sources
-
-    async def generate_stream(
-        self, query: str, context_chunks: list[QueryResult]
-    ) -> AsyncIterator[str]:
-        """异步流式生成回答，逐 token yield
-
-        Args:
-            query: 学生问题
-            context_chunks: 检索到的相关教材片段（可为空）
-
-        Yields:
-            LLM 生成的 token 字符串
-        """
-        messages = self._build_messages(query, context_chunks)
-        stream = await self._async_client.chat.completions.create(
-            model=self._model, messages=messages, stream=True
-        )
-        async with stream:
-            async for chunk in stream:
-                if not chunk.choices:
-                    continue
-                token = chunk.choices[0].delta.content or ""
-                if token:
-                    yield token
 
     async def generate_title(self, user_message: str) -> str | None:
         """根据首条用户消息生成对话标题（非流式，5s timeout）

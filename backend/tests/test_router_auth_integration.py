@@ -15,7 +15,6 @@
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncIterator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -97,9 +96,6 @@ def client():
     )
 
     mock_gen = MagicMock()
-    async def _fake_stream(*args, **kwargs):
-        yield "mock answer"
-    mock_gen.generate_stream = _fake_stream
     mock_gen.generate_title = AsyncMock(return_value=None)
     mock_gen.get_chat_model.return_value = MagicMock()
 

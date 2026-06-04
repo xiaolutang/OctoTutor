@@ -301,7 +301,6 @@ def _make_generator_with_model(model):
     """创建 mock generator，使用指定 chat_model"""
     gen = MagicMock()
     gen.get_chat_model.return_value = model
-    gen.generate_stream = AsyncMock()
     gen.generate_title = AsyncMock()
     return gen
 

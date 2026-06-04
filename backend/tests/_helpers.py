@@ -59,11 +59,6 @@ def make_mock_generator(tokens=None, title=None):
     from langchain_core.messages import AIMessage
     gen = MagicMock()
 
-    async def _stream(*args, **kwargs):
-        for t in (tokens or ["mock", " answer"]):
-            yield t
-
-    gen.generate_stream = _stream
     gen.generate_title = AsyncMock(return_value=title)
 
     mock_chat_model = MagicMock()
