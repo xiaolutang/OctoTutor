@@ -138,7 +138,9 @@ export function useChatController() {
 
     const callbacks: ResumeCallbacks = {
       onStatus: (stage) => {
-        if (!cancelled) updateMsg(lastMsg.id, { status: stage as MessageStatus });
+        if (!cancelled && (stage === 'retrieving' || stage === 'generating')) {
+          updateMsg(lastMsg.id, { status: stage as MessageStatus });
+        }
       },
       onToken: (token) => {
         if (!cancelled) appendToken(lastMsg.id, token);

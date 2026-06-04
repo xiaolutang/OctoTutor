@@ -132,6 +132,7 @@ export function ConversationItemCard({
         }
         onSelect(item.id);
       }}
+      onMouseLeave={() => setMenuOpen(false)}
     >
       <div className="flex-1 min-w-0">
         {isRenaming ? (

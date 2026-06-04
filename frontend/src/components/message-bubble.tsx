@@ -54,8 +54,8 @@ export const MessageBubble = memo(function MessageBubble({
               : 'bg-muted text-foreground'
           }`}
         >
-          {/* AI 状态提示 */}
-          {!isUser && message.status !== 'done' && message.status !== 'error' && (
+          {/* AI 状态提示（仅活跃状态显示） */}
+          {!isUser && !isTerminal && (
             <div className="text-xs text-muted-foreground mb-1">
               {statusLabels[message.status] || message.status}
             </div>
