@@ -1,7 +1,7 @@
 {
   "version": "3.0",
   "project": "OctoTutor",
-  "active_rc": "R016",
+  "active_rc": null,
   "default_workflow": {
     "name": "XLFoundry",
     "mode": "A",
@@ -27,9 +27,8 @@
     { "id": "R012", "name": "sse-decouple", "archive_dir": "R012", "total_tasks": 5, "completed_at": "2026-06-03" },
     { "id": "R013", "name": "code-quality-governance", "archive_dir": "R013", "total_tasks": 4, "completed_at": "2026-06-03" },
     { "id": "R014", "name": "sidebar-ux-polish", "archive_dir": "R014", "total_tasks": 2, "completed_at": "2026-06-04" },
-    { "id": "R015", "name": "code-convergence", "archive_dir": "R015", "total_tasks": 6, "completed_at": "2026-06-04" }
+    { "id": "R015", "name": "code-convergence", "archive_dir": "R015", "total_tasks": 6, "completed_at": "2026-06-04" },
+    { "id": "R016", "name": "conversation-security-fix", "archive_dir": "R016", "total_tasks": 3, "completed_at": "2026-06-04" }
   ],
-  "rc_queue": [
-    { "id": "R016", "name": "conversation-security-fix", "status": "analyzing", "depends_on": [] }
-  ]
+  "rc_queue": []
 }

@@ -6,7 +6,7 @@ requirement_cycle: R016
 workflow:
   evaluate_provider: local
   mode: auto
-status: planned
+status: archived
 ---
 
 # 对话安全与初始化修复 — 任务清单

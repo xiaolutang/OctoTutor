@@ -24,6 +24,7 @@
 | R013 | code-quality-governance | 4 | archived | 2026-06-03 |
 | R014 | sidebar-ux-polish | 2 | archived | 2026-06-04 |
 | R015 | code-convergence | 6 | archived | 2026-06-04 |
+| R016 | conversation-security-fix | 3 | archived | 2026-06-04 |
 
 ## 模块清单
 
@@ -105,8 +106,18 @@
 | CAP-sse-003 | 停止端点 POST /chat/stop（cancel_event 设置 + 后台任务事件边界停止） |
 | CAP-sse-004 | 前端 SSE 重连（刷新后检测未完成 AI 回复 → resumeStream → 流式恢复或直接显示） |
 | CAP-sse-005 | 前端停止按钮适配（fire-and-forget POST /chat/stop + 立即 abort） |
+| CAP-sec-002 | Checkpoint metadata user_id 归属校验（PostgresSaver metadata 过滤 + conversation_utils 隔离） |
+| CAP-conv-008 | 对话加载错误状态 UI（loadError + retryLoad + 渲染优先级） |
 
 ## 变更记录
+
+### R016 conversation-security-fix (2026-06-04)
+
+- 后端 checkpoint user_id 过滤修复：PostgresSaver metadata 读取 user_id 替代 config.configurable，消除跨用户数据泄漏
+- 前端 conversation-context catch 块容错：INIT_LIST dispatch 推进 isInitialized，消除新用户无限加载
+- 前端 chat-ui 错误状态 UI：加载失败显示错误提示 + 重试按钮，渲染优先级 loadError > !mounted > 正常
+- 收敛：提取 processLoadedMessages 共享函数消除 retryLoad 与 useEffect 重复代码
+- 后端 102 测试 + 前端 37 测试全通过
 
 ### R015 code-convergence (2026-06-04)
 
