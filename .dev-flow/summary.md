@@ -1,6 +1,6 @@
 # OctoTutor Development Summary
 
-最后更新: 2026-06-03
+最后更新: 2026-06-04
 
 ## 需求包索引
 
@@ -23,6 +23,7 @@
 | R012 | sse-decouple | 5 | archived | 2026-06-03 |
 | R013 | code-quality-governance | 4 | archived | 2026-06-03 |
 | R014 | sidebar-ux-polish | 2 | archived | 2026-06-04 |
+| R015 | code-convergence | 6 | archived | 2026-06-04 |
 
 ## 模块清单
 
@@ -106,6 +107,17 @@
 | CAP-sse-005 | 前端停止按钮适配（fire-and-forget POST /chat/stop + 立即 abort） |
 
 ## 变更记录
+
+### R015 code-convergence (2026-06-04)
+
+- 全项目 6 视角 simplify 并行审查（125 个发现），提取 6 个高置信度共性问题做机械修复
+- BF001: llm.py 删除 generate_stream 死代码 + 测试级联清理（6 文件，-330 行）
+- FF002: createId() 从 5 处内联收敛到 lib/utils.ts 统一导出
+- FF003: partitionByPinned 单次遍历替代 double .filter()（reducer 热路径）
+- FF001: rehypePlugins 提取为模块常量，消除渲染时数组重建
+- FF004: ConversationItemCard onPin/onUnpin 合并为 onTogglePin + sidebar cardProps spread
+- FF005: ChatInput 移除冗余 disabled prop，统一使用 isStreaming
+- 后端 683 测试 + 前端 271 测试全通过，Simplify 审查无 HIGH 问题
 
 ### R014 sidebar-ux-polish (2026-06-04)
 

@@ -39,6 +39,56 @@
   - 原因：数学学习场景里用户很可能上传题目图片、截图或包含公式的内容，需要让智能体具备图片/公式/文本混合输入的识别能力，再接入后续解题和检索链路
   - 优先级：中
 
+- [ ] appendToken 逐 token 全量重渲染优化
+  - 来源：R015 simplify 审查 Agent 3 HIGH
+  - 原因：流式回答时每个 token 都触发消息列表全量重渲染，需拆分流式状态为独立 state，架构级改动
+  - 优先级：中
+
+- [ ] scrollIntoView 每 token 触发节流
+  - 来源：R015 simplify 审查 Agent 3 MEDIUM
+  - 原因：每个 token 都触发 scrollIntoView，需 RAF 节流或 IntersectionObserver
+  - 优先级：低
+
+- [ ] _active_graphs 无过期清理
+  - 来源：R015 simplify 审查 Agent 3 HIGH
+  - 原因：后端 _active_graphs 注册表无过期清理机制，长时间运行可能内存泄漏，需设计定期清理策略
+  - 优先级：中
+
+- [ ] summarize/rewrite 串行改并行
+  - 来源：R015 simplify 审查 Agent 3 MEDIUM
+  - 原因：Agent Graph 中 summarize 和 rewrite 串行执行，可并行化提升响应速度，需 Graph 拓扑变更
+  - 优先级：低
+
+- [ ] 测试中复制源码逻辑重构
+  - 来源：R015 simplify 审查 Agent 5 HIGH × 9
+  - 原因：9 处测试复制了源码逻辑而非导入真实实现，大规模测试重构，需提取纯函数
+  - 优先级：中
+
+- [ ] 无效/冗余测试清理
+  - 来源：R015 simplify 审查 Agent 5 MEDIUM × 7
+  - 原因：7 处无效或冗余测试需逐个评估测试价值后删除
+  - 优先级：低
+
+- [ ] AuthContext value useMemo 优化
+  - 来源：R015 simplify 审查 Agent 3 MEDIUM
+  - 原因：AuthContext value 每次渲染创建新对象，影响面较大需谨慎处理
+  - 优先级：低
+
+- [ ] ConversationItemCard memo 优化
+  - 来源：R015 simplify 审查 Agent 3 LOW
+  - 原因：需评估回调引用稳定性后再决定是否加 React.memo
+  - 优先级：低
+
+- [ ] cn() 全局替换统一
+  - 来源：R015 simplify 审查 Agent 2 MEDIUM × 9
+  - 原因：9 处手写 className 拼接可替换为 cn() 工具函数，机械但量大
+  - 优先级：低
+
+- [ ] createId 碰撞风险改进
+  - 来源：R015 simplify 审查 Agent 2 MEDIUM
+  - 原因：Date.now().toString(36) + Math.random() 方案在高并发下有碰撞风险，可考虑 crypto.randomUUID() 或 nanoid
+  - 优先级：低
+
 ## 已完成
 
 ## 已放弃
