@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { MoreVertical } from 'lucide-react';
 import { toast } from 'sonner';
 import type { ConversationItem } from '@/chat/types';
@@ -45,7 +45,39 @@ export function ConversationItemCard({
   const [renameValue, setRenameValue] = useState(item.title);
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [menuDirection, setMenuDirection] = useState<'down' | 'up'>('down');
   const renameRef = useRef<HTMLInputElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const isFirstActivation = useRef(true);
+
+  useEffect(() => {
+    if (!isActive || !cardRef.current) return;
+    const behavior = isFirstActivation.current ? 'instant' : 'smooth';
+    isFirstActivation.current = false;
+    cardRef.current.scrollIntoView({ block: 'nearest', behavior });
+  }, [isActive]);
+
+  useLayoutEffect(() => {
+    if (!menuOpen || !cardRef.current) return;
+    const cardRect = cardRef.current.getBoundingClientRect();
+    const container = cardRef.current.closest('[class*="overflow-y-auto"]');
+    if (!container) return;
+    const containerRect = container.getBoundingClientRect();
+    const menuHeight = 120;
+    const wouldOverflow = cardRect.bottom + menuHeight > containerRect.bottom;
+    setMenuDirection(wouldOverflow ? 'up' : 'down');
+  }, [menuOpen]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (cardRef.current && !cardRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [menuOpen]);
 
   useEffect(() => {
     if (isRenaming && renameRef.current) {
@@ -87,6 +119,7 @@ export function ConversationItemCard({
 
   return (
     <div
+      ref={cardRef}
       className={`group flex items-center gap-2 rounded-md px-3 py-2 cursor-pointer text-sm transition-colors ${
         isActive
           ? 'bg-accent text-accent-foreground'
@@ -138,7 +171,9 @@ export function ConversationItemCard({
 
           {/* Dropdown menu */}
           {menuOpen && (
-            <div className="absolute right-0 mt-1 w-36 bg-popover border rounded-md shadow-md z-50 py-1">
+            <div className={`absolute right-0 z-50 w-36 bg-popover border rounded-md shadow-md py-1 ${
+              menuDirection === 'down' ? 'top-full mt-1' : 'bottom-full mb-1'
+            }`}>
               <button
                 className="w-full text-left px-3 py-1.5 text-sm hover:bg-accent/50"
                 onClick={() => {

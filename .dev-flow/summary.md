@@ -22,6 +22,7 @@
 | R011 | auth-race-condition | 2 | archived | 2026-06-02 |
 | R012 | sse-decouple | 5 | archived | 2026-06-03 |
 | R013 | code-quality-governance | 4 | archived | 2026-06-03 |
+| R014 | sidebar-ux-polish | 2 | archived | 2026-06-04 |
 
 ## 模块清单
 
@@ -105,6 +106,12 @@
 | CAP-sse-005 | 前端停止按钮适配（fire-and-forget POST /chat/stop + 立即 abort） |
 
 ## 变更记录
+
+### R014 sidebar-ux-polish (2026-06-04)
+
+- scrollIntoView 选中恢复：刷新后侧边栏自动滚动到当前对话项（instant），切换对话时平滑滚动（smooth）
+- 菜单碰撞检测：三点菜单根据位置自动向上/向下展开，底部项不再被裁剪；点击外部自动关闭菜单
+- 只改 conversation-item-card.tsx 一个文件，271 前端测试全通过
 
 ### R013 code-quality-governance (2026-06-03)
 
