@@ -64,7 +64,6 @@ export function ChatUI() {
         onSend={handleSend}
         onStop={handleStop}
         isStreaming={isStreaming}
-        disabled={isStreaming}
       />
     </div>
   );

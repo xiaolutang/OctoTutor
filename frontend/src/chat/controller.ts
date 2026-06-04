@@ -5,10 +5,7 @@ import { useConversation } from './use-conversation';
 import { useAuth } from '@/contexts/auth-context';
 import { useConversationContext } from '@/contexts/conversation-context';
 import type { Message, MessageStatus, ThinkingStep } from './types';
-
-function createId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-}
+import { createId } from '@/lib/utils';
 
 /** 检测消息列表是否以用户消息结尾（AI 回复待处理），且在 2 分钟内 */
 function needsResumePlaceholder(msgs: Message[]): boolean {

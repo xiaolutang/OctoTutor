@@ -22,6 +22,15 @@ export function ConversationSidebar() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const cardProps = {
+    onSelect: switchTo,
+    onRename: renameConversation,
+    onTogglePin: (id: string, pinned: boolean) =>
+      pinned ? unpinConversation(id) : pinConversation(id),
+    onDelete: deleteConversation,
+    isStreaming,
+  };
+
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -69,12 +78,7 @@ export function ConversationSidebar() {
                 key={item.id}
                 item={item}
                 isActive={activeId === item.id}
-                onSelect={switchTo}
-                onRename={renameConversation}
-                onPin={pinConversation}
-                onUnpin={unpinConversation}
-                onDelete={deleteConversation}
-                isStreaming={isStreaming}
+                {...cardProps}
               />
             ))}
           </div>
@@ -86,12 +90,7 @@ export function ConversationSidebar() {
             key={item.id}
             item={item}
             isActive={activeId === item.id}
-            onSelect={switchTo}
-            onRename={renameConversation}
-            onPin={pinConversation}
-            onUnpin={unpinConversation}
-            onDelete={deleteConversation}
-            isStreaming={isStreaming}
+            {...cardProps}
           />
         ))}
 

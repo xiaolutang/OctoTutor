@@ -327,7 +327,7 @@ describe('ConversationItemCard 三点菜单交互逻辑', () => {
   // 置顶操作
   // ----------------------------------
   describe('置顶操作', () => {
-    it('对未置顶的 item 点击置顶应调用 onPin', () => {
+    it('对未置顶的 item 点击置顶应调用 onTogglePin', () => {
       const item = createMockItem({ pinned: false });
       let state = createInitialState(item.title);
       state = toggleMenu(state);
@@ -352,7 +352,7 @@ describe('ConversationItemCard 三点菜单交互逻辑', () => {
   // 取消置顶
   // ----------------------------------
   describe('取消置顶', () => {
-    it('对已置顶的 item 点击取消置顶应调用 onUnpin', () => {
+    it('对已置顶的 item 点击取消置顶应调用 onTogglePin', () => {
       const item = createMockItem({ pinned: true, pinned_at: '2026-05-25T00:00:00Z' });
       let state = createInitialState(item.title);
       state = toggleMenu(state);

@@ -15,13 +15,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Message, SSECallbacks, ConversationItem } from '@/chat/types';
-
-// ============================================================
-// 工具函数
-// ============================================================
-function createId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-}
+import { createId } from '@/lib/utils';
 
 // ============================================================
 // Mock 依赖

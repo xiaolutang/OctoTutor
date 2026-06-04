@@ -8,7 +8,6 @@ interface ChatInputProps {
   onSend: () => void;
   onStop: () => void;
   isStreaming: boolean;
-  disabled?: boolean;
 }
 
 export function ChatInput({
@@ -17,7 +16,6 @@ export function ChatInput({
   onSend,
   onStop,
   isStreaming,
-  disabled = false,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -33,7 +31,7 @@ export function ChatInput({
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if (!isStreaming && !disabled && value.trim()) {
+      if (!isStreaming && value.trim()) {
         onSend();
       }
     }
@@ -47,7 +45,7 @@ export function ChatInput({
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder="输入问题..."
-        disabled={disabled}
+        disabled={isStreaming}
         rows={1}
         className="flex-1 resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm leading-relaxed placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
       />
@@ -61,7 +59,7 @@ export function ChatInput({
       ) : (
         <button
           onClick={onSend}
-          disabled={isStreaming || !value.trim() || disabled}
+          disabled={isStreaming || !value.trim()}
           className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           发送

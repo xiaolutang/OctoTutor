@@ -15,6 +15,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ConversationItem } from '@/chat/types';
+import { createId } from '@/lib/utils';
 
 // ============================================================
 // 测试数据工厂
@@ -22,7 +23,7 @@ import type { ConversationItem } from '@/chat/types';
 
 function createItem(overrides: Partial<ConversationItem> = {}): ConversationItem {
   return {
-    id: `conv-${Math.random().toString(36).slice(2, 8)}`,
+    id: `conv-${createId()}`,
     title: '测试对话',
     pinned: false,
     pinned_at: null,

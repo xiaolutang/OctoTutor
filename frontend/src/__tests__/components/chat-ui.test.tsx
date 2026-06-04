@@ -39,12 +39,11 @@ vi.mock('@/chat/use-conversation', () => ({
   }),
 }));
 
+import { createId } from '@/lib/utils';
+
 // ============================================================
 // 辅助：模拟 ChatUI 逻辑（纯函数，不依赖 React 渲染）
 // ============================================================
-function createId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-}
 
 /**
  * 模拟 handleSend 逻辑的纯函数版本

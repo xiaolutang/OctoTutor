@@ -14,6 +14,7 @@ import {
   conversationReducer,
   initialState,
 } from '@/chat/conversation-reducer';
+import { createId } from '@/lib/utils';
 
 const STORAGE_KEY = 'octotutor_active_conversation_id';
 
@@ -23,7 +24,7 @@ const STORAGE_KEY = 'octotutor_active_conversation_id';
 
 function createMockItem(overrides: Partial<ConversationItem> = {}): ConversationItem {
   return {
-    id: `conv-${Math.random().toString(36).slice(2, 8)}`,
+    id: `conv-${createId()}`,
     title: '测试对话',
     pinned: false,
     pinned_at: null,

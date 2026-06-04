@@ -10,8 +10,7 @@ interface ConversationItemCardProps {
   isActive: boolean;
   onSelect: (id: string) => void;
   onRename: (id: string, title: string) => Promise<void>;
-  onPin: (id: string) => Promise<void>;
-  onUnpin: (id: string) => Promise<void>;
+  onTogglePin: (id: string, pinned: boolean) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   isStreaming: boolean;
 }
@@ -36,8 +35,7 @@ export function ConversationItemCard({
   isActive,
   onSelect,
   onRename,
-  onPin,
-  onUnpin,
+  onTogglePin,
   onDelete,
   isStreaming,
 }: ConversationItemCardProps) {
@@ -190,11 +188,7 @@ export function ConversationItemCard({
                 onClick={async () => {
                   setMenuOpen(false);
                   try {
-                    if (item.pinned) {
-                      await onUnpin(item.id);
-                    } else {
-                      await onPin(item.id);
-                    }
+                    await onTogglePin(item.id, item.pinned);
                   } catch (err) {
                     const msg = err instanceof Error ? err.message : (item.pinned ? '取消置顶失败' : '置顶失败');
                     toast.error(msg);

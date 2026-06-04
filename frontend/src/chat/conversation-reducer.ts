@@ -64,6 +64,19 @@ export const initialState: ConversationListState = {
 };
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function partitionByPinned(items: ConversationItem[]) {
+  const pinned: ConversationItem[] = [];
+  const normal: ConversationItem[] = [];
+  for (const item of items) {
+    (item.pinned ? pinned : normal).push(item);
+  }
+  return { pinned, normal };
+}
+
+// ---------------------------------------------------------------------------
 // Reducer
 // ---------------------------------------------------------------------------
 
@@ -93,8 +106,7 @@ export function conversationReducer(
       // 新对话 pinned=false，插入到普通区头部（置顶区之后）
       {
         storeActiveId(action.payload.id);
-        const pinned = state.items.filter((i) => i.pinned);
-        const normal = state.items.filter((i) => !i.pinned);
+        const { pinned, normal } = partitionByPinned(state.items);
         return {
           ...state,
           items: [...pinned, action.payload, ...normal],
@@ -134,13 +146,10 @@ export function conversationReducer(
       {
         const updated = action.payload;
         const rest = state.items.filter((item) => item.id !== updated.id);
+        const { pinned, normal } = partitionByPinned(rest);
         if (updated.pinned) {
-          const pinned = rest.filter((i) => i.pinned);
-          const normal = rest.filter((i) => !i.pinned);
           return { ...state, items: [updated, ...pinned, ...normal] };
         }
-        const pinned = rest.filter((i) => i.pinned);
-        const normal = rest.filter((i) => !i.pinned);
         return { ...state, items: [...pinned, updated, ...normal] };
       }
     default:

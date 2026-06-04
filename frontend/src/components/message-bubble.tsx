@@ -23,6 +23,7 @@ const statusLabels: Record<string, string> = {
 };
 
 const remarkPlugins = [remarkMath];
+const rehypePlugins = [[rehypeKatex, { throwOnError: false }]] as const;
 
 export const MessageBubble = memo(function MessageBubble({
   message,
@@ -79,7 +80,7 @@ export const MessageBubble = memo(function MessageBubble({
               ) : (
                 <ReactMarkdown
                   remarkPlugins={remarkPlugins}
-                  rehypePlugins={[[rehypeKatex, { throwOnError: false }]]}
+                  rehypePlugins={rehypePlugins}
                 >
                   {message.content}
                 </ReactMarkdown>
