@@ -23,7 +23,7 @@ const statusLabels: Record<string, string> = {
 };
 
 const remarkPlugins = [remarkMath];
-const rehypePlugins = [[rehypeKatex, { throwOnError: false }]] as const;
+const rehypePlugins: [typeof rehypeKatex, { throwOnError: boolean }][] = [[rehypeKatex, { throwOnError: false }]];
 
 export const MessageBubble = memo(function MessageBubble({
   message,
