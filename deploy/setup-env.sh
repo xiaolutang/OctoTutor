@@ -20,7 +20,7 @@ REMOTE_PLATFORM=linux/amd64
 
 # ===== 线上 Auth SDK =====
 AUTH_CLIENT_ID=bM-IuROa8huhe8Ih
-AUTH_BASE_URL=https://auth.xiaolutang.top
+AUTH_BASE_URL=https://your-server-ip/auth
 EOF
 
 echo "✓ 已生成 $ENV_FILE"

@@ -3,7 +3,7 @@
 #
 # 特点:
 #   - 依赖外部 Traefik 网关（gateway 网络）
-#   - 通过 Traefik labels 配置 TLS + 域名路由
+#   - IP 直连 + PathPrefix 路由（HTTP + HTTPS 自签名证书）
 #   - 需要远端已部署基础设施（Traefik + auth-center）
 #   - 前端 catch-all + 后端 /api/* 路由
 
@@ -24,12 +24,17 @@ services:
       - auth-network
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.octotutor-frontend.rule=Host(`${OCTOTUTOR_DOMAIN:-octotutor.xiaolutang.top}`)"
-      - "traefik.http.routers.octotutor-frontend.entrypoints=websecure"
-      - "traefik.http.routers.octotutor-frontend.tls=true"
-      - "traefik.http.routers.octotutor-frontend.tls.certresolver=ali"
+      # HTTP 路由
+      - "traefik.http.routers.octotutor-frontend.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.octotutor-frontend.entrypoints=web"
       - "traefik.http.routers.octotutor-frontend.priority=1"
       - "traefik.http.routers.octotutor-frontend.service=octotutor-frontend-svc"
+      # HTTPS 路由（Traefik 默认自签名证书）
+      - "traefik.http.routers.octotutor-frontend-secure.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.octotutor-frontend-secure.entrypoints=websecure"
+      - "traefik.http.routers.octotutor-frontend-secure.priority=1"
+      - "traefik.http.routers.octotutor-frontend-secure.tls=true"
+      - "traefik.http.routers.octotutor-frontend-secure.service=octotutor-frontend-svc"
       - "traefik.http.services.octotutor-frontend-svc.loadbalancer.server.port=3000"
     deploy:
       resources:
@@ -46,22 +51,30 @@ services:
       - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - NEWAPI_API_KEY=${NEWAPI_API_KEY}
-      - NEWAPI_BASE_URL=http://new-api:13000/v1
+      - NEWAPI_BASE_URL=http://new-api:3000/v1
       - AUTH_CLIENT_ID=${AUTH_CLIENT_ID}
       - AUTH_BASE_URL=${AUTH_BASE_URL}
+      - DATABASE_URL=postgresql://octotutor:octotutor2024@auth-center-postgres:5432/octotutor_checkpoints
       - CHROMA_PERSIST_DIR=/app/data/chroma_db
     volumes:
       - octotutor-data:/app/data
     networks:
       - gateway
+      - auth-network
+      - new-api-net
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.octotutor-backend.rule=Host(`${OCTOTUTOR_DOMAIN:-octotutor.xiaolutang.top}`) && PathPrefix(`/api/`)"
-      - "traefik.http.routers.octotutor-backend.entrypoints=websecure"
-      - "traefik.http.routers.octotutor-backend.tls=true"
-      - "traefik.http.routers.octotutor-backend.tls.certresolver=ali"
+      # HTTP 路由
+      - "traefik.http.routers.octotutor-backend.rule=PathPrefix(`/api/`)"
+      - "traefik.http.routers.octotutor-backend.entrypoints=web"
       - "traefik.http.routers.octotutor-backend.priority=10"
       - "traefik.http.routers.octotutor-backend.service=octotutor-backend-svc"
+      # HTTPS 路由（Traefik 默认自签名证书）
+      - "traefik.http.routers.octotutor-backend-secure.rule=PathPrefix(`/api/`)"
+      - "traefik.http.routers.octotutor-backend-secure.entrypoints=websecure"
+      - "traefik.http.routers.octotutor-backend-secure.priority=10"
+      - "traefik.http.routers.octotutor-backend-secure.tls=true"
+      - "traefik.http.routers.octotutor-backend-secure.service=octotutor-backend-svc"
       - "traefik.http.services.octotutor-backend-svc.loadbalancer.server.port=8000"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
@@ -83,3 +96,6 @@ networks:
     external: true
   auth-network:
     external: true
+  new-api-net:
+    external: true
+    name: new-api_default
