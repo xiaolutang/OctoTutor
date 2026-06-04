@@ -25,6 +25,7 @@
 | R014 | sidebar-ux-polish | 2 | archived | 2026-06-04 |
 | R015 | code-convergence | 6 | archived | 2026-06-04 |
 | R016 | conversation-security-fix | 3 | archived | 2026-06-04 |
+| R017 | ip-direct-access | 2 | archived | 2026-06-04 |
 
 ## 模块清单
 
@@ -44,7 +45,7 @@
 | classifier | 问题分类器（textbook/unrelated + 社交噪音检测） |
 | chat | ChatService 对话管线（混合检索 + Rerank + LLM 生成） |
 | infra | LLM Generator + Reranker + BM25Retriever 基础设施层 |
-| docker-deploy | Docker Compose 双容器 + Traefik 路由 |
+| docker-deploy | Docker Compose 双容器 + Traefik IP 直连 PathPrefix 路由 |
 | classifiers | BlockType LLM 分类（NewAPI glm-5.1） |
 | chat-ui | Chat UI 组件（ChatUI + MessageBubble + ChatInput + useChatStream） |
 | sse | SSE 流式端点 + 事件序列化 + 断线检测 |
@@ -110,6 +111,14 @@
 | CAP-conv-008 | 对话加载错误状态 UI（loadError + retryLoad + 渲染优先级） |
 
 ## 变更记录
+
+### R017 ip-direct-access (2026-06-04)
+
+- docker-compose.yml Traefik 路由从域名 Host() 改为 IP PathPrefix() 直连（前后端 HTTP+HTTPS 双路由）
+- AUTH_BASE_URL 从域名改为 `https://<IP>/auth`（HTTPS 避免混合内容策略阻止 OAuth）
+- NEWAPI_BASE_URL 端口修正 13000→3000（Docker 内部网络用容器端口）
+- 后端新增 auth-network（PostgreSQL 访问）和 new-api-net（LLM 调用）
+- 部署验证通过：飞书 OAuth 登录 + SSE 聊天正常
 
 ### R016 conversation-security-fix (2026-06-04)
 

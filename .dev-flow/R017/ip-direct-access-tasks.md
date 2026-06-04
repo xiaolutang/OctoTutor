@@ -7,7 +7,7 @@ workflow:
   evaluate_provider: local
   mode: direct
 plan_format_exemption: true
-status: planned
+status: archived
 ---
 
 # IP 直连改造 — 任务清单
