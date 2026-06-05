@@ -89,6 +89,11 @@
   - 原因：Date.now().toString(36) + Math.random() 方案在高并发下有碰撞风险，可考虑 crypto.randomUUID() 或 nanoid
   - 优先级：低
 
+- [ ] 重构类 RC 归档时检查 feature-map 节点拆分
+  - 来源：R018 归档 feature-map 代码一致性审查
+  - 原因：R012/R013 重构把大模块拆成小模块（如 Controller、Reducer、ConvUtils），归档时没有同步更新功能图节点，导致多次归档后累积偏差
+  - 优先级：中
+
 ## 已完成
 
 ## 已放弃
