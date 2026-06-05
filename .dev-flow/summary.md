@@ -1,6 +1,6 @@
 # OctoTutor Development Summary
 
-最后更新: 2026-06-04
+最后更新: 2026-06-05
 
 ## 需求包索引
 
@@ -26,6 +26,7 @@
 | R015 | code-convergence | 6 | archived | 2026-06-04 |
 | R016 | conversation-security-fix | 3 | archived | 2026-06-04 |
 | R017 | ip-direct-access | 2 | archived | 2026-06-04 |
+| R018 | validation-i18n | 4 | archived | 2026-06-05 |
 
 ## 模块清单
 
@@ -111,6 +112,13 @@
 | CAP-conv-008 | 对话加载错误状态 UI（loadError + retryLoad + 渲染优先级） |
 
 ## 变更记录
+
+### R018 validation-i18n (2026-06-05)
+
+- auth-center 全局 RequestValidationError 异常处理器，Pydantic 422 错误翻译为中文
+- 字段名中文映射（用户名、密码、邮箱、邀请码等）+ 错误类型中文映射（不能为空、不能少于N个字符等）
+- 返回 `{"detail": "中文消息"}` 格式，与 BaseAPIException 一致
+- test_register.py T16-T18 断言更新 + test_validation.py 新建 4 个独立测试，23 测试全通过
 
 ### R017 ip-direct-access (2026-06-04)
 

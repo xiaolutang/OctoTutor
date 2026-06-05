@@ -7,9 +7,11 @@ graph LR
     User[用户] --> ChatUI[Chat UI]
     ChatUI --> SSEHook[useChatStream]
     ChatUI --> ConvCtx[ConversationContext]
+    ConvCtx --> Reducer[conversation-reducer]
     ConvCtx --> Sidebar[Sidebar 侧边栏]
-    SSEHook --> ApiClient[apiClient 统一网络层]
-    SSEHook --> ResumeFn[resumeStream 重连]
+    SSEHook --> Controller[SSE Controller]
+    Controller --> ApiClient[apiClient 统一网络层]
+    Controller --> ResumeFn[resumeStream 重连]
     ApiClient --> SSEEndpoint[SSE /api/chat/stream]
     ApiClient --> StopEP[POST /chat/stop]
     ApiClient --> TokenMgr[TokenManager]
@@ -40,7 +42,8 @@ graph LR
     Queue --> SSEGen[_create_sse_generator]
     ResumeEP[GET /resume] --> Queue
     StopEP --> RunGraph
-    ConvRouter --> Checkpointer[PostgresSaver/MemorySaver]
+    ConvRouter --> ConvUtils[conversation_utils]
+    ConvUtils --> Checkpointer[PostgresSaver/MemorySaver]
 
     ConvAPI --> ConvRepo[ConversationRepo]
     ConvRepo --> PG[(PostgreSQL)]
@@ -70,6 +73,7 @@ graph LR
     style Respond fill:#A5D6A7
     style Refuse fill:#A5D6A7
     style ConvRouter fill:#A5D6A7
+    style ConvUtils fill:#A5D6A7
     style Checkpointer fill:#A5D6A7
     style ConvRepo fill:#A5D6A7
     style AuthMiddleware fill:#A5D6A7
@@ -78,8 +82,10 @@ graph LR
     style ApiClient fill:#90CAF9
     style TokenMgr fill:#90CAF9
     style ConvCtx fill:#90CAF9
+    style Reducer fill:#90CAF9
     style Sidebar fill:#90CAF9
     style SSEHook fill:#FFB74D
+    style Controller fill:#FFB74D
     style ResumeFn fill:#FFB74D
     style RunGraph fill:#FFD54F
     style Queue fill:#FFD54F
@@ -92,8 +98,8 @@ graph LR
 
 | 颜色 | 前缀 | 含义 |
 |------|------|------|
-| 🔵 蓝色 | FF | 前端基础（apiClient, TokenManager, ConversationContext, Sidebar） |
-| 🟢 绿色 | BF/BB | 后端基础+业务（StateGraph, Auth, Checkpointer, ConvRouter, ConvRepo） |
+| 🔵 蓝色 | FF | 前端基础（apiClient, TokenManager, ConversationContext, Reducer, Sidebar） |
+| 🟢 绿色 | BF/BB | 后端基础+业务（StateGraph, Auth, Checkpointer, ConvRouter, ConvUtils, ConvRepo） |
 | 🟡 浅黄 | BB | 后端业务（Router + R012 SSE 解耦：_run_graph, Queue, Resume, Stop） |
-| 🟠 橙色 | FB | 前端业务（useChatStream, resumeStream） |
+| 🟠 橙色 | FB | 前端业务（useChatStream, Controller, resumeStream） |
 | 🟣 紫色 | BB | 评估基础设施（DetGrader, LLMJudge） |
