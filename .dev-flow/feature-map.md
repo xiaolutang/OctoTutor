@@ -5,17 +5,19 @@
 ```mermaid
 graph LR
     User[用户] --> ChatUI[Chat UI]
-    ChatUI --> SSEHook[useChatStream]
-    ChatUI --> ConvCtx[ConversationContext]
-    ConvCtx --> Reducer[conversation-reducer]
-    ConvCtx --> Sidebar[Sidebar 侧边栏]
-    SSEHook --> Controller[SSE Controller]
-    Controller --> ApiClient[apiClient 统一网络层]
+    ChatUI --> Controller[SSE Controller]
+    Controller --> SSEHook[useChatStream]
+    Controller --> ConvCtx[ConversationContext]
+    SSEHook --> ParseSSE[parse-sse 解析器]
+    SSEHook --> ApiClient[apiClient 统一网络层]
     Controller --> ResumeFn[resumeStream 重连]
     ApiClient --> SSEEndpoint[SSE /api/chat/stream]
     ApiClient --> StopEP[POST /chat/stop]
-    ApiClient --> TokenMgr[TokenManager]
     ApiClient --> ConvAPI[Conversation API]
+    ConvCtx --> Reducer[conversation-reducer]
+    ConvCtx --> Sidebar[Sidebar 侧边栏]
+    AuthCtx[AuthContext] --> TokenMgr[TokenManager]
+    AuthCtx -.-> ApiClient
 
     SSEEndpoint --> AuthMiddleware[JWT 鉴权 Depends]
     ChatAPI --> AuthMiddleware
@@ -25,11 +27,8 @@ graph LR
     AuthMiddleware --> StateGraph[LangGraph StateGraph]
     StateGraph --> Summarize[summarize 摘要压缩]
     Summarize --> Rewrite[rewrite 多轮改写]
-    Rewrite --> Classify[classify 分类器]
-    Classify -->|textbook| Retrieve[混合检索+Rerank]
-    Classify -->|unrelated| Refuse[refuse 拒绝]
-    Retrieve --> CtxInject[context injection 分级注入]
-    CtxInject --> Respond[respond ChatOpenAI]
+    Rewrite --> Retrieve[ChatService 混合检索+Rerank]
+    Retrieve --> Respond[respond + context injection]
 
     Retrieve --> Embedding[DashScopeEmbedding]
     Retrieve --> VectorStore[ChromaDBStore]
@@ -68,10 +67,8 @@ graph LR
     style StateGraph fill:#A5D6A7
     style Summarize fill:#A5D6A7
     style Rewrite fill:#A5D6A7
-    style Classify fill:#A5D6A7
-    style CtxInject fill:#A5D6A7
+    style Retrieve fill:#A5D6A7
     style Respond fill:#A5D6A7
-    style Refuse fill:#A5D6A7
     style ConvRouter fill:#A5D6A7
     style ConvUtils fill:#A5D6A7
     style Checkpointer fill:#A5D6A7
@@ -81,9 +78,11 @@ graph LR
     style LLMJudge fill:#CE93D8
     style ApiClient fill:#90CAF9
     style TokenMgr fill:#90CAF9
+    style AuthCtx fill:#90CAF9
     style ConvCtx fill:#90CAF9
     style Reducer fill:#90CAF9
     style Sidebar fill:#90CAF9
+    style ParseSSE fill:#FFB74D
     style SSEHook fill:#FFB74D
     style Controller fill:#FFB74D
     style ResumeFn fill:#FFB74D
@@ -98,8 +97,8 @@ graph LR
 
 | 颜色 | 前缀 | 含义 |
 |------|------|------|
-| 🔵 蓝色 | FF | 前端基础（apiClient, TokenManager, ConversationContext, Reducer, Sidebar） |
-| 🟢 绿色 | BF/BB | 后端基础+业务（StateGraph, Auth, Checkpointer, ConvRouter, ConvUtils, ConvRepo） |
-| 🟡 浅黄 | BB | 后端业务（Router + R012 SSE 解耦：_run_graph, Queue, Resume, Stop） |
-| 🟠 橙色 | FB | 前端业务（useChatStream, Controller, resumeStream） |
+| 🔵 蓝色 | FF | 前端基础（apiClient, TokenManager, AuthContext, ConversationContext, Reducer, Sidebar） |
+| 🟢 绿色 | BF/BB | 后端基础+业务（StateGraph, ChatService 检索, Respond, Auth, Checkpointer, ConvRouter, ConvUtils, ConvRepo） |
+| 🟡 浅黄 | BB | 后端业务（R012 SSE 解耦：_run_graph, Queue, SSEGen, Resume, Stop） |
+| 🟠 橙色 | FB | 前端业务（useChatStream, Controller, parse-sse, resumeStream） |
 | 🟣 紫色 | BB | 评估基础设施（DetGrader, LLMJudge） |
