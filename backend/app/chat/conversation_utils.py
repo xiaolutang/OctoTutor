@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 
-from app.chat.schemas import ApiMessage, ThinkingPayload
+from app.chat.schemas import ApiMessage, ThinkingPayload, ImageRef
 from app.domain.models import SourceReference
 
 logger = logging.getLogger(__name__)
@@ -114,7 +114,6 @@ def to_api_message(msg, index: int) -> ApiMessage:
         for img in raw_images:
             if isinstance(img, dict):
                 try:
-                    from app.chat.schemas import ImageRef
                     images.append(ImageRef(**img))
                 except Exception:
                     pass

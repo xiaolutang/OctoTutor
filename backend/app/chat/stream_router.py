@@ -149,7 +149,10 @@ async def _run_with_recognition(
     # 1. SSE status: recognizing
     await queue.put(_sse_frame("status", {"stage": "recognizing", "message": "正在识别图片..."}))
 
-    # 2. 调 VLM（30s 超时）
+    # 2. 始终保留图片元数据引用
+    image_refs_kwargs = [{"url": img.url, "image_id": img.image_id} for img in body.images]
+
+    # 3. 调 VLM（30s 超时），失败降级纯文字
     try:
         recognition_provider = app_state.recognition_provider
         recognized_text = await asyncio.wait_for(
@@ -158,7 +161,6 @@ async def _run_with_recognition(
             ),
             timeout=30,
         )
-        image_refs_kwargs = [{"url": img.url, "image_id": img.image_id} for img in body.images]
     except Exception:
         logger.warning("[stream] Vision LLM failed, degrading to text-only")
         recognized_text = ""
