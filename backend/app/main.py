@@ -21,7 +21,7 @@ from app.api.routes.config import router as config_router
 from app.chat.router import router as chat_router
 from app.chat.stream_router import router as stream_router
 from app.chat.conversation_router import router as conversation_router
-from app.chat.upload_router import router as upload_router
+from app.chat.upload_router import router as upload_router, serve_router as upload_serve_router
 from app.middleware.upload_mtime import upload_mtime_middleware
 
 
@@ -193,6 +193,7 @@ app.include_router(chat_router)
 app.include_router(stream_router)
 app.include_router(conversation_router)
 app.include_router(upload_router)
+app.include_router(upload_serve_router)
 
 # R019: 确保上传目录存在
 os.makedirs(settings.data_uploads_dir, exist_ok=True)

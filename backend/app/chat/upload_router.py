@@ -8,6 +8,8 @@ from app.config import settings
 from app.middleware.auth import UserContext, get_current_user
 
 router = APIRouter(prefix="/api/chat", tags=["upload"])
+# 图片访问路由：路径必须匹配 ImageManager 生成的 URL 格式 /api/uploads/...
+serve_router = APIRouter(prefix="/api", tags=["upload"])
 
 ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_SIZE_BYTES = settings.image_max_size_mb * 1024 * 1024
@@ -65,7 +67,7 @@ async def delete_image(
     return {"ok": True}
 
 
-@router.get("/uploads/{user_id}/{filename}")
+@serve_router.get("/uploads/{user_id}/{filename}")
 async def serve_upload(
     user_id: str,
     filename: str,
