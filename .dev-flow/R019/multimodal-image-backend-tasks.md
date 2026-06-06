@@ -24,10 +24,10 @@ status: planned
 
 ## 执行顺序
 
-1. 🔧 R019-BF001 — config.py + requirements.txt 配置（无依赖）
-2. 🔧 R019-BF002 — schemas.py 数据模型扩展（无依赖）
-3. ⬜ R019-BF003 — image_manager.py 图片管理模块（依赖 BF001）
-4. ⬜ R019-BF004 — recognition.py + prompts.py 识别层（依赖 BF001）
+1. ✅ R019-BF001 — config.py + requirements.txt 配置（无依赖）
+2. ✅ R019-BF002 — schemas.py 数据模型扩展（无依赖）
+3. 🔧 R019-BF003 — image_manager.py 图片管理模块（依赖 BF001）
+4. 🔧 R019-BF004 — recognition.py + prompts.py 识别层（依赖 BF001）
 5. ⬜ R019-BF005 — upload_mtime.py 图片访问中间件（依赖 BF003）
 6. ⬜ R019-BB001 — upload_router.py 上传/删除 API（依赖 BF002, BF003）
 7. ⬜ R019-BB002 — stream_router.py 图片预处理（依赖 BF002, BF004）
@@ -36,7 +36,7 @@ status: planned
 
 ---
 
-## R019-BF001：config.py + requirements.txt — 图片配置 `🔧 进行中`
+## R019-BF001：config.py + requirements.txt — 图片配置 `✅ 已完成`
 
 - 文件：`backend/app/config.py`, `backend/requirements.txt`
 - 改动类型：修改
@@ -47,7 +47,7 @@ status: planned
 - risk_tags: []
 - smoke_required: false
 - mode: direct
-- status: in_progress
+- status: completed
 - acceptance_criteria:
   - Settings 类新增 vision_model / image_max_size_mb / image_max_storage_mb 字段
   - requirements.txt 包含 python-multipart
@@ -81,7 +81,7 @@ python-multipart>=0.0.9
 
 ---
 
-## R019-BF002：schemas.py — 数据模型扩展 `⬜ 待处理`
+## R019-BF002：schemas.py — 数据模型扩展 `✅ 已完成`
 
 - 文件：`backend/app/chat/schemas.py`
 - 改动类型：修改
@@ -92,7 +92,7 @@ python-multipart>=0.0.9
 - risk_tags: []
 - smoke_required: false
 - mode: direct
-- status: pending
+- status: completed
 - acceptance_criteria:
   - ImageRef 模型定义存在且包含 url + image_id 字段
   - ChatRequest 新增 images 字段（default_factory=list, max_length=3）
@@ -144,7 +144,7 @@ stage: Literal["recognizing", "retrieving", "generating"]
 
 ---
 
-## R019-BF003：image_manager.py — 图片管理模块 `⬜ 待处理`
+## R019-BF003：image_manager.py — 图片管理模块 `🔧 进行中`
 
 - 文件：`backend/app/infra/image_manager.py`
 - 改动类型：新建
@@ -222,7 +222,7 @@ def touch(self, filepath: str) -> None:
 
 ---
 
-## R019-BF004：recognition.py + prompts.py — 识别层 `⬜ 待处理`
+## R019-BF004：recognition.py + prompts.py — 识别层 `🔧 进行中`
 
 - 文件：`backend/app/infra/recognition.py`（新建）, `backend/app/agent/prompts.py`（修改）
 - 改动类型：新建 + 修改
