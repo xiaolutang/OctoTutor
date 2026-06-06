@@ -4,21 +4,155 @@
 
 ## 系统拓扑
 
-```
-User → Traefik → Frontend (Next.js) → Browser
-                → Backend (FastAPI) → ChromaDB (embedded)
-                                   → DashScope API (Embedding + OCR + Reranker)
-                                   → LLM (OpenAI 兼容协议)
-                                   → BM25 (内存索引)
-                                   → PostgreSQL (checkpoints + conversations)
+```mermaid
+graph TD
+    USER["用户浏览器"]
 
-SSE 流式连接：Browser → Traefik → Backend SSE Endpoint (/api/chat/stream)
+    %% ── 网关 ──
+    TRAEFIK["Traefik 反向代理"]
 
-认证链路：
-  Browser → auth-center (OAuth 2.0 + PKCE) → TokenManager (localStorage)
-  apiClient (Bearer token) → Backend JWT 验证 (HS256 共享密钥)
-  auth-center ← 共享 JWT_SECRET_KEY → Backend
+    %% ── OctoTutor 容器 ──
+    FE["Frontend — Next.js :3000"]
+    BE["Backend — FastAPI :8000<br/>ChromaDB · BM25 (内嵌)"]
+
+    %% ── xlfoundryTest 基础设施 ──
+    AUTH["auth-center — OAuth 2.0 + JWT"]
+    PG["PostgreSQL :5432<br/>checkpoints · conversations"]
+
+    %% ── 外部 API ──
+    DASHSCOPE["DashScope API<br/>Embedding · OCR · Reranker"]
+    LLM["NewAPI — LLM (OpenAI 兼容)"]
+
+    %% ── 请求路由 ──
+    USER --> TRAEFIK
+    TRAEFIK -->|" /*"| FE
+    TRAEFIK -->|"/api/*"| BE
+
+    %% ── 前端连接 ──
+    FE -->|"OAuth 2.0 PKCE"| AUTH
+    FE -->|"Bearer token · SSE"| BE
+
+    %% ── 后端数据 ──
+    BE --> PG
+    BE --> DASHSCOPE
+    BE --> LLM
+
+    %% ── 认证共享 ──
+    AUTH --> PG
+    AUTH -.->|"共享 HS256 密钥"| BE
+
+    %% ── 样式：OctoTutor 容器 ──
+    style FE fill:#2196F3,color:#fff
+    style BE fill:#2196F3,color:#fff
+
+    %% ── 样式：xlfoundryTest 基础设施 ──
+    style TRAEFIK fill:#616161,color:#fff
+    style AUTH fill:#616161,color:#fff
+    style PG fill:#616161,color:#fff
+
+    %% ── 样式：外部 API ──
+    style DASHSCOPE fill:#FF9800,color:#fff
+    style LLM fill:#FF9800,color:#fff
+
+    %% ── 样式：用户 ──
+    style USER fill:#fff,color:#333,stroke:#999
 ```
+
+> **图例**：蓝色 = OctoTutor 容器，深灰色 = xlfoundryTest 基础设施，橙色 = 外部 API。
+> ChromaDB（向量存储）和 BM25（稀疏检索）内嵌于 Backend 进程，非独立容器。
+> auth-center 和 PostgreSQL 由 xlfoundryTest 项目管理，OctoTutor 通过同一 Docker 网络访问。
+
+### 部署差异
+
+| 环境 | 网络 | NewAPI 访问方式 |
+|------|------|----------------|
+| 本地 | `auth-network-local` 单网络 | `host.docker.internal:13000`（宿主机） |
+| 远程 | `gateway` + `auth-network` + `new-api-net` 三网络 | `new-api:3000`（容器直连） |
+
+## 数据模型
+
+PostgreSQL 共 10 张表，分属 2 个独立数据库。OctoTutor 通过 JWT 中的 `user_id` 与 auth-center 逻辑关联，无物理外键。
+
+```mermaid
+erDiagram
+    %% ── auth-center 数据库 (auth_center) ──
+    admins {
+        uuid id PK
+        string username
+        string role
+    }
+    invite_codes {
+        uuid id PK
+        string code UK
+        uuid created_by FK
+        integer max_uses
+        timestamp expires_at
+    }
+    users {
+        uuid id PK
+        string username UK
+        string email
+        uuid invite_code_id FK
+        boolean is_active
+    }
+    login_logs {
+        uuid id PK
+        uuid user_id FK
+        string login_type
+        string result
+        timestamp created_at
+    }
+    apps {
+        uuid id PK
+        string name
+        string client_id UK
+    }
+
+    %% ── OctoTutor 数据库 (octotutor_checkpoints) ──
+    conversations {
+        string id PK
+        string user_id "来自JWT，逻辑FK→users.id"
+        string title
+        boolean pinned
+        timestamp updated_at
+    }
+    checkpoints {
+        text thread_id PK "FK→conversations.id"
+        text checkpoint_ns PK
+        text checkpoint_id PK
+        text parent_checkpoint_id
+        jsonb checkpoint "含messages等"
+    }
+    checkpoint_blobs {
+        text thread_id PK
+        text checkpoint_ns PK
+        text channel PK
+        text version PK
+        bytea blob
+    }
+    checkpoint_writes {
+        text thread_id PK
+        text checkpoint_ns PK
+        text checkpoint_id PK
+        text task_id PK
+        integer idx PK
+    }
+
+    %% ── auth-center 关系 ──
+    admins ||--o{ invite_codes : creates
+    invite_codes ||--o{ users : invites
+    users ||--o{ login_logs : logs
+    apps ||--o{ login_logs : client_id
+
+    %% ── OctoTutor 关系 ──
+    conversations ||--o{ checkpoints : thread_id
+    conversations ||--o{ checkpoint_blobs : thread_id
+    conversations ||--o{ checkpoint_writes : thread_id
+```
+
+> **说明**：`conversations.user_id` 与 `users.id` 为跨库逻辑关联（通过 JWT 传递），无物理外键。
+> `conversations.id` 等于 LangGraph 的 `thread_id`，对话元数据在 `conversations`，消息历史在 `checkpoints.checkpoint` JSONB 字段。
+> RAG 数据使用 ChromaDB（向量数据库），不在 PostgreSQL 中。
 
 ## 关键决策与理由
 

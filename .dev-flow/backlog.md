@@ -14,10 +14,6 @@
   - 原因：当前评估只输出分数报告，缺少中间产物（rewritten_question、context_chunks、AI 回答）的完整日志，不便于回查评分器有效性
   - 优先级：中
 
-- [ ] /chat 刷新后对话列表时有时无（L2 缺陷 — Auth 竞态）
-  - 来源：工作中发现（R010 真实评估部署后用户刷新测试）
-  - 原因：ConversationProvider 的 useEffect([]) 不等 Auth 初始化就发起 fetchConversationList，与 AuthProvider 的 registerAuthHandlers 异步注册形成竞态。修复方案：useEffect 依赖 [isInitialized]，参照 controller.ts:37-48。关联缺陷 ID: DF-20260527-01，关联任务: R009-FF003
-  - 优先级：高
 
 - [ ] 最后一条消息的重新编辑功能
   - 来源：R010 评估过程中想到
@@ -94,7 +90,23 @@
   - 原因：R012/R013 重构把大模块拆成小模块（如 Controller、Reducer、ConvUtils），归档时没有同步更新功能图节点，导致多次归档后累积偏差
   - 优先级：中
 
+- [ ] 数据库连接池加固（SQLAlchemy + PostgresSaver）
+  - 来源：工作中发现（线上 PostgresSaver 单连接断开后无法重连，对话消息加载失败）
+  - 原因：PostgresSaver 当前用 psycopg 单连接，无重连机制；SQLAlchemy engine 缺少 pool_pre_ping 保活配置。需改为：1) PostgresSaver 从单连接改为 psycopg_pool.AsyncConnectionPool（自动重连+保活）；2) SQLAlchemy 加 pool_pre_ping=True + pool_recycle=1800
+  - 优先级：高
+
+- [ ] 前端 controller.ts 重命名 + Hook 职责拆分
+  - 来源：R019 方案设计讨论
+  - 原因：controller.ts 应改为 use-chat-controller.ts 符合 React Hook 命名惯例；useChatController 330 行职责偏大，可拆为 useChatMessages、useStreamResume 等更小的 Hook
+  - 优先级：低
+
 ## 已完成
+
+- [x] /chat 刷新后对话列表时有时无（L2 缺陷 — Auth 竞态）
+  - 来源：工作中发现（R010 真实评估部署后用户刷新测试）
+  - 完成：2026-06-05
+  - 证据：conversation-context.tsx 的 useEffect 依赖已改为 [isInitialized]，竞态已修复
+  - 关联缺陷 ID: DF-20260527-01，关联任务: R009-FF003
 
 ## 已放弃
 
