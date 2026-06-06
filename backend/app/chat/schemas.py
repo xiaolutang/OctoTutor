@@ -7,10 +7,17 @@ from pydantic import BaseModel, Field, field_validator
 from app.domain.models import SourceReference
 
 
+class ImageRef(BaseModel):
+    """图片引用"""
+    url: str
+    image_id: str
+
+
 class ChatRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=2000, description="学生问题")
     top_k: int = Field(default=10, ge=3, le=20, description="检索数量")
     conversation_id: str | None = Field(default=None, description="对话 ID，为空时自动创建")
+    images: list[ImageRef] = Field(default_factory=list, max_length=3, description="图片引用列表")
 
     @field_validator("question")
     @classmethod
@@ -38,7 +45,7 @@ class StreamEvent:
 @dataclass
 class StatusPayload:
     """status 事件数据"""
-    stage: Literal["retrieving", "generating"]
+    stage: Literal["recognizing", "retrieving", "generating"]
     message: str
 
 
@@ -57,6 +64,7 @@ class ApiMessage(BaseModel):
     status: str = "completed"
     sources: list[SourceReference] = Field(default_factory=list)
     thinking_steps: list[ThinkingPayload] = Field(default_factory=list)
+    images: list[ImageRef] = Field(default_factory=list)
     created_at: str = ""
 
 
