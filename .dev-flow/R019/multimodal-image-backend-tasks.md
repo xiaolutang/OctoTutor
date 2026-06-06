@@ -26,9 +26,9 @@ status: planned
 
 1. ✅ R019-BF001 — config.py + requirements.txt 配置（无依赖）
 2. ✅ R019-BF002 — schemas.py 数据模型扩展（无依赖）
-3. 🔧 R019-BF003 — image_manager.py 图片管理模块（依赖 BF001）
-4. 🔧 R019-BF004 — recognition.py + prompts.py 识别层（依赖 BF001）
-5. ⬜ R019-BF005 — upload_mtime.py 图片访问中间件（依赖 BF003）
+3. ✅ R019-BF003 — image_manager.py 图片管理模块（依赖 BF001）
+4. ✅ R019-BF004 — recognition.py + prompts.py 识别层（依赖 BF001）
+5. 🔧 R019-BF005 — upload_mtime.py 图片访问中间件（依赖 BF003）
 6. ⬜ R019-BB001 — upload_router.py 上传/删除 API（依赖 BF002, BF003）
 7. ⬜ R019-BB002 — stream_router.py 图片预处理（依赖 BF002, BF004）
 8. ⬜ R019-BB003 — conversation_utils.py + conversation_router.py 序列化+清理（依赖 BF002, BF003）
@@ -144,7 +144,7 @@ stage: Literal["recognizing", "retrieving", "generating"]
 
 ---
 
-## R019-BF003：image_manager.py — 图片管理模块 `🔧 进行中`
+## R019-BF003：image_manager.py — 图片管理模块 `✅ 已完成`
 
 - 文件：`backend/app/infra/image_manager.py`
 - 改动类型：新建
@@ -222,7 +222,7 @@ def touch(self, filepath: str) -> None:
 
 ---
 
-## R019-BF004：recognition.py + prompts.py — 识别层 `🔧 进行中`
+## R019-BF004：recognition.py + prompts.py — 识别层 `✅ 已完成`
 
 - 文件：`backend/app/infra/recognition.py`（新建）, `backend/app/agent/prompts.py`（修改）
 - 改动类型：新建 + 修改
@@ -280,7 +280,7 @@ class VLMRecognitionProvider:
 
 ---
 
-## R019-BF005：upload_mtime.py — 图片访问中间件 `⬜ 待处理`
+## R019-BF005：upload_mtime.py — 图片访问中间件 `🔧 进行中`
 
 - 文件：`backend/app/middleware/upload_mtime.py`
 - 改动类型：新建
