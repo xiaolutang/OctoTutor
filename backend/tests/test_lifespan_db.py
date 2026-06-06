@@ -63,6 +63,17 @@ def mock_deps():
     mocks["graph"] = mock_graph
     mocks["create_graph"] = MagicMock(return_value=mock_graph)
 
+    # R019: ImageManager
+    mock_image_manager = MagicMock()
+    mock_image_manager.cleanup_lru = AsyncMock(return_value=0)
+    mocks["image_manager_instance"] = mock_image_manager
+    mocks["ImageManager"] = MagicMock(return_value=mock_image_manager)
+
+    # R019: VLMRecognitionProvider
+    mock_vlm = MagicMock()
+    mocks["vlm_instance"] = mock_vlm
+    mocks["VLMRecognitionProvider"] = MagicMock(return_value=mock_vlm)
+
     return mocks
 
 
@@ -100,6 +111,8 @@ async def _run_lifespan_with_mocks(mock_deps, mock_db, pg_saver_fail=False):
          patch("app.main.LLMGenerator", mock_deps["LLMGenerator"]), \
          patch("app.main.ChatService", mock_deps["ChatService"]), \
          patch("app.main.create_graph", mock_deps["create_graph"]), \
+         patch("app.main.ImageManager", mock_deps["ImageManager"]), \
+         patch("app.main.VLMRecognitionProvider", mock_deps["VLMRecognitionProvider"]), \
          patch("app.main.engine", mock_db["engine"]), \
          patch("app.main.async_session_factory", mock_db["async_session_factory"]), \
          patch("app.main.create_tables", mock_db["create_tables"]), \
