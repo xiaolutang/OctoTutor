@@ -2,7 +2,6 @@
 import os
 
 import pytest
-from starlette.testclient import TestClient
 
 from app.middleware.upload_mtime import upload_mtime_middleware
 
@@ -18,6 +17,12 @@ class FakeApp:
         @property
         def image_manager(self):
             return self
+
+        def disk_path_from_url(self, url: str) -> str:
+            """模拟 ImageManager.disk_path_from_url"""
+            prefix = "/api/uploads/"
+            relative = url[len(prefix):]
+            return os.path.join(self._upload_dir, relative)
 
         def touch(self, filepath):
             self._touched_paths.append(filepath)
@@ -42,7 +47,6 @@ async def test_upload_path_triggers_touch():
     fake_app = FakeApp()
 
     from starlette.requests import Request
-    from starlette.datastructures import URL
 
     scope = {
         "type": "http",
@@ -86,21 +90,19 @@ async def test_non_upload_path_skips_touch():
 @pytest.mark.asyncio
 async def test_touch_exception_does_not_block():
     """touch 抛异常时不阻断响应。"""
-    fake_app = FakeApp()
-    # 让 touch 抛异常
-    fake_app.state._touched_paths = None  # type: ignore
 
-    class BrokenTouch:
-        _upload_dir = "data/images"
-
-        @property
-        def image_manager(self):
-            return self
+    class BrokenManager:
+        def disk_path_from_url(self, url: str) -> str:
+            return "/some/path"
 
         def touch(self, filepath):
             raise RuntimeError("disk error")
 
-    fake_app.state = BrokenTouch()  # type: ignore
+    class BrokenState:
+        image_manager = BrokenManager()
+
+    fake_app = FakeApp()
+    fake_app.state = BrokenState()  # type: ignore
 
     scope = {
         "type": "http",

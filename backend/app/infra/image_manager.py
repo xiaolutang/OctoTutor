@@ -88,6 +88,30 @@ class ImageManager:
 
         return False
 
+    def disk_path_from_url(self, url: str) -> str:
+        """从 URL 解析磁盘绝对路径（不做归属校验）。
+
+        供内部模块（recognition、middleware）使用。外部请求的归属校验
+        由 resolve_filepath 或路由层负责。
+
+        Args:
+            url: URL 路径，格式 ``/api/uploads/{user_id}/{filename}``。
+
+        Returns:
+            磁盘绝对路径。
+
+        Raises:
+            ValueError: URL 格式无效。
+        """
+        prefix = "/api/uploads/"
+        if not url.startswith(prefix):
+            raise ValueError(f"Invalid upload URL: {url}")
+        relative = url[len(prefix):]
+        parts = relative.split("/", 1)
+        if len(parts) != 2:
+            raise ValueError(f"Invalid upload URL: {url}")
+        return os.path.abspath(os.path.join(self._upload_dir, parts[0], parts[1]))
+
     def resolve_filepath(self, url: str, user_id: str) -> str:
         """从 URL 解析磁盘路径，校验 user_id 匹配。
 

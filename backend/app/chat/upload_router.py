@@ -82,9 +82,10 @@ async def serve_upload(
         raise HTTPException(404, "图片不存在")
 
     image_manager = request.app.state.image_manager
-    filepath = os.path.join(image_manager._upload_dir, user_id, filename)
+    url = f"/api/uploads/{user_id}/{filename}"
+    filepath = image_manager.resolve_filepath(url, user.user_id)
 
     if not os.path.isfile(filepath):
         raise HTTPException(404, "图片不存在")
 
-    return FileResponse(filepath)
+    return FileResponse(filepath, headers={"Cache-Control": "private, max-age=3600"})

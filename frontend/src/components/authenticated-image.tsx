@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 
 interface AuthenticatedImageProps {
@@ -19,45 +19,58 @@ export function AuthenticatedImage({ src, alt, className, onClick }: Authenticat
   const [failed, setFailed] = useState(false);
   const { getAccessToken } = useAuth();
   const currentSrc = useRef(src);
+  const blobUrlRef = useRef<string | null>(null);
+
+  const revokeCurrentBlob = useCallback(() => {
+    if (blobUrlRef.current) {
+      URL.revokeObjectURL(blobUrlRef.current);
+      blobUrlRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     currentSrc.current = src;
     setFailed(false);
-    let objectUrl: string | null = null;
+    let cancelled = false;
 
     (async () => {
       try {
         const token = await getAccessToken();
+        if (cancelled || currentSrc.current !== src) return;
         const res = await fetch(src, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
-        if (!res.ok || currentSrc.current !== src) {
-          setFailed(true);
+        if (!res.ok || cancelled || currentSrc.current !== src) {
+          if (!cancelled) setFailed(true);
           return;
         }
         const blob = await res.blob();
-        objectUrl = URL.createObjectURL(blob);
-        if (currentSrc.current === src) {
-          setBlobUrl(objectUrl);
-        } else {
-          URL.revokeObjectURL(objectUrl);
-        }
+        if (cancelled || currentSrc.current !== src) return;
+
+        const newUrl = URL.createObjectURL(blob);
+        revokeCurrentBlob();
+        blobUrlRef.current = newUrl;
+        setBlobUrl(newUrl);
       } catch {
-        setFailed(true);
+        if (!cancelled) setFailed(true);
       }
     })();
 
     return () => {
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      cancelled = true;
     };
-  }, [src, getAccessToken]);
+  }, [src, getAccessToken, revokeCurrentBlob]);
+
+  // 组件卸载时清理 blob URL
+  useEffect(() => {
+    return () => revokeCurrentBlob();
+  }, [revokeCurrentBlob]);
+
+  const placeholderClass = "flex h-20 w-20 items-center justify-center rounded text-xs";
 
   if (failed) {
     return (
-      <div
-        className="flex h-20 w-20 items-center justify-center rounded bg-white/20 text-xs"
-        onClick={onClick}
-      >
+      <div className={`${placeholderClass} bg-white/20`} onClick={onClick}>
         图片已过期
       </div>
     );
@@ -65,10 +78,7 @@ export function AuthenticatedImage({ src, alt, className, onClick }: Authenticat
 
   if (!blobUrl) {
     return (
-      <div
-        className="flex h-20 w-20 items-center justify-center rounded bg-white/10 text-xs text-muted-foreground"
-        onClick={onClick}
-      >
+      <div className={`${placeholderClass} bg-white/10 text-muted-foreground`} onClick={onClick}>
         加载中...
       </div>
     );

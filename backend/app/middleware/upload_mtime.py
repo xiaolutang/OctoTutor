@@ -1,7 +1,5 @@
 """图片访问中间件 — 访问 /api/uploads/ 时更新文件 mtime（LRU 热度标记）。"""
 
-import os
-
 from starlette.requests import Request
 from starlette.responses import Response
 
@@ -16,8 +14,7 @@ async def upload_mtime_middleware(request: Request, call_next) -> Response:
     if request.url.path.startswith("/api/uploads/"):
         try:
             image_manager = request.app.state.image_manager
-            relative = request.url.path[len("/api/uploads/"):]
-            filepath = os.path.join(image_manager._upload_dir, relative)
+            filepath = image_manager.disk_path_from_url(request.url.path)
             image_manager.touch(filepath)
         except Exception:
             pass

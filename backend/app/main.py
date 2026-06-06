@@ -195,8 +195,5 @@ app.include_router(conversation_router)
 app.include_router(upload_router)
 app.include_router(upload_serve_router)
 
-# R019: 确保上传目录存在
-os.makedirs(settings.data_uploads_dir, exist_ok=True)
-
 # R019: 图片访问 mtime 中间件
 app.middleware("http")(upload_mtime_middleware)

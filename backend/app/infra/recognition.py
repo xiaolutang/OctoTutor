@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING
 
 from openai import AsyncOpenAI
 
+from app.agent.prompts import RECOGNITION_SYSTEM_PROMPT
+
 if TYPE_CHECKING:
     from app.infra.image_manager import ImageManager
 
@@ -87,6 +89,21 @@ class VLMRecognitionProvider:
             {"role": "system", "content": RECOGNITION_SYSTEM_PROMPT},
             {"role": "user", "content": user_content},
         ]
+        image_blocks: list[dict] = []
+        for url in image_urls:
+            image_block = self._build_image_block(url)
+            image_blocks.append(image_block)
+
+        # 构造消息
+        user_content: list[dict] = [
+            *image_blocks,
+            {"type": "text", "text": question},
+        ]
+
+        messages = [
+            {"role": "system", "content": RECOGNITION_SYSTEM_PROMPT},
+            {"role": "user", "content": user_content},
+        ]
 
         response = await self._client.chat.completions.create(
             model=self._model,
@@ -99,19 +116,10 @@ class VLMRecognitionProvider:
     def _build_image_block(self, url: str) -> dict:
         """将 URL 转换为 OpenAI Vision 格式的 image_url block
 
-        使用 ImageManager 解析 URL 到磁盘路径（含 user_id 校验）。
+        使用 ImageManager 解析 URL 到磁盘路径。
         URL 格式: /api/uploads/{user_id}/{filename}
         """
-        # 从 URL 提取 user_id 和 filename
-        prefix = "/api/uploads/"
-        relative = url[len(prefix):]  # "user1/abc.jpg"
-        parts = relative.split("/", 1)
-        if len(parts) != 2:
-            raise ValueError(f"Invalid image URL: {url}")
-        url_user_id, filename = parts
-
-        # 通过 ImageManager 的 upload_dir 构建磁盘路径
-        disk_path = Path(self._image_manager._upload_dir) / url_user_id / filename
+        disk_path = Path(self._image_manager.disk_path_from_url(url))
 
         if not disk_path.exists():
             raise FileNotFoundError(f"Image file not found: {disk_path}")
