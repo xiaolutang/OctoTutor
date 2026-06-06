@@ -59,8 +59,9 @@ class Settings(BaseSettings):
     data_parsed_dir: str = "data/parsed"
     data_images_dir: str = "data/images"
 
-    # R019: 图片识别配置
+    # R019: 图片识别配置（DashScope 直连，非 NewAPI）
     vision_model: str = "qwen3-vl-flash"
+    dashscope_vision_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     image_max_size_mb: int = 10           # 单张图片大小上限
     image_max_storage_mb: int = 1000      # uploads 目录高水位（MB），低水位 = 80%
     data_uploads_dir: str = "data/uploads"  # 用户上传图片目录（独立于 PDF 管线的 data/images）

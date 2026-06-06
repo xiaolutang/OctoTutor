@@ -7,6 +7,7 @@ import rehypeKatex from 'rehype-katex';
 import type { Message } from '@/chat/types';
 import { SourceCard } from './source-card';
 import { ThinkingProcess } from './thinking-process';
+import { AuthenticatedImage } from './authenticated-image';
 
 interface MessageBubbleProps {
   message: Message;
@@ -94,23 +95,13 @@ export const MessageBubble = memo(function MessageBubble({
           {isUser && message.images && message.images.length > 0 && (
             <div className="mt-2 flex gap-2">
               {message.images.map((img, i) => (
-                <div
+                <AuthenticatedImage
                   key={i}
-                  className="relative cursor-pointer"
+                  src={img.url}
+                  alt={`图片 ${i + 1}`}
+                  className="h-20 w-20 rounded object-cover cursor-pointer"
                   onClick={() => setLightboxUrl(img.url)}
-                >
-                  <img
-                    src={img.url}
-                    alt={`图片 ${i + 1}`}
-                    className="h-20 w-20 rounded object-cover"
-                    onError={(e) => {
-                      const el = e.target as HTMLImageElement;
-                      el.style.display = 'none';
-                      el.parentElement!.className = 'flex h-20 w-20 items-center justify-center rounded bg-white/20 text-xs';
-                      el.parentElement!.textContent = '图片已过期';
-                    }}
-                  />
-                </div>
+                />
               ))}
             </div>
           )}
@@ -183,7 +174,11 @@ export const MessageBubble = memo(function MessageBubble({
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
           onClick={() => setLightboxUrl(null)}
         >
-          <img src={lightboxUrl} className="max-h-[90vh] max-w-[90vw] rounded-lg" alt="大图" />
+          <AuthenticatedImage
+            src={lightboxUrl}
+            alt="大图"
+            className="max-h-[90vh] max-w-[90vw] rounded-lg cursor-default"
+          />
         </div>
       )}
     </>

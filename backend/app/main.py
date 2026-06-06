@@ -114,10 +114,10 @@ async def lifespan(application: FastAPI):
     await image_manager.cleanup_lru()
     print(f"[startup] ImageManager initialized (dir={settings.data_uploads_dir})")
 
-    # R019: 初始化 VLMRecognitionProvider
+    # R019: 初始化 VLMRecognitionProvider（DashScope 直连）
     recognition_provider = VLMRecognitionProvider(
-        api_key=settings.newapi_api_key,
-        base_url=settings.newapi_base_url,
+        api_key=settings.dashscope_api_key,
+        base_url=settings.dashscope_vision_base_url,
         model=settings.vision_model,
         image_manager=image_manager,
     )
