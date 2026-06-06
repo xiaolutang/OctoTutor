@@ -28,11 +28,11 @@ status: planned
 2. ✅ R019-BF002 — schemas.py 数据模型扩展（无依赖）
 3. ✅ R019-BF003 — image_manager.py 图片管理模块（依赖 BF001）
 4. ✅ R019-BF004 — recognition.py + prompts.py 识别层（依赖 BF001）
-5. 🔧 R019-BF005 — upload_mtime.py 图片访问中间件（依赖 BF003）
-6. ⬜ R019-BB001 — upload_router.py 上传/删除 API（依赖 BF002, BF003）
-7. ⬜ R019-BB002 — stream_router.py 图片预处理（依赖 BF002, BF004）
-8. ⬜ R019-BB003 — conversation_utils.py + conversation_router.py 序列化+清理（依赖 BF002, BF003）
-9. ⬜ R019-BB004 — main.py 集成（依赖所有以上）
+5. ✅ R019-BF005 — upload_mtime.py 图片访问中间件（依赖 BF003）
+6. ✅ R019-BB001 — upload_router.py 上传/删除 API（依赖 BF002, BF003）
+7. ✅ R019-BB002 — stream_router.py 图片预处理（依赖 BF002, BF004）
+8. ✅ R019-BB003 — conversation_utils.py + conversation_router.py 序列化+清理（依赖 BF002, BF003）
+9. ✅ R019-BB004 — main.py 集成（依赖所有以上）
 
 ---
 
@@ -324,7 +324,7 @@ async def upload_mtime_middleware(request: Request, call_next):
 
 ---
 
-## R019-BB001：upload_router.py — 上传/删除 API `⬜ 待处理`
+## R019-BB001：upload_router.py — 上传/删除 API `✅ 已完成`
 
 - 文件：`backend/app/chat/upload_router.py`
 - 改动类型：新建
@@ -335,7 +335,7 @@ async def upload_mtime_middleware(request: Request, call_next):
 - risk_tags: [auth]
 - smoke_required: true
 - mode: direct
-- status: pending
+- status: completed
 - acceptance_criteria:
   - POST /api/chat/upload 接受 multipart/form-data，返回 {image_id, url}
   - DELETE /api/chat/upload/{image_id} 删除文件，返回 200 {ok: true}
@@ -389,7 +389,7 @@ async def delete_image(
 
 ---
 
-## R019-BB002：stream_router.py — 图片预处理 `⬜ 待处理`
+## R019-BB002：stream_router.py — 图片预处理 `✅ 已完成`
 
 - 文件：`backend/app/chat/stream_router.py`
 - 改动类型：修改
@@ -400,7 +400,7 @@ async def delete_image(
 - risk_tags: [streaming, network]
 - smoke_required: true
 - mode: direct
-- status: pending
+- status: completed
 - acceptance_criteria:
   - body.images 非空时，校验图片文件存在
   - SSE 立即建立，后台任务发 recognizing → VLM 识别 → Graph
@@ -485,7 +485,7 @@ async def _run_with_recognition(graph, body, user, config, queue, cancel_event, 
 
 ---
 
-## R019-BB003：conversation_utils.py + conversation_router.py — 序列化+清理 `⬜ 待处理`
+## R019-BB003：conversation_utils.py + conversation_router.py — 序列化+清理 `✅ 已完成`
 
 - 文件：`backend/app/chat/conversation_utils.py`, `backend/app/chat/conversation_router.py`
 - 改动类型：修改
@@ -496,7 +496,7 @@ async def _run_with_recognition(graph, body, user, config, queue, cancel_event, 
 - risk_tags: []
 - smoke_required: true
 - mode: direct
-- status: pending
+- status: completed
 - acceptance_criteria:
   - to_api_message 从 additional_kwargs 提取 images → ApiMessage.images
   - delete_conversation 新增图片文件清理（失败只 warning 不阻断）
@@ -547,7 +547,7 @@ except Exception as e:
 
 ---
 
-## R019-BB004：main.py — 集成 `⬜ 待处理`
+## R019-BB004：main.py — 集成 `✅ 已完成`
 
 - 文件：`backend/app/main.py`
 - 改动类型：修改
@@ -558,7 +558,7 @@ except Exception as e:
 - risk_tags: []
 - smoke_required: true
 - mode: direct
-- status: pending
+- status: completed
 - acceptance_criteria:
   - StaticFiles 挂载 /api/uploads
   - upload_mtime 中间件注册
