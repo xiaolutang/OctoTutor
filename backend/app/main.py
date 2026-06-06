@@ -119,7 +119,7 @@ async def lifespan(application: FastAPI):
         api_key=settings.newapi_api_key,
         base_url=settings.newapi_base_url,
         model=settings.vision_model,
-        images_dir=settings.data_images_dir,
+        upload_dir=settings.data_images_dir,
     )
     application.state.recognition_provider = recognition_provider
     print(f"[startup] VLMRecognitionProvider initialized (model={settings.vision_model})")
