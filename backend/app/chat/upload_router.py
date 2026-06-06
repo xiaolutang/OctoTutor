@@ -1,7 +1,8 @@
-"""图片上传/删除 API"""
+"""图片上传/删除/访问 API"""
 import os
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Request
+from fastapi.responses import FileResponse
 
 from app.config import settings
 from app.middleware.auth import UserContext, get_current_user
@@ -62,3 +63,26 @@ async def delete_image(
     if not deleted:
         raise HTTPException(404, "图片不存在")
     return {"ok": True}
+
+
+@router.get("/uploads/{user_id}/{filename}")
+async def serve_upload(
+    user_id: str,
+    filename: str,
+    user: UserContext = Depends(get_current_user),
+    request: Request = None,
+):
+    """带鉴权的图片访问端点 — 替代 StaticFiles 挂载
+
+    校验 user_id 归属后返回文件，同时由 upload_mtime 中间件更新 mtime。
+    """
+    if user_id != user.user_id:
+        raise HTTPException(404, "图片不存在")
+
+    image_manager = request.app.state.image_manager
+    filepath = os.path.join(image_manager._upload_dir, user_id, filename)
+
+    if not os.path.isfile(filepath):
+        raise HTTPException(404, "图片不存在")
+
+    return FileResponse(filepath)

@@ -186,22 +186,8 @@ export function useImageUpload() {
         }
         URL.revokeObjectURL(item.thumbnailUrl);
       }
-      // DELETE 成功的
-      for (const item of prev) {
-        if (item.status === 'success' && item.imageId) {
-          (async () => {
-            try {
-              const token = await getAccessToken();
-              await fetch(`/api/chat/upload/${item.imageId}`, {
-                method: 'DELETE',
-                headers: token ? { Authorization: `Bearer ${token}` } : {},
-              });
-            } catch {
-              // 静默
-            }
-          })();
-        }
-      }
+      // 注意：不 DELETE 已上传成功的图片，后端还需要用于 VLM 识别和静态服务
+      // 图片生命周期由后端 ImageManager LRU 策略管理
       return [];
     });
   }, []);

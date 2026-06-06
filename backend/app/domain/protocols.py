@@ -27,3 +27,9 @@ class Generator(Protocol):
     """
 
     def generate(self, query: str, context_chunks: list[QueryResult]) -> tuple[str, list[SourceReference]]: ...
+
+
+class RecognitionProvider(Protocol):
+    """图片识别提供者协议"""
+
+    async def recognize(self, image_urls: list[str], question: str) -> str: ...

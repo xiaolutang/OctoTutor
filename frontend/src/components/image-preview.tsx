@@ -1,18 +1,7 @@
 'use client';
 
 import { Loader2, RotateCw, X } from 'lucide-react';
-
-export type UploadStatus = 'uploading' | 'success' | 'error';
-
-export interface ImageUploadItem {
-  localId: string;
-  file: File;
-  status: UploadStatus;
-  thumbnailUrl: string;
-  imageId?: string;
-  url?: string;
-  abortController: AbortController;
-}
+import type { ImageUploadItem } from '@/hooks/use-image-upload';
 
 interface ImagePreviewProps {
   item: ImageUploadItem;

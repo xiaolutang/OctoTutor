@@ -21,12 +21,19 @@ from app.infra.recognition import VLMRecognitionProvider
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _make_image_manager():
+    """Mock ImageManager with _upload_dir attribute"""
+    mgr = MagicMock()
+    mgr._upload_dir = "data/uploads"
+    return mgr
+
+
 def _make_provider() -> VLMRecognitionProvider:
     return VLMRecognitionProvider(
         api_key="test-key",
         base_url="http://localhost:13000/v1",
         model="qwen3-vl-flash",
-        upload_dir="data/uploads",
+        image_manager=_make_image_manager(),
     )
 
 
@@ -43,8 +50,6 @@ def _fake_image_bytes() -> bytes:
 async def test_recognize_success():
     """recognize 正常返回识别文本"""
     provider = _make_provider()
-
-    fake_b64 = base64.b64encode(_fake_image_bytes()).decode()
 
     # Mock AsyncOpenAI
     mock_choice = MagicMock()
@@ -92,8 +97,6 @@ async def test_recognize_timeout():
 async def test_recognize_multi_images():
     """多张图片：单次 VLM 调用，验证传入的 content 包含多张图"""
     provider = _make_provider()
-
-    fake_b64 = base64.b64encode(_fake_image_bytes()).decode()
 
     mock_choice = MagicMock()
     mock_choice.message.content = "两道题目的转录结果"

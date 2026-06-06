@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 import os
 
 from fastapi import FastAPI
-from starlette.staticfiles import StaticFiles
+from starlette.responses import FileResponse
 
 from app.config import settings
 from app.rag.embeddings import DashScopeEmbedding
@@ -106,20 +106,20 @@ async def lifespan(application: FastAPI):
 
     # R019: 初始化 ImageManager
     image_manager = ImageManager(
-        upload_dir=settings.data_images_dir,
+        upload_dir=settings.data_uploads_dir,
         max_storage_mb=settings.image_max_storage_mb,
     )
     application.state.image_manager = image_manager
     # 启动时清理过期文件
     await image_manager.cleanup_lru()
-    print(f"[startup] ImageManager initialized (dir={settings.data_images_dir})")
+    print(f"[startup] ImageManager initialized (dir={settings.data_uploads_dir})")
 
     # R019: 初始化 VLMRecognitionProvider
     recognition_provider = VLMRecognitionProvider(
         api_key=settings.newapi_api_key,
         base_url=settings.newapi_base_url,
         model=settings.vision_model,
-        upload_dir=settings.data_images_dir,
+        image_manager=image_manager,
     )
     application.state.recognition_provider = recognition_provider
     print(f"[startup] VLMRecognitionProvider initialized (model={settings.vision_model})")
@@ -194,9 +194,8 @@ app.include_router(stream_router)
 app.include_router(conversation_router)
 app.include_router(upload_router)
 
-# R019: 静态文件挂载 — 图片上传目录
-os.makedirs(settings.data_images_dir, exist_ok=True)
-app.mount("/api/uploads", StaticFiles(directory=settings.data_images_dir), name="uploads")
+# R019: 确保上传目录存在
+os.makedirs(settings.data_uploads_dir, exist_ok=True)
 
 # R019: 图片访问 mtime 中间件
 app.middleware("http")(upload_mtime_middleware)

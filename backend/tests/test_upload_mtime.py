@@ -13,6 +13,7 @@ class FakeApp:
     class State:
         def __init__(self, touched_paths):
             self._touched_paths = touched_paths
+            self._upload_dir = "data/images"
 
         @property
         def image_manager(self):
@@ -49,20 +50,15 @@ async def test_upload_path_triggers_touch():
         "path": "/api/uploads/user1/abc.png",
         "query_string": b"",
         "headers": [],
+        "app": fake_app,
     }
-    request = Request(scope)
-    # 注入 app
-    request._app = fake_app
-
-    # 通过 app 属性注入
-    scope["app"] = fake_app
     request = Request(scope)
 
     response = await upload_mtime_middleware(request, _call_next_ok)
 
     assert response.status_code == 200
     assert len(fake_app.touched_paths) == 1
-    assert fake_app.touched_paths[0] == os.path.join("data/uploads", "user1/abc.png")
+    assert fake_app.touched_paths[0] == os.path.join("data/images", "user1/abc.png")
 
 
 @pytest.mark.asyncio
@@ -95,6 +91,8 @@ async def test_touch_exception_does_not_block():
     fake_app.state._touched_paths = None  # type: ignore
 
     class BrokenTouch:
+        _upload_dir = "data/images"
+
         @property
         def image_manager(self):
             return self

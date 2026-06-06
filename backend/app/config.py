@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     vision_model: str = "qwen3-vl-flash"
     image_max_size_mb: int = 10           # 单张图片大小上限
     image_max_storage_mb: int = 1000      # uploads 目录高水位（MB），低水位 = 80%
+    data_uploads_dir: str = "data/uploads"  # 用户上传图片目录（独立于 PDF 管线的 data/images）
 
     # R004: Reranker 配置
     rerank_top_n: int = 3

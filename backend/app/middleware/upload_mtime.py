@@ -16,10 +16,8 @@ async def upload_mtime_middleware(request: Request, call_next) -> Response:
     if request.url.path.startswith("/api/uploads/"):
         try:
             image_manager = request.app.state.image_manager
-            # URL 格式: /api/uploads/{user_id}/{filename}
-            # 磁盘路径: data/uploads/{user_id}/{filename}
             relative = request.url.path[len("/api/uploads/"):]
-            filepath = os.path.join("data/uploads", relative)
+            filepath = os.path.join(image_manager._upload_dir, relative)
             image_manager.touch(filepath)
         except Exception:
             pass

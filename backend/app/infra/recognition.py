@@ -1,7 +1,8 @@
 """图片识别层 — 基于 Vision LLM 的图片内容识别
 
-提供 RecognitionProvider Protocol 和 VLMRecognitionProvider 实现，
+提供 VLMRecognitionProvider 实现，
 将磁盘上的图片文件通过 OpenAI Vision 兼容 API 发送给 VLM 进行内容识别。
+RecognitionProvider Protocol 定义在 domain/protocols.py。
 """
 
 from __future__ import annotations
@@ -10,17 +11,14 @@ import base64
 import logging
 import os
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING
 
 from openai import AsyncOpenAI
 
+if TYPE_CHECKING:
+    from app.infra.image_manager import ImageManager
+
 logger = logging.getLogger(__name__)
-
-
-class RecognitionProvider(Protocol):
-    """图片识别提供者协议"""
-
-    async def recognize(self, image_urls: list[str], question: str) -> str: ...
 
 
 # 扩展名 → MIME 类型映射
@@ -36,13 +34,13 @@ class VLMRecognitionProvider:
     """基于 Vision LLM 的图片识别实现
 
     从磁盘读取图片文件，转为 base64 编码后通过 OpenAI Vision 兼容 API
-    发送给 VLM 模型进行内容识别。
+    发送给 VLM 模型进行内容识别。路径解析委托给 ImageManager。
 
     Args:
         api_key: OpenAI 兼容 API Key
         base_url: OpenAI 兼容 API 地址
         model: VLM 模型名称
-        upload_dir: 上传文件根目录（如 "data/uploads"）
+        image_manager: ImageManager 实例，用于路径解析
     """
 
     def __init__(
@@ -50,11 +48,11 @@ class VLMRecognitionProvider:
         api_key: str,
         base_url: str,
         model: str,
-        upload_dir: str,
+        image_manager: ImageManager,
     ) -> None:
         self._client = AsyncOpenAI(api_key=api_key, base_url=base_url)
         self._model = model
-        self._upload_dir = upload_dir
+        self._image_manager = image_manager
 
     async def recognize(self, image_urls: list[str], question: str) -> str:
         """识别图片内容
@@ -101,14 +99,19 @@ class VLMRecognitionProvider:
     def _build_image_block(self, url: str) -> dict:
         """将 URL 转换为 OpenAI Vision 格式的 image_url block
 
+        使用 ImageManager 解析 URL 到磁盘路径（含 user_id 校验）。
         URL 格式: /api/uploads/{user_id}/{filename}
-        磁盘路径: {upload_dir}/{user_id}/{filename}
         """
-        # 去掉 /api 前缀得到相对路径
-        # /api/uploads/user1/abc.jpg → uploads/user1/abc.jpg
-        relative_path = url.removeprefix("/api/")
+        # 从 URL 提取 user_id 和 filename
+        prefix = "/api/uploads/"
+        relative = url[len(prefix):]  # "user1/abc.jpg"
+        parts = relative.split("/", 1)
+        if len(parts) != 2:
+            raise ValueError(f"Invalid image URL: {url}")
+        url_user_id, filename = parts
 
-        disk_path = Path(self._upload_dir) / relative_path.removeprefix("uploads/")
+        # 通过 ImageManager 的 upload_dir 构建磁盘路径
+        disk_path = Path(self._image_manager._upload_dir) / url_user_id / filename
 
         if not disk_path.exists():
             raise FileNotFoundError(f"Image file not found: {disk_path}")
