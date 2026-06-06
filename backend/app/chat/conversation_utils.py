@@ -107,6 +107,18 @@ def to_api_message(msg, index: int) -> ApiMessage:
                 except Exception:
                     pass
 
+    # R019: 提取 images
+    images = []
+    raw_images = additional_kwargs.get("images", [])
+    if raw_images:
+        for img in raw_images:
+            if isinstance(img, dict):
+                try:
+                    from app.chat.schemas import ImageRef
+                    images.append(ImageRef(**img))
+                except Exception:
+                    pass
+
     created_at = ""
     response_metadata = getattr(msg, "response_metadata", {}) or {}
     if "created_at" in response_metadata:
@@ -119,5 +131,6 @@ def to_api_message(msg, index: int) -> ApiMessage:
         status="completed",
         sources=sources,
         thinking_steps=thinking_steps,
+        images=images,
         created_at=created_at,
     )

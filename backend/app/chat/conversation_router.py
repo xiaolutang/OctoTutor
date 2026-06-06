@@ -221,6 +221,21 @@ async def delete_conversation(
 
     await db.commit()
 
+    # R019: 清理关联图片文件（失败不阻断，需在 checkpoint 清理前执行）
+    try:
+        image_manager = request.app.state.image_manager
+        messages = await load_conversation_by_id(checkpointer, conversation_id, user.user_id)
+        for msg in messages:
+            additional_kwargs = getattr(msg, "additional_kwargs", {}) or {}
+            raw_images = additional_kwargs.get("images", [])
+            for img in raw_images:
+                if isinstance(img, dict):
+                    img_id = img.get("image_id", "")
+                    if img_id:
+                        await image_manager.delete(user.user_id, img_id)
+    except Exception as e:
+        logger.warning(f"[conversation] image cleanup failed for {conversation_id}: {e}")
+
     # 清理 checkpoint（失败不阻断）
     try:
         if hasattr(checkpointer, "adelete_thread"):

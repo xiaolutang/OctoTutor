@@ -12,19 +12,20 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import uuid
 from dataclasses import asdict, dataclass
 from typing import Any
 
 from langchain_core.messages import HumanMessage
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.chat.dependencies import get_graph, get_checkpointer, get_db
 from app.chat.errors import ChatErrorCode, ConversationErrorCode, make_error, make_conversation_error
-from app.chat.schemas import ChatRequest, StopRequest
+from app.chat.schemas import ChatRequest, StopRequest, StatusPayload
 from app.chat.conversation_utils import load_conversation_by_id, to_api_message
 from app.domain.models import Conversation
 from app.infra.conversation_repo import ConversationRepo
@@ -129,6 +130,63 @@ async def _run_graph(
         _active_graphs.pop(conversation_id, None)
 
 
+async def _run_with_recognition(
+    graph,
+    body: ChatRequest,
+    config: dict,
+    queue: asyncio.Queue,
+    cancel_event: asyncio.Event,
+    db: AsyncSession,
+    conversation_id: str,
+    user: UserContext,
+    is_new: bool,
+    app_state,
+) -> None:
+    """含 VLM 图片识别的后台任务：recognizing → VLM → Graph"""
+    recognized_text = ""
+    image_refs_kwargs = []
+
+    # 1. SSE status: recognizing
+    await queue.put(_sse_frame("status", {"stage": "recognizing", "message": "正在识别图片..."}))
+
+    # 2. 调 VLM（30s 超时）
+    try:
+        recognition_provider = app_state.recognition_provider
+        recognized_text = await asyncio.wait_for(
+            recognition_provider.recognize(
+                [img.url for img in body.images], body.question
+            ),
+            timeout=30,
+        )
+        image_refs_kwargs = [{"url": img.url, "image_id": img.image_id} for img in body.images]
+    except Exception:
+        logger.warning("[stream] Vision LLM failed, degrading to text-only")
+        recognized_text = ""
+
+    # 3. 构造 HumanMessage
+    combined = f"{recognized_text}\n\n{body.question}" if recognized_text else body.question
+    human_msg = HumanMessage(
+        content=combined,
+        additional_kwargs={"images": image_refs_kwargs} if image_refs_kwargs else {},
+    )
+    input_state = {"messages": [human_msg], "question": combined}
+
+    # 4. 启动 Graph（复用现有 _run_graph）
+    await _run_graph(
+        graph=graph,
+        input_state=input_state,
+        config=config,
+        queue=queue,
+        cancel_event=cancel_event,
+        db=db,
+        conversation_id=conversation_id,
+        user=user,
+        question=combined,
+        is_new=is_new,
+        app_state=app_state,
+    )
+
+
 @router.post("/chat/stream")
 async def stream_chat(
     body: ChatRequest,
@@ -178,11 +236,13 @@ async def stream_chat(
         }
     }
 
-    # 将用户问题作为 HumanMessage 传入 graph state，checkpointer 自动持久化
-    input_state = {
-        "messages": [HumanMessage(content=body.question)],
-        "question": body.question,
-    }
+    # R019: 图片校验
+    if body.images:
+        image_manager = http_request.app.state.image_manager
+        for img in body.images:
+            filepath = image_manager.resolve_filepath(img.url, user.user_id)
+            if not os.path.exists(filepath):
+                raise HTTPException(400, "图片不存在，请重新上传")
 
     # ========== 创建后台任务基础设施 ==========
     queue = asyncio.Queue()
@@ -190,22 +250,43 @@ async def stream_chat(
     task_info = GraphTaskInfo(queue=queue, cancel_event=cancel_event, task=None)
     _active_graphs[conversation_id] = task_info
 
-    # 启动后台任务执行 graph
-    task = asyncio.create_task(
-        _run_graph(
-            graph=graph,
-            input_state=input_state,
-            config=config,
-            queue=queue,
-            cancel_event=cancel_event,
-            db=db,
-            conversation_id=conversation_id,
-            user=user,
-            question=body.question,
-            is_new=is_new_conversation,
-            app_state=http_request.app.state,
+    # R019: 有图片时走识别流程，无图片时走原有流程
+    if body.images:
+        task = asyncio.create_task(
+            _run_with_recognition(
+                graph=graph,
+                body=body,
+                config=config,
+                queue=queue,
+                cancel_event=cancel_event,
+                db=db,
+                conversation_id=conversation_id,
+                user=user,
+                is_new=is_new_conversation,
+                app_state=http_request.app.state,
+            )
         )
-    )
+    else:
+        # 将用户问题作为 HumanMessage 传入 graph state，checkpointer 自动持久化
+        input_state = {
+            "messages": [HumanMessage(content=body.question)],
+            "question": body.question,
+        }
+        task = asyncio.create_task(
+            _run_graph(
+                graph=graph,
+                input_state=input_state,
+                config=config,
+                queue=queue,
+                cancel_event=cancel_event,
+                db=db,
+                conversation_id=conversation_id,
+                user=user,
+                question=body.question,
+                is_new=is_new_conversation,
+                app_state=http_request.app.state,
+            )
+        )
     task_info.task = task
 
     return StreamingResponse(
@@ -329,6 +410,10 @@ async def _create_sse_generator(
                 return
             elif isinstance(event, _TitleEvent):
                 yield _sse_frame("title", {"conversation_id": event.conversation_id, "title": event.title})
+                continue
+            elif isinstance(event, str):
+                # 已完成的 SSE 帧（如 recognizing status），直接输出
+                yield event
                 continue
 
             async for frame in _map_event_to_sse(event, http_request):
