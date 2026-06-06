@@ -4,7 +4,7 @@ import type { ResumeCallbacks } from './use-chat-stream';
 import { useConversation } from './use-conversation';
 import { useAuth } from '@/contexts/auth-context';
 import { useConversationContext } from '@/contexts/conversation-context';
-import type { Message, MessageStatus, ThinkingStep } from './types';
+import type { Message, MessageStatus, ThinkingStep, ImageRef } from './types';
 import { createId } from '@/lib/utils';
 
 /** 检测消息列表是否以用户消息结尾（AI 回复待处理），且在 2 分钟内 */
@@ -137,14 +137,14 @@ export function useChatController() {
     if (currentMessages.length === 0) return;
 
     const lastMsg = currentMessages[currentMessages.length - 1];
-    if (lastMsg.role !== 'ai' || !['generating', 'retrieving'].includes(lastMsg.status)) return;
+    if (lastMsg.role !== 'ai' || !['generating', 'retrieving', 'recognizing'].includes(lastMsg.status)) return;
     if (Date.now() - lastMsg.timestamp > 180_000) return;
 
     let cancelled = false;
 
     const callbacks: ResumeCallbacks = {
       onStatus: (stage) => {
-        if (!cancelled && (stage === 'retrieving' || stage === 'generating')) {
+        if (!cancelled && (stage === 'recognizing' || stage === 'retrieving' || stage === 'generating')) {
           updateMsg(lastMsg.id, { status: stage as MessageStatus });
         }
       },
@@ -175,7 +175,7 @@ export function useChatController() {
 
   // SSE 流式启动
   const startSSE = useCallback(
-    (question: string, aiMsgId: string) => {
+    (question: string, aiMsgId: string, images?: ImageRef[]) => {
       sendMessage(
         question,
         {
@@ -193,7 +193,7 @@ export function useChatController() {
             }
           },
           onStatus: (stage: string, _message: string) => {
-            if (stage === 'retrieving' || stage === 'generating') {
+            if (stage === 'recognizing' || stage === 'retrieving' || stage === 'generating') {
               updateMsg(aiMsgId, { status: stage as MessageStatus });
             }
           },
@@ -218,14 +218,14 @@ export function useChatController() {
           },
         },
         activeId ?? undefined,
+        images,
       );
     },
     [sendMessage, updateMsg, activeId, isNewConversation, insertNewConversation, updateTitle],
   );
 
   // 发送消息
-  const handleSend = useCallback(() => {
-    const text = input.trim();
+  const handleSend = useCallback((text: string, images?: ImageRef[]) => {
     if (!text || isStreaming) return;
 
     const userMsg: Message = {
@@ -233,6 +233,7 @@ export function useChatController() {
       role: 'user',
       content: text,
       status: 'sending',
+      images,
       timestamp: Date.now(),
     };
 
@@ -249,8 +250,8 @@ export function useChatController() {
 
     setMessages((prev) => [...prev, userMsg, aiMsg]);
     setInput('');
-    startSSE(text, aiMsgId);
-  }, [input, isStreaming, startSSE]);
+    startSSE(text, aiMsgId, images);
+  }, [isStreaming, startSSE]);
 
   // 停止生成
   const handleStop = useCallback(() => {

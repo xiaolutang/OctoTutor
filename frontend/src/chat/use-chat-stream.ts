@@ -1,11 +1,11 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { parseSSEEvents } from './parse-sse';
-import type { SSECallbacks, SourceReference, ThinkingStep, Message, ApiMessage } from './types';
+import type { SSECallbacks, SourceReference, ThinkingStep, Message, ApiMessage, ImageRef } from './types';
 import { convertApiMessages } from './types';
 import { fetchWithAuth } from '../lib/api-client';
 
 interface UseChatStreamReturn {
-  sendMessage: (question: string, callbacks: SSECallbacks, conversationId?: string) => void;
+  sendMessage: (question: string, callbacks: SSECallbacks, conversationId?: string, images?: ImageRef[]) => void;
   stop: () => void;
   isStreaming: boolean;
 }
@@ -101,12 +101,16 @@ export function chatStreamFetch(
   abortController: AbortController,
   onSetStreaming: (v: boolean) => void,
   conversationId?: string,
+  images?: ImageRef[],
 ) {
   let firstEventReceived = false;
 
   const body: Record<string, unknown> = { question, top_k: 10 };
   if (conversationId) {
     body.conversation_id = conversationId;
+  }
+  if (images && images.length > 0) {
+    body.images = images;
   }
 
   fetchWithAuth('/chat/stream', {
@@ -253,13 +257,13 @@ export function useChatStream(): UseChatStreamReturn {
   }, []);
 
   const sendMessage = useCallback(
-    (question: string, callbacks: SSECallbacks, conversationId?: string) => {
+    (question: string, callbacks: SSECallbacks, conversationId?: string, images?: ImageRef[]) => {
       const abortController = new AbortController();
       abortRef.current = abortController;
       conversationIdRef.current = conversationId;
       setIsStreaming(true);
 
-      chatStreamFetch(question, callbacks, abortController, setIsStreaming, conversationId);
+      chatStreamFetch(question, callbacks, abortController, setIsStreaming, conversationId, images);
     },
     [],
   );

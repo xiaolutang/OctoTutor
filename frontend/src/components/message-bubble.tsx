@@ -16,6 +16,7 @@ interface MessageBubbleProps {
 const statusLabels: Record<string, string> = {
   sending: '发送中...',
   retrieving: '正在检索相关知识...',
+  recognizing: '识别中...',
   generating: '正在生成回答...',
   done: '',
   stopped: '已停止',
@@ -31,6 +32,7 @@ export const MessageBubble = memo(function MessageBubble({
 }: MessageBubbleProps) {
   const isUser = message.role === 'user';
   const [copied, setCopied] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const handleCopy = useCallback(async () => {
     if (!message.content) return;
@@ -45,7 +47,7 @@ export const MessageBubble = memo(function MessageBubble({
 
   const isTerminal = message.status === 'done' || message.status === 'stopped' || message.status === 'error';
 
-  return (
+  const bubble = (
     <div className={`group flex items-start gap-1 ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
       <div className="max-w-[80%]">
         <div
@@ -88,8 +90,33 @@ export const MessageBubble = memo(function MessageBubble({
             </div>
           )}
 
+          {/* 用户消息图片缩略图 */}
+          {isUser && message.images && message.images.length > 0 && (
+            <div className="mt-2 flex gap-2">
+              {message.images.map((img, i) => (
+                <div
+                  key={i}
+                  className="relative cursor-pointer"
+                  onClick={() => setLightboxUrl(img.url)}
+                >
+                  <img
+                    src={img.url}
+                    alt={`图片 ${i + 1}`}
+                    className="h-20 w-20 rounded object-cover"
+                    onError={(e) => {
+                      const el = e.target as HTMLImageElement;
+                      el.style.display = 'none';
+                      el.parentElement!.className = 'flex h-20 w-20 items-center justify-center rounded bg-white/20 text-xs';
+                      el.parentElement!.textContent = '图片已过期';
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* AI 正在生成时无内容则显示加载动画 */}
-          {!isUser && !message.content && (message.status === 'retrieving' || message.status === 'generating') && (
+          {!isUser && !message.content && (message.status === 'recognizing' || message.status === 'retrieving' || message.status === 'generating') && (
             <div className="flex items-center gap-1 text-sm text-muted-foreground">
               <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
               <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current [animation-delay:0.2s]" />
@@ -146,5 +173,19 @@ export const MessageBubble = memo(function MessageBubble({
         </div>
       )}
     </div>
+  );
+
+  return (
+    <>
+      {bubble}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <img src={lightboxUrl} className="max-h-[90vh] max-w-[90vw] rounded-lg" alt="大图" />
+        </div>
+      )}
+    </>
   );
 });

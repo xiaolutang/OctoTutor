@@ -12,6 +12,12 @@ export interface ThinkingStep {
   index: number;
 }
 
+/** 图片引用 — 上传/历史消息中的图片 */
+export interface ImageRef {
+  url: string;       // /api/uploads/{user_id}/{uuid}.{ext}
+  image_id: string;  // 服务端 UUID
+}
+
 /** 后端消息格式（role 为 human/ai） */
 export interface ApiMessage {
   id: string;
@@ -20,6 +26,7 @@ export interface ApiMessage {
   status: 'completed' | 'stopped' | 'error';
   sources?: SourceReference[];
   thinking_steps?: ThinkingStep[];
+  images?: ImageRef[];
   created_at: string;
 }
 
@@ -62,7 +69,7 @@ export interface SSECallbacks {
   onError: (error: { code: string; message: string; action: string }) => void;
 }
 
-export type MessageStatus = 'sending' | 'retrieving' | 'generating' | 'done' | 'stopped' | 'error';
+export type MessageStatus = 'sending' | 'retrieving' | 'recognizing' | 'generating' | 'done' | 'stopped' | 'error';
 
 /** 将后端 ApiMessage 的 status 映射为前端 MessageStatus */
 export function mapApiStatus(status: ApiMessage['status']): MessageStatus {
@@ -87,6 +94,7 @@ export function convertApiMessages(apiMsgs: ApiMessage[]): Message[] {
     status: mapApiStatus(apiMsg.status),
     sources: apiMsg.sources,
     thinkingSteps: apiMsg.thinking_steps,
+    images: apiMsg.images,
     timestamp: apiMsg.created_at ? new Date(apiMsg.created_at).getTime() : Date.now(),
   }));
 }
@@ -98,6 +106,7 @@ export interface Message {
   status: MessageStatus;
   sources?: SourceReference[];
   thinkingSteps?: ThinkingStep[];
+  images?: ImageRef[];
   error?: { code: string; message: string; action: string };
   timestamp: number;
 }
