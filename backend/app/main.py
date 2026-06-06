@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
+import os
 
 from fastapi import FastAPI
+from starlette.staticfiles import StaticFiles
 
 from app.config import settings
 from app.rag.embeddings import DashScopeEmbedding
@@ -8,6 +10,8 @@ from app.rag.vector_store import ChromaDBStore
 from app.infra.bm25 import BM25Retriever
 from app.infra.reranker import DashScopeReranker
 from app.infra.llm import LLMGenerator
+from app.infra.image_manager import ImageManager
+from app.infra.recognition import VLMRecognitionProvider
 from app.chat.service import ChatService
 from app.agent.graph import create_graph
 from app.infra.database import engine, async_session_factory, create_tables
@@ -17,6 +21,8 @@ from app.api.routes.config import router as config_router
 from app.chat.router import router as chat_router
 from app.chat.stream_router import router as stream_router
 from app.chat.conversation_router import router as conversation_router
+from app.chat.upload_router import router as upload_router
+from app.middleware.upload_mtime import upload_mtime_middleware
 
 
 async def _ensure_database_exists(database_url: str):
@@ -98,6 +104,26 @@ async def lifespan(application: FastAPI):
     application.state.chat_service = chat_service
     print("[startup] ChatService initialized")
 
+    # R019: 初始化 ImageManager
+    image_manager = ImageManager(
+        upload_dir=settings.data_images_dir,
+        max_storage_mb=settings.image_max_storage_mb,
+    )
+    application.state.image_manager = image_manager
+    # 启动时清理过期文件
+    await image_manager.cleanup_lru()
+    print(f"[startup] ImageManager initialized (dir={settings.data_images_dir})")
+
+    # R019: 初始化 VLMRecognitionProvider
+    recognition_provider = VLMRecognitionProvider(
+        api_key=settings.newapi_api_key,
+        base_url=settings.newapi_base_url,
+        model=settings.vision_model,
+        images_dir=settings.data_images_dir,
+    )
+    application.state.recognition_provider = recognition_provider
+    print(f"[startup] VLMRecognitionProvider initialized (model={settings.vision_model})")
+
     # 初始化 LangGraph PostgresSaver（失败时回退 MemorySaver）
     checkpointer = None
     checkpointer_ctx = None
@@ -166,3 +192,11 @@ app.include_router(retrieve_router)
 app.include_router(chat_router)
 app.include_router(stream_router)
 app.include_router(conversation_router)
+app.include_router(upload_router)
+
+# R019: 静态文件挂载 — 图片上传目录
+os.makedirs(settings.data_images_dir, exist_ok=True)
+app.mount("/api/uploads", StaticFiles(directory=settings.data_images_dir), name="uploads")
+
+# R019: 图片访问 mtime 中间件
+app.middleware("http")(upload_mtime_middleware)
