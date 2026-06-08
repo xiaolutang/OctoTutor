@@ -94,3 +94,40 @@ class TestGraphCompilation:
         # 去掉 __start__ 和 __end__（LangGraph 内部节点）
         real_nodes = node_names - {"__start__", "__end__"}
         assert real_nodes == {"summarize", "rewrite", "retrieve", "respond"}
+
+
+class TestContentToStr:
+    """验证 _content_to_str() 处理 str / list[dict] / 其他类型"""
+
+    def test_string_passthrough(self):
+        """string 原样返回"""
+        from app.agent.graph import _content_to_str
+        assert _content_to_str("hello") == "hello"
+
+    def test_list_of_text_blocks(self):
+        """list[dict] 拼接所有 text block"""
+        from app.agent.graph import _content_to_str
+        content = [
+            {"type": "text", "text": "识别结果"},
+            {"type": "text", "text": "用户问题"},
+        ]
+        assert _content_to_str(content) == "识别结果\n用户问题"
+
+    def test_empty_list(self):
+        """空 list 返回空串"""
+        from app.agent.graph import _content_to_str
+        assert _content_to_str([]) == ""
+
+    def test_non_text_blocks_filtered(self):
+        """非 text 类型的 block 被过滤"""
+        from app.agent.graph import _content_to_str
+        content = [
+            {"type": "image_url", "image_url": {"url": "data:..."}},
+            {"type": "text", "text": "hello"},
+        ]
+        assert _content_to_str(content) == "hello"
+
+    def test_fallback_to_str(self):
+        """其他类型 fallback 为 str()"""
+        from app.agent.graph import _content_to_str
+        assert _content_to_str(42) == "42"

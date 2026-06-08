@@ -60,11 +60,15 @@ export function useChatController() {
     [],
   );
 
-  // 追加 token 到指定消息
+  // 追加 token 到指定消息（仅 AI 消息，content 始终为 string）
   const appendToken = useCallback(
     (id: string, token: string) => {
       setMessages((prev) =>
-        prev.map((m) => (m.id === id ? { ...m, content: m.content + token } : m)),
+        prev.map((m) => {
+          if (m.id !== id) return m;
+          const text = typeof m.content === 'string' ? m.content : '';
+          return { ...m, content: text + token };
+        }),
       );
     },
     [],

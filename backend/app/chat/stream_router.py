@@ -161,7 +161,7 @@ async def _run_with_recognition(
         # VLM 成功：保留图片元数据引用
         image_refs_kwargs = [{"url": img.url, "image_id": img.image_id} for img in body.images]
     except Exception:
-        logger.warning("[stream] Vision LLM failed, degrading to text-only")
+        logger.warning("[stream] Vision LLM failed, degrading to text-only", exc_info=True)
         recognized_text = ""
 
     # 3. 构造 HumanMessage（content 数组：识别文本与用户问题分开存储）

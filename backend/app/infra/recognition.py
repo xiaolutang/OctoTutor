@@ -71,24 +71,8 @@ class VLMRecognitionProvider:
             TimeoutError: VLM 调用超时
             Exception: VLM 调用失败
         """
-        from app.agent.prompts import RECOGNITION_SYSTEM_PROMPT
 
         # 构造图片内容块
-        image_blocks: list[dict] = []
-        for url in image_urls:
-            image_block = self._build_image_block(url)
-            image_blocks.append(image_block)
-
-        # 构造消息
-        user_content: list[dict] = [
-            *image_blocks,
-            {"type": "text", "text": question},
-        ]
-
-        messages = [
-            {"role": "system", "content": RECOGNITION_SYSTEM_PROMPT},
-            {"role": "user", "content": user_content},
-        ]
         image_blocks: list[dict] = []
         for url in image_urls:
             image_block = self._build_image_block(url)
