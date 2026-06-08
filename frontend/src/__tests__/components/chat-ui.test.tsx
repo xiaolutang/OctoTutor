@@ -9,6 +9,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Message, SSECallbacks, ThinkingStep } from '@/chat/types';
+import { getUserQuestionText } from '@/chat/types';
 
 // ============================================================
 // Mock: useChatStream
@@ -119,7 +120,7 @@ function simulateHandleRegenerate(
   }
   if (userMsgIndex < 0) return null;
 
-  const userText = currentMessages[userMsgIndex].content;
+  const userText = getUserQuestionText(currentMessages[userMsgIndex].content);
   const newAiMsgId = createId();
 
   const newAiMsg: Message = {

@@ -5,6 +5,7 @@ import { useConversation } from './use-conversation';
 import { useAuth } from '@/contexts/auth-context';
 import { useConversationContext } from '@/contexts/conversation-context';
 import type { Message, MessageStatus, ThinkingStep, ImageRef } from './types';
+import { getUserQuestionText } from './types';
 import { createId } from '@/lib/utils';
 
 /** 检测消息列表是否以用户消息结尾（AI 回复待处理），且在 2 分钟内 */
@@ -281,7 +282,7 @@ export function useChatController() {
       }
       if (userMsgIndex < 0) return;
 
-      const userText = currentMessages[userMsgIndex].content;
+      const userText = getUserQuestionText(currentMessages[userMsgIndex].content);
       const newAiMsgId = createId();
       aiMsgIdRef.current = newAiMsgId;
 

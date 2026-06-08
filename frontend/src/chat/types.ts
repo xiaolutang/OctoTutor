@@ -18,11 +18,17 @@ export interface ImageRef {
   image_id: string;  // 服务端 UUID
 }
 
+/** content 数组中的文本块（后端 VLM 识别结果 + 用户问题分开存储） */
+export interface ContentBlock {
+  type: 'text';
+  text: string;
+}
+
 /** 后端消息格式（role 为 human/ai） */
 export interface ApiMessage {
   id: string;
   role: 'human' | 'ai';
-  content: string;
+  content: string | ContentBlock[];
   status: 'completed' | 'stopped' | 'error';
   sources?: SourceReference[];
   thinking_steps?: ThinkingStep[];
@@ -102,11 +108,36 @@ export function convertApiMessages(apiMsgs: ApiMessage[]): Message[] {
 export interface Message {
   id: string;
   role: 'user' | 'ai';
-  content: string;
+  content: string | ContentBlock[];
   status: MessageStatus;
   sources?: SourceReference[];
   thinkingSteps?: ThinkingStep[];
   images?: ImageRef[];
   error?: { code: string; message: string; action: string };
   timestamp: number;
+}
+
+// ── 展示映射层 ──────────────────────────────────────────────
+
+/**
+ * 从 content 中提取纯文本（展示用）。
+ * - string → 原样返回
+ * - ContentBlock[] → 拼接所有 text block
+ */
+export function getDisplayText(content: string | ContentBlock[] | undefined): string {
+  if (!content) return '';
+  if (typeof content === 'string') return content;
+  return content.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
+}
+
+/**
+ * 从 content 中提取用户问题文本（用户消息展示用）。
+ * - string → 原样返回
+ * - ContentBlock[] → 只取最后一个 text block（即用户原始输入，前面的 block 是 VLM 识别结果）
+ */
+export function getUserQuestionText(content: string | ContentBlock[] | undefined): string {
+  if (!content) return '';
+  if (typeof content === 'string') return content;
+  const textBlocks = content.filter((b) => b.type === 'text');
+  return textBlocks.length > 0 ? textBlocks[textBlocks.length - 1].text : '';
 }

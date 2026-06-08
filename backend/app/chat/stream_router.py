@@ -164,13 +164,19 @@ async def _run_with_recognition(
         logger.warning("[stream] Vision LLM failed, degrading to text-only")
         recognized_text = ""
 
-    # 3. 构造 HumanMessage
-    combined = f"{recognized_text}\n\n{body.question}" if recognized_text else body.question
+    # 3. 构造 HumanMessage（content 数组：识别文本与用户问题分开存储）
+    if recognized_text:
+        content = [
+            {"type": "text", "text": recognized_text},
+            {"type": "text", "text": body.question},
+        ]
+    else:
+        content = body.question
     human_msg = HumanMessage(
-        content=combined,
+        content=content,
         additional_kwargs={"images": image_refs_kwargs} if image_refs_kwargs else {},
     )
-    input_state = {"messages": [human_msg], "question": combined}
+    input_state = {"messages": [human_msg], "question": body.question}
 
     # 4. 启动 Graph（复用现有 _run_graph）
     await _run_graph(
@@ -182,7 +188,7 @@ async def _run_with_recognition(
         db=db,
         conversation_id=conversation_id,
         user=user,
-        question=combined,
+        question=body.question,
         is_new=is_new,
         app_state=app_state,
     )

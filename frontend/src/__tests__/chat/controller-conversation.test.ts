@@ -15,6 +15,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Message, SSECallbacks, ConversationItem } from '@/chat/types';
+import { getUserQuestionText } from '@/chat/types';
 import { createId } from '@/lib/utils';
 
 // ============================================================
@@ -181,7 +182,7 @@ function simulateHandleRegenerate(
   }
   if (userMsgIndex < 0) return null;
 
-  const userText = currentMessages[userMsgIndex].content;
+  const userText = getUserQuestionText(currentMessages[userMsgIndex].content);
   const newAiMsgId = createId();
 
   const newAiMsg: Message = {

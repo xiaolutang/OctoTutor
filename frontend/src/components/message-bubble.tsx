@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import type { Message } from '@/chat/types';
+import { getDisplayText, getUserQuestionText } from '@/chat/types';
 import { SourceCard } from './source-card';
 import { ThinkingProcess } from './thinking-process';
 import { AuthenticatedImage } from './authenticated-image';
@@ -35,10 +36,13 @@ export const MessageBubble = memo(function MessageBubble({
   const [copied, setCopied] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
+  const displayText = isUser ? getUserQuestionText(message.content) : getDisplayText(message.content);
+
   const handleCopy = useCallback(async () => {
-    if (!message.content) return;
+    const text = getDisplayText(message.content);
+    if (!text) return;
     try {
-      await navigator.clipboard.writeText(message.content);
+      await navigator.clipboard.writeText(text);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -76,16 +80,16 @@ export const MessageBubble = memo(function MessageBubble({
           )}
 
           {/* 内容 */}
-          {message.content && (
+          {displayText && (
             <div className={`text-sm leading-relaxed prose prose-sm max-w-none ${isUser ? '' : 'dark:prose-invert'}`}>
               {isUser ? (
-                <div className="whitespace-pre-wrap">{message.content}</div>
+                <div className="whitespace-pre-wrap">{displayText}</div>
               ) : (
                 <ReactMarkdown
                   remarkPlugins={remarkPlugins}
                   rehypePlugins={rehypePlugins}
                 >
-                  {message.content}
+                  {displayText}
                 </ReactMarkdown>
               )}
             </div>
@@ -107,7 +111,7 @@ export const MessageBubble = memo(function MessageBubble({
           )}
 
           {/* AI 正在生成时无内容则显示加载动画 */}
-          {!isUser && !message.content && (message.status === 'recognizing' || message.status === 'retrieving' || message.status === 'generating') && (
+          {!isUser && !displayText && (message.status === 'recognizing' || message.status === 'retrieving' || message.status === 'generating') && (
             <div className="flex items-center gap-1 text-sm text-muted-foreground">
               <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
               <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current [animation-delay:0.2s]" />
@@ -116,7 +120,7 @@ export const MessageBubble = memo(function MessageBubble({
           )}
 
           {/* 停止提示 */}
-          {!isUser && message.status === 'stopped' && !message.content && (
+          {!isUser && message.status === 'stopped' && !displayText && (
             <div className="text-xs text-muted-foreground italic">已停止生成</div>
           )}
 

@@ -60,7 +60,7 @@ class ApiMessage(BaseModel):
     """对话消息 — GET /api/conversations/current 响应中的消息格式"""
     id: str
     role: str
-    content: str
+    content: str | list[dict]
     status: str = "completed"
     sources: list[SourceReference] = Field(default_factory=list)
     thinking_steps: list[ThinkingPayload] = Field(default_factory=list)

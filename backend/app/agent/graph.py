@@ -79,10 +79,21 @@ class AgentState(dict):
     rewritten_question: str
 
 
+def _content_to_str(content) -> str:
+    """将 content（str 或 list[dict]）统一转为纯文本"""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "\n".join(
+            block.get("text", "") for block in content if isinstance(block, dict) and block.get("type") == "text"
+        )
+    return str(content)
+
+
 def _format_msg_line(msg: BaseMessage) -> str:
     """将消息格式化为 '角色：内容' 行"""
     role = "用户" if isinstance(msg, HumanMessage) else "助手"
-    return f"{role}：{msg.content}"
+    return f"{role}：{_content_to_str(msg.content)}"
 
 
 def _make_summarize(chat_model):
@@ -100,7 +111,7 @@ def _make_summarize(chat_model):
         # 1. 估算总 token
         total_tokens = estimate_tokens(existing_summary)
         for msg in messages:
-            total_tokens += estimate_tokens(msg.content or "")
+            total_tokens += estimate_tokens(_content_to_str(msg.content) or "")
         total_tokens += TokenBudget.RESERVED_FOR_RAG + TokenBudget.RESERVED_FOR_OUTPUT
 
         # 2. 未超阈值 → no-op
