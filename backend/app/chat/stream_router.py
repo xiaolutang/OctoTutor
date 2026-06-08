@@ -167,7 +167,7 @@ async def _run_with_recognition(
     # 3. 构造 HumanMessage（content 数组：识别文本与用户问题分开存储）
     if recognized_text:
         content = [
-            {"type": "text", "text": recognized_text},
+            {"type": "text", "text": f"以下是用户上传图片的自动识别结果：\n{recognized_text}"},
             {"type": "text", "text": body.question},
         ]
     else:
