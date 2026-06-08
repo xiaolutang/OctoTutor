@@ -222,16 +222,6 @@ def _make_respond(chat_model, relevance_threshold: float):
             chunks, degraded, relevance_threshold
         )
 
-        # 1b. 从最后一条 HumanMessage 的 kwargs 提取 VLM 识别文本注入 system
-        for msg in reversed(history):
-            if isinstance(msg, HumanMessage) and msg.additional_kwargs.get("recognized_text"):
-                recognized = msg.additional_kwargs["recognized_text"]
-                system_content += (
-                    f"\n\n---\n以下是用户上传图片的内容识别结果，请结合图片内容回答用户问题：\n"
-                    f"{recognized}"
-                )
-                break
-
         messages = [SystemMessage(content=system_content)]
 
         # 2. 摘要 SystemMessage（如存在）
