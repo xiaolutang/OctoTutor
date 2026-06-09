@@ -6,7 +6,7 @@ requirement_cycle: R019
 workflow:
   evaluate_provider: direct
   mode: auto
-status: planned
+status: archived
 ---
 
 # 多模态图片识别 — 后端任务清单

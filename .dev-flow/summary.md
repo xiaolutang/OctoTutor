@@ -27,6 +27,7 @@
 | R016 | conversation-security-fix | 3 | archived | 2026-06-04 |
 | R017 | ip-direct-access | 2 | archived | 2026-06-04 |
 | R018 | validation-i18n | 4 | archived | 2026-06-05 |
+| R019 | multimodal-image | 16 | archived | 2026-06-09 |
 
 ## 模块清单
 
@@ -58,6 +59,9 @@
 | conversation-context | ConversationProvider + useReducer 对话状态管理 + Auth 守卫 |
 | sidebar | 侧边栏组件（对话列表+新建+置顶分组+右键菜单） |
 | sse-decouple | SSE 断连恢复（后台任务解耦 + Queue 事件队列 + 重连端点 + 停止端点） |
+| image-manager | 图片文件管理（上传/删除/LRU 清理/归属校验/StaticFiles 鉴权访问） |
+| vision-recognition | VLM 图片识别（OpenAI Vision API + base64 + 降级纯文字） |
+| image-upload-ui | 图片上传交互（附件按钮 + Ctrl+V 粘贴 + 预览 + 缩略图渲染） |
 
 ## 能力清单
 
@@ -110,8 +114,29 @@
 | CAP-sse-005 | 前端停止按钮适配（fire-and-forget POST /chat/stop + 立即 abort） |
 | CAP-sec-002 | Checkpoint metadata user_id 归属校验（PostgresSaver metadata 过滤 + conversation_utils 隔离） |
 | CAP-conv-008 | 对话加载错误状态 UI（loadError + retryLoad + 渲染优先级） |
+| CAP-img-001 | 图片上传/删除 API（multipart + 类型/大小校验 + JWT 归属 + LRU 清理） |
+| CAP-img-002 | VLM 图片识别（qwen3-vl-flash + base64 + 30s 超时 + 降级纯文字） |
+| CAP-img-003 | SSE 图片预处理流程（校验→recognizing→VLM→Graph + image_refs 始终保留） |
+| CAP-img-004 | 对话删除图片清理（从消息提取 images 引用 → 逐个删除磁盘文件） |
+| CAP-img-005 | 图片上传交互（附件按钮 + Ctrl+V 粘贴 + AbortController + retry + 预览） |
+| CAP-img-006 | 消息图片渲染（用户消息缩略图 + 大图 lightbox + 过期占位符） |
 
 ## 变更记录
+
+### R019 multimodal-image (2026-06-09)
+
+- 后端图片管理模块：ImageManager（文件系统存储 + LRU 双水位清理 + asyncio.Lock 并发安全）
+- 后端 VLM 识别层：VLMRecognitionProvider（OpenAI Vision API + base64 + 30s 超时 + 降级纯文字）
+- 后端上传/删除 API：POST /api/chat/upload + DELETE /api/chat/upload/{image_id} + GET /api/uploads/{user_id}/{filename}
+- 后端 SSE 图片预处理：stream_router 含图片校验→VLM 识别→Graph，image_refs_kwargs 始终保留保证对话删除时能清理磁盘
+- 后端对话删除图片清理：conversation_router 删除对话时从消息提取 images 引用→逐个删除文件（失败不阻断）
+- 前端上传 Hook：use-image-upload.ts（类型/大小/数量校验 + AbortController + retry + clearAll）
+- 前端图片预览组件：image-preview.tsx（uploading/success/error 三态 + 缩略图）
+- 前端 ChatInput 扩展：附件按钮 + Ctrl+V 粘贴 + 预览区 + 发送携带 images
+- 前端消息渲染扩展：message-bubble.tsx 用户消息缩略图 + 大图 lightbox + recognizing 状态
+- Docker 集成测试：上传/访问/删除/SSE+VLM/对话清理/LRU 清理 6 个测试文件
+- 测试收敛：helpers 统一到 _helpers.py + _make_capture_create factory + parametrize MIME 测试
+- 65 后端测试全通过
 
 ### R018 validation-i18n (2026-06-05)
 

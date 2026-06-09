@@ -37,12 +37,24 @@ graph LR
 
     SSEEndpoint --> RunGraph[_run_graph 后台任务]
     SSEEndpoint --> ConvRouter[conversation_router]
+    SSEEndpoint --> RunRecognition[_run_with_recognition VLM+Graph]
+    RunRecognition --> VLM[VLMRecognitionProvider]
     RunGraph --> Queue[asyncio.Queue]
     Queue --> SSEGen[_create_sse_generator]
     ResumeEP[GET /resume] --> Queue
     StopEP --> RunGraph
     ConvRouter --> ConvUtils[conversation_utils]
     ConvUtils --> Checkpointer[PostgresSaver/MemorySaver]
+    ConvRouter --> ImgCleanup[图片文件清理]
+
+    ChatUI --> ChatInput[ChatInput + 附件/粘贴]
+    ChatInput --> ImgUpload[use-image-upload Hook]
+    ImgUpload --> UploadAPI[POST /api/chat/upload]
+    UploadAPI --> ImgMgr[ImageManager]
+    ImgMgr --> UploadsDir[(data/uploads)]
+    UploadAPI --> AuthMiddleware
+    ChatInput -.-> ImgPreview[ImagePreview 预览]
+    MessageBubble --> ImgThumb[用户消息缩略图+lightbox]
 
     ConvAPI --> ConvRepo[ConversationRepo]
     ConvRepo --> PG[(PostgreSQL)]
@@ -63,6 +75,7 @@ graph LR
     VectorStore -.-> ChromaDB[(ChromaDB)]
     BM25 -.-> ChromaDB
     LLM -.-> NewAPI[NewAPI 配置切换]
+    VLM -.-> NewAPI
 
     style StateGraph fill:#A5D6A7
     style Summarize fill:#A5D6A7
@@ -91,6 +104,15 @@ graph LR
     style SSEGen fill:#FFD54F
     style ResumeEP fill:#FFD54F
     style StopEP fill:#FFD54F
+    style RunRecognition fill:#FFD54F
+    style VLM fill:#A5D6A7
+    style ImgCleanup fill:#A5D6A7
+    style ImgMgr fill:#A5D6A7
+    style UploadAPI fill:#A5D6A7
+    style ChatInput fill:#FFB74D
+    style ImgUpload fill:#90CAF9
+    style ImgPreview fill:#90CAF9
+    style ImgThumb fill:#FFB74D
 ```
 
 ## 颜色分级
@@ -99,6 +121,6 @@ graph LR
 |------|------|------|
 | 🔵 蓝色 | FF | 前端基础（apiClient, TokenManager, AuthContext, ConversationContext, Reducer, Sidebar） |
 | 🟢 绿色 | BF/BB | 后端基础+业务（StateGraph, ChatService 检索, Respond, Auth, Checkpointer, ConvRouter, ConvUtils, ConvRepo） |
-| 🟡 浅黄 | BB | 后端业务（R012 SSE 解耦：_run_graph, Queue, SSEGen, Resume, Stop） |
-| 🟠 橙色 | FB | 前端业务（useChatStream, Controller, parse-sse, resumeStream） |
+| 🟡 浅黄 | BB | 后端业务（R012 SSE 解耦：_run_graph, Queue, SSEGen, Resume, Stop；R019 VLM 识别：_run_with_recognition） |
+| 🟠 橙色 | FB | 前端业务（useChatStream, Controller, parse-sse, resumeStream；R019 ChatInput+图片, MessageBubble+缩略图） |
 | 🟣 紫色 | BB | 评估基础设施（DetGrader, LLMJudge） |

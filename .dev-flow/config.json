@@ -1,7 +1,7 @@
 {
   "version": "3.0",
   "project": "OctoTutor",
-  "active_rc": "R019",
+  "active_rc": null,
   "default_workflow": {
     "name": "XLFoundry",
     "mode": "A",
@@ -30,7 +30,8 @@
     { "id": "R015", "name": "code-convergence", "archive_dir": "R015", "total_tasks": 6, "completed_at": "2026-06-04" },
     { "id": "R016", "name": "conversation-security-fix", "archive_dir": "R016", "total_tasks": 3, "completed_at": "2026-06-04" },
     { "id": "R017", "name": "ip-direct-access", "archive_dir": "R017", "total_tasks": 2, "completed_at": "2026-06-04" },
-    { "id": "R018", "name": "validation-i18n", "archive_dir": "R018", "total_tasks": 4, "completed_at": "2026-06-05" }
+    { "id": "R018", "name": "validation-i18n", "archive_dir": "R018", "total_tasks": 4, "completed_at": "2026-06-05" },
+    { "id": "R019", "name": "multimodal-image", "archive_dir": "R019", "total_tasks": 16, "completed_at": "2026-06-09" }
   ],
   "rc_queue": []
 }
