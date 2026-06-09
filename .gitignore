@@ -46,3 +46,6 @@ auth-sdk-web/
 *.tsbuildinfo
 next-env.d.ts
 .env.secrets
+
+# runtime data
+data/
