@@ -43,3 +43,31 @@ def test_database_url_from_env():
             os.environ[key] = original
         else:
             os.environ.pop(key, None)
+
+
+# ---------------------------------------------------------------------------
+# R019-BF001: 图片识别配置字段默认值
+# ---------------------------------------------------------------------------
+
+
+def test_r019_vision_config_defaults():
+    """R019 新增的图片配置字段默认值正确"""
+    # 清理环境变量，避免 .env 干扰
+    env_backup = {}
+    for key in ["VISION_MODEL", "IMAGE_MAX_SIZE_MB", "IMAGE_MAX_STORAGE_MB", "DATA_UPLOADS_DIR"]:
+        val = os.environ.pop(key, None)
+        if val is not None:
+            env_backup[key] = val
+
+    try:
+        s = Settings(
+            dashscope_api_key="test-key",
+            auth_jwt_secret="test-secret",
+        )
+        assert s.vision_model == "qwen3-vl-flash"
+        assert s.image_max_size_mb == 10
+        assert s.image_max_storage_mb == 1000
+        assert s.data_uploads_dir == "data/uploads"
+        assert "dashscope" in s.dashscope_vision_base_url
+    finally:
+        os.environ.update(env_backup)

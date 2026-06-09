@@ -19,6 +19,7 @@ from typing import Optional
 import pytest
 
 from app.infra.recognition import VLMRecognitionProvider
+from tests._helpers import FAKE_PNG
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -62,8 +63,15 @@ def _make_provider() -> VLMRecognitionProvider:
     )
 
 
-def _fake_image_bytes() -> bytes:
-    return b"\x89PNG\r\n\x1a\n" + b"\x00" * 100  # minimal fake PNG
+def _make_capture_create(mock_response):
+    """返回 (captured_kwargs dict, capture_create async fn) 元组"""
+    captured_kwargs: dict = {}
+
+    async def capture_create(**kwargs):
+        captured_kwargs.update(kwargs)
+        return mock_response
+
+    return captured_kwargs, capture_create
 
 
 def _make_mock_response(content: Optional[str] = "识别结果文本") -> MagicMock:
@@ -91,7 +99,7 @@ async def test_recognize_success():
         new_callable=AsyncMock,
         return_value=mock_response,
     ), patch.object(Path, "exists", return_value=True), patch.object(
-        Path, "read_bytes", return_value=_fake_image_bytes()
+        Path, "read_bytes", return_value=FAKE_PNG
     ):
         result = await provider.recognize(
             ["/api/uploads/user1/test.png"], "请识别图片"
@@ -108,11 +116,7 @@ async def test_recognize_success_captures_messages():
     """recognize 成功时验证 messages 结构"""
     provider = _make_provider()
     mock_response = _make_mock_response("OK")
-    captured_kwargs: dict = {}
-
-    async def capture_create(**kwargs):
-        captured_kwargs.update(kwargs)
-        return mock_response
+    captured_kwargs, capture_create = _make_capture_create(mock_response)
 
     with patch.object(
         provider._client.chat.completions,
@@ -120,7 +124,7 @@ async def test_recognize_success_captures_messages():
         new_callable=AsyncMock,
         side_effect=capture_create,
     ), patch.object(Path, "exists", return_value=True), patch.object(
-        Path, "read_bytes", return_value=_fake_image_bytes()
+        Path, "read_bytes", return_value=FAKE_PNG
     ):
         await provider.recognize(["/api/uploads/user1/test.png"], "问题")
 
@@ -146,7 +150,7 @@ async def test_recognize_timeout():
         new_callable=AsyncMock,
         side_effect=asyncio.TimeoutError(),
     ), patch.object(Path, "exists", return_value=True), patch.object(
-        Path, "read_bytes", return_value=_fake_image_bytes()
+        Path, "read_bytes", return_value=FAKE_PNG
     ):
         with pytest.raises(asyncio.TimeoutError):
             await provider.recognize(
@@ -159,11 +163,7 @@ async def test_recognize_multi_images():
     """多张图片：单次 VLM 调用，验证传入的 content 包含多张图"""
     provider = _make_provider()
     mock_response = _make_mock_response("两道题目的转录结果")
-    captured_kwargs: dict = {}
-
-    async def capture_create(**kwargs):
-        captured_kwargs.update(kwargs)
-        return mock_response
+    captured_kwargs, capture_create = _make_capture_create(mock_response)
 
     with patch.object(
         provider._client.chat.completions,
@@ -171,7 +171,7 @@ async def test_recognize_multi_images():
         new_callable=AsyncMock,
         side_effect=capture_create,
     ), patch.object(Path, "exists", return_value=True), patch.object(
-        Path, "read_bytes", return_value=_fake_image_bytes()
+        Path, "read_bytes", return_value=FAKE_PNG
     ):
         result = await provider.recognize(
             [
@@ -205,7 +205,7 @@ async def test_recognize_empty_response():
         new_callable=AsyncMock,
         return_value=mock_response,
     ), patch.object(Path, "exists", return_value=True), patch.object(
-        Path, "read_bytes", return_value=_fake_image_bytes()
+        Path, "read_bytes", return_value=FAKE_PNG
     ):
         result = await provider.recognize(
             ["/api/uploads/user1/test.png"], "请识别图片"
@@ -225,7 +225,7 @@ async def test_recognize_none_response():
         new_callable=AsyncMock,
         return_value=mock_response,
     ), patch.object(Path, "exists", return_value=True), patch.object(
-        Path, "read_bytes", return_value=_fake_image_bytes()
+        Path, "read_bytes", return_value=FAKE_PNG
     ):
         result = await provider.recognize(
             ["/api/uploads/user1/test.png"], "请识别图片"
@@ -261,3 +261,36 @@ def test_build_image_block_invalid_url_wrong_prefix():
 
     with pytest.raises(ValueError, match="Invalid upload URL"):
         provider._build_image_block("/wrong/prefix/user1/file.png")
+
+
+# ---------------------------------------------------------------------------
+# Tests — MIME type mapping
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "filename, expected_mime",
+    [
+        ("test.jpeg", "image/jpeg"),
+        ("test.webp", "image/webp"),
+        ("test.gif", "image/jpeg"),  # 未知扩展名 fallback
+    ],
+    ids=["jpeg", "webp", "unknown-fallback"],
+)
+async def test_recognize_mime_mapping(filename, expected_mime):
+    """文件扩展名正确映射为对应 MIME 类型"""
+    provider = _make_provider()
+    mock_response = _make_mock_response("OK")
+    captured_kwargs, capture_create = _make_capture_create(mock_response)
+
+    with patch.object(
+        provider._client.chat.completions, "create",
+        new_callable=AsyncMock, side_effect=capture_create,
+    ), patch.object(Path, "exists", return_value=True), \
+       patch.object(Path, "read_bytes", return_value=FAKE_PNG):
+        await provider.recognize([f"/api/uploads/user1/{filename}"], "问题")
+
+    user_content = captured_kwargs["messages"][1]["content"]
+    image_block = [b for b in user_content if b.get("type") == "image_url"][0]
+    assert expected_mime in image_block["image_url"]["url"]

@@ -51,6 +51,7 @@ services:
       - DATABASE_URL=postgresql://postgres:postgres@auth-center-postgres:5432/octotutor_checkpoints
       - AUTH_CLIENT_ID=${AUTH_CLIENT_ID:-MlP4hO8DKk-BOByD}
       - AUTH_BASE_URL=${AUTH_BASE_URL:-http://auth.localhost}
+      - IMAGE_MAX_STORAGE_MB=${IMAGE_MAX_STORAGE_MB:-1000}
     volumes:
       - octotutor-data:/app/data
     networks:

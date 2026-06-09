@@ -144,7 +144,8 @@ async def _run_with_recognition(
 ) -> None:
     """含 VLM 图片识别的后台任务：recognizing → VLM → Graph"""
     recognized_text = ""
-    image_refs_kwargs: list[dict] = []
+    # 图片引用始终保留，供对话删除时清理文件（不依赖 VLM 成功与否）
+    image_refs_kwargs = [{"url": img.url, "image_id": img.image_id} for img in body.images]
 
     # 1. SSE status: recognizing
     await queue.put(_sse_frame("status", {"stage": "recognizing", "message": "正在识别图片..."}))
@@ -158,8 +159,6 @@ async def _run_with_recognition(
             ),
             timeout=30,
         )
-        # VLM 成功：保留图片元数据引用
-        image_refs_kwargs = [{"url": img.url, "image_id": img.image_id} for img in body.images]
     except Exception:
         logger.warning("[stream] Vision LLM failed, degrading to text-only", exc_info=True)
         recognized_text = ""
@@ -174,7 +173,7 @@ async def _run_with_recognition(
         content = body.question
     human_msg = HumanMessage(
         content=content,
-        additional_kwargs={"images": image_refs_kwargs} if image_refs_kwargs else {},
+        additional_kwargs={"images": image_refs_kwargs},
     )
     input_state = {"messages": [human_msg], "question": body.question}
 

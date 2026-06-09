@@ -146,3 +146,82 @@ def test_touch_updates_mtime(tmp_path):
 def test_touch_nonexistent_does_not_raise(tmp_path):
     """touch 不存在的文件不抛异常。"""
     ImageManager.touch(str(tmp_path / "no_such_file.png"))  # should not raise
+
+
+# ---------------------------------------------------------------------------
+# _scan_existing_files
+# ---------------------------------------------------------------------------
+
+
+def test_scan_existing_files_counts_total_size(tmp_path):
+    """启动时扫描已有文件，正确累加 _total_size。"""
+    upload_dir = str(tmp_path / "uploads")
+    user_dir = os.path.join(upload_dir, "user1")
+    os.makedirs(user_dir)
+    content = b"x" * 2048
+    with open(os.path.join(user_dir, "existing.png"), "wb") as f:
+        f.write(content)
+
+    mgr = ImageManager(upload_dir=upload_dir, max_storage_mb=10)
+    assert mgr._total_size == 2048
+
+
+def test_scan_existing_files_empty_dir(tmp_path):
+    """空目录时 _total_size 为 0。"""
+    mgr = _make_manager(tmp_path)
+    assert mgr._total_size == 0
+
+
+# ---------------------------------------------------------------------------
+# disk_path_from_url
+# ---------------------------------------------------------------------------
+
+
+def test_disk_path_from_url_valid(tmp_path):
+    """disk_path_from_url 正确解析路径（不做归属校验）。"""
+    mgr = _make_manager(tmp_path)
+    path = mgr.disk_path_from_url("/api/uploads/user1/abc.png")
+    assert path.endswith(os.path.join("user1", "abc.png"))
+    assert os.path.isabs(path)
+
+
+def test_disk_path_from_url_invalid_prefix(tmp_path):
+    """disk_path_from_url 错误前缀 → ValueError。"""
+    mgr = _make_manager(tmp_path)
+    with pytest.raises(ValueError, match="Invalid"):
+        mgr.disk_path_from_url("/wrong/prefix/abc.png")
+
+
+def test_disk_path_from_url_no_slash(tmp_path):
+    """disk_path_from_url 缺少斜杠 → ValueError。"""
+    mgr = _make_manager(tmp_path)
+    with pytest.raises(ValueError, match="Invalid"):
+        mgr.disk_path_from_url("/api/uploads/noslash")
+
+
+# ---------------------------------------------------------------------------
+# save triggers cleanup
+# ---------------------------------------------------------------------------
+
+
+def test_save_triggers_cleanup_when_over_limit(tmp_path):
+    """save 写入超过高水位时自动触发 LRU 清理。"""
+    mgr = _make_manager(tmp_path, max_mb=1)  # 1 MB
+
+    content = b"x" * (400 * 1024)  # 400 KB each
+    # 写 3 个文件 = 1200 KB > 1024 KB
+    asyncio.run(mgr.save("user1", content, ext="bin"))
+    asyncio.run(mgr.save("user1", content, ext="bin"))
+    asyncio.run(mgr.save("user1", content, ext="bin"))
+
+    # _total_size 应降到低水位以下
+    low_watermark = int(1 * 1024 * 1024 * 0.8)
+    assert mgr._total_size <= low_watermark + 1  # 容差 1 byte
+
+
+def test_cleanup_lru_nothing_to_clean(tmp_path):
+    """总量未超限时 cleanup_lru 返回 0。"""
+    mgr = _make_manager(tmp_path, max_mb=100)
+    asyncio.run(mgr.save("user1", b"small", ext="png"))
+    deleted = asyncio.run(mgr.cleanup_lru())
+    assert deleted == 0

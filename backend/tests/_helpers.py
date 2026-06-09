@@ -22,25 +22,53 @@ from app.middleware.auth import ALGORITHM
 
 TEST_SECRET = "test-jwt-secret-key"
 
+# 测试用假图片数据
+FAKE_JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 100
+FAKE_PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
+FAKE_WEBP = b"RIFF" + b"\x00" * 100 + b"WEBP"
+
 
 # ---------------------------------------------------------------------------
 # 认证
 # ---------------------------------------------------------------------------
 
-def make_auth_headers(token: str | None = None) -> dict:
+def make_token(
+    sub: str = "user-001",
+    client_id: str = "testuser",
+    exp: int = 9999999999,
+    token_type: str = "access",
+    secret: str = TEST_SECRET,
+) -> str:
+    """构造标准 JWT access token"""
+    return jwt.encode(
+        {"sub": sub, "client_id": client_id, "exp": exp, "type": token_type},
+        secret,
+        algorithm=ALGORITHM,
+    )
+
+
+def make_auth_headers(token: str | None = None, sub: str = "user-001") -> dict:
     """构造 Bearer token 认证头"""
     if token is None:
-        token = jwt.encode(
-            {"sub": "user-123", "client_id": "testuser", "exp": 9999999999, "type": "access"},
-            TEST_SECRET,
-            algorithm=ALGORITHM,
-        )
+        token = make_token(sub=sub)
     return {"Authorization": f"Bearer {token}"}
 
 
 # ---------------------------------------------------------------------------
 # Mock 构造
 # ---------------------------------------------------------------------------
+
+
+def make_mock_msg(**kwargs):
+    """构造 mock LangChain message"""
+    msg = MagicMock()
+    msg.id = kwargs.get("id", "msg-1")
+    msg.content = kwargs.get("content", "hello")
+    msg.type = kwargs.get("type", "human")
+    msg.additional_kwargs = kwargs.get("additional_kwargs", {})
+    msg.response_metadata = kwargs.get("response_metadata", {})
+    return msg
+
 
 def make_mock_chat_service(chunks=None, degraded=False, degradation_reason=None):
     """构造 mock ChatService，retrieve 返回指定 chunks"""

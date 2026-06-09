@@ -19,36 +19,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-from jose import jwt
 
-from app.middleware.auth import ALGORITHM
-
-# ---------------------------------------------------------------------------
-# 测试辅助工具
-# ---------------------------------------------------------------------------
-
-TEST_SECRET = "test-jwt-secret-key"
-
-
-def _make_token(
-    sub: str = "user-001",
-    client_id: str = "testuser",
-    exp: int = 9999999999,
-    token_type: str = "access",
-) -> str:
-    """构造有效 JWT token"""
-    return jwt.encode(
-        {"sub": sub, "client_id": client_id, "exp": exp, "type": token_type},
-        TEST_SECRET,
-        algorithm=ALGORITHM,
-    )
-
-
-def _auth_headers(token: str | None = None) -> dict:
-    """构造 Authorization header"""
-    if token is None:
-        return {}
-    return {"Authorization": f"Bearer {token}"}
+from tests._helpers import TEST_SECRET, make_token, make_auth_headers
 
 
 # ---------------------------------------------------------------------------
@@ -198,11 +170,11 @@ def test_health_no_token_200(client: TestClient):
 
 def test_chat_valid_token_200(client: TestClient):
     """有效 JWT → POST /api/chat 返回 200"""
-    token = _make_token()
+    token = make_token()
     response = client.post(
         "/api/chat",
         json={"question": "test", "top_k": 3},
-        headers=_auth_headers(token),
+        headers=make_auth_headers(token),
     )
     assert response.status_code == 200
 
@@ -214,11 +186,11 @@ def test_chat_valid_token_200(client: TestClient):
 
 def test_stream_valid_token_sse(client: TestClient):
     """有效 JWT → POST /api/chat/stream 返回 200 + SSE content-type"""
-    token = _make_token()
+    token = make_token()
     response = client.post(
         "/api/chat/stream",
         json={"question": "test", "top_k": 3},
-        headers=_auth_headers(token),
+        headers=make_auth_headers(token),
     )
     assert response.status_code == 200
     assert response.headers["content-type"] == "text/event-stream; charset=utf-8"
@@ -231,10 +203,10 @@ def test_stream_valid_token_sse(client: TestClient):
 
 def test_retrieve_valid_token_200(client: TestClient):
     """有效 JWT → POST /api/retrieve 返回 200"""
-    token = _make_token()
+    token = make_token()
     response = client.post(
         "/api/retrieve",
         json={"query": "test", "top_k": 5},
-        headers=_auth_headers(token),
+        headers=make_auth_headers(token),
     )
     assert response.status_code == 200
